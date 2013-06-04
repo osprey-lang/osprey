@@ -1231,44 +1231,27 @@ namespace Osprey.Nodes
 
 		internal static void EnsureAssignable(Expression expr)
 		{
-			if (expr is MemberAccess)
-			{
-				((MemberAccess)expr).IsAssignment = true;
-				return;
-			}
-			if (expr is IndexerAccess)
-			{
-				((IndexerAccess)expr).IsAssignment = true;
-				return;
-			}
+			if (!(expr is AssignableExpression))
+				throw new CompileTimeException(expr, "This expression cannot be assigned to.");
+
+			((AssignableExpression)expr).IsAssignment = true;
+
 			if (expr is LocalVariableAccess)
 			{
-				var access = (LocalVariableAccess)expr;
-				if (access.Variable.VariableKind == VariableKind.IterationVariable)
+				var variable = ((LocalVariableAccess)expr).Variable;
+				if (variable.VariableKind == VariableKind.IterationVariable)
 					throw new CompileTimeException(expr,
 						string.Format("The variable '{0}' is an iteration variable and cannot be reassigned.",
-							access.Variable.Name));
-				access.IsAssignment = true;
-				return;
+							variable.Name));
 			}
-			if (expr is StaticFieldAccess)
-			{
-				((StaticFieldAccess)expr).IsAssignment = true;
-				return;
-			}
-			if (expr is GlobalVariableAccess)
-			{
-				((GlobalVariableAccess)expr).IsAssignment = true;
-				return;
-			}
-
-			if (expr is InstanceMemberAccess)
+			else if (expr is InstanceMemberAccess)
 			{
 				var member = ((InstanceMemberAccess)expr).Member;
 				// Note: fields are always OK
 				switch (member.Kind)
 				{
 					case MemberKind.Constant:
+						// This should never happen, should it? Constants are static.
 						throw new CompileTimeException(expr,
 							string.Format("The constant '{0}.{1}' cannot be reassigned.",
 								((ClassMember)member).Parent.FullName, member.Name));
@@ -1286,22 +1269,15 @@ namespace Osprey.Nodes
 							break; // Property is OK
 						}
 				}
-				((InstanceMemberAccess)expr).IsAssignment = true;
-				return;
 			}
-
-			if (expr is StaticPropertyAccess)
+			else if (expr is StaticPropertyAccess)
 			{
 				var prop = ((StaticPropertyAccess)expr).Property;
 				if (prop.PropertyKind == PropertyKind.ReadOnly)
 					throw new CompileTimeException(expr,
 						string.Format("The property '{0}.{1}' cannot be assigned to; it is read-only.",
 							prop.Parent.FullName, prop.Name));
-				((StaticPropertyAccess)expr).IsAssignment = true;
-				return;
 			}
-
-			throw new CompileTimeException(expr, "This member cannot be assigned to.");
 		}
 	}
 
