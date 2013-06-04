@@ -1,0 +1,1694 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using Osprey.Instructions;
+using Osprey.Members;
+using Osprey.Nodes;
+using CI = System.Globalization.CultureInfo;
+using Enum = Osprey.Members.Enum;
+using Type = Osprey.Members.Type;
+using Switch = Osprey.Instructions.Switch;
+using System.Reflection;
+
+namespace Osprey
+{
+	public partial class Compiler : IDisposable
+	{
+		private Compiler(CompilerOptions options, params string[] sourceFiles)
+		{
+			if (sourceFiles == null)
+				throw new ArgumentNullException("sourceFiles");
+			if (sourceFiles.Length == 0)
+				throw new ArgumentException("There must be at least one source file.", "sourceFiles");
+
+			this.flags = options.Flags;
+			this.verbosity = options.Verbosity;
+			this.libraryPath = options.LibraryPath;
+			this.projectType = options.Type;
+			this.metadataFile = options.MetadataFile;
+
+			this.moduleName = options.ModuleName ?? Path.GetFileNameWithoutExtension(sourceFiles[0]);
+
+			this.sourceFiles = new Dictionary<string, Document>();
+			foreach (var file in sourceFiles)
+				this.sourceFiles[file] = null;
+			this.documents = new List<Document>(this.sourceFiles.Count);
+
+			if (options.NativeLibrary != null)
+				this.nativeLibrary = NativeLibrary.Open(options.NativeLibrary);
+		}
+
+		~Compiler()
+		{
+			Dispose();
+		}
+
+		private CompilerFlags flags;
+		/// <summary>Gets appropriate parser options for the compiler instance.</summary>
+		private ParseFlags ParserOptions
+		{
+			get
+			{
+				return ((flags & CompilerFlags.UseExtensions) != 0 ? ParseFlags.UseExtensions : 0)
+					|
+					ParseFlags.Compilation;
+			}
+		}
+
+		private bool NoStandardModule
+		{
+			get { return (flags & CompilerFlags.NoStandardModule) == CompilerFlags.NoStandardModule; }
+		}
+		private bool SilenceWarnings
+		{
+			get { return (flags & CompilerFlags.SilenceWarnings) == CompilerFlags.SilenceWarnings; }
+		}
+		private bool SilenceNotices
+		{
+			get { return (flags & CompilerFlags.SilenceNotices) == CompilerFlags.SilenceNotices; }
+		}
+		private bool SkipExternChecks
+		{
+			get { return (flags & CompilerFlags.SkipExternChecks) == CompilerFlags.SkipExternChecks; }
+		}
+
+		private CompilerVerbosity verbosity;
+
+		private ProjectType projectType;
+
+		private string libraryPath;
+		private string metadataFile;
+
+		/// <summary>
+		/// The name of the module that is being compiled.
+		/// </summary>
+		private string moduleName;
+
+		private NativeLibrary nativeLibrary;
+		internal NativeLibrary NativeLibrary { get { return nativeLibrary; } }
+
+		private Version version;
+		/// <summary>Gets the version of the project.</summary>
+		public Version Version { get { return version; } }
+
+		private Dictionary<string, string> metadata;
+		private Dictionary<string, Document> sourceFiles;
+		private List<Document> documents;
+		private HashSet<string> importedModules;
+
+		private HashSet<Method> methodsWithLocalFunctions;
+		private List<Action> additionalLocalExtractors;
+		private HashSet<Method> generatorMethods;
+
+		private List<Type> types;
+		private List<MethodGroup> globalFunctions;
+		private List<GlobalConstant> globalConstants;
+
+		private ModulePool modules;
+		private Namespace projectNamespace;
+		private Block mainMethodBody;
+		private Method mainMethod;
+		private Class lambdaOpClass;
+		private Class globalsClass;
+
+		public Method MainMethod { get { return mainMethod; } }
+
+		private Module outputModule;
+		public Module OutputModule { get { return outputModule; } }
+
+		private Dictionary<string, Type> typeObjects = new Dictionary<string, Type>();
+
+		internal Type ObjectType    { get { return FindType(StandardNames.TypeRootName); } }
+		internal Type EnumType      { get { return FindType(StandardNames.EnumName);     } }
+		internal Type EnumSetType   { get { return FindType(StandardNames.EnumSetName);  } }
+		internal Type BooleanType   { get { return FindType(StandardNames.BooleanName);  } }
+		internal Type IntType       { get { return FindType(StandardNames.IntName);      } }
+		internal Type UIntType      { get { return FindType(StandardNames.UIntName);     } }
+		internal Type RealType      { get { return FindType(StandardNames.RealName);     } }
+		internal Type StringType    { get { return FindType(StandardNames.StringName);   } }
+		internal Type ListType      { get { return FindType(StandardNames.ListName);     } }
+		internal Type HashType      { get { return FindType(StandardNames.HashName);     } }
+		internal Type IteratorType  { get { return FindType(StandardNames.IteratorName); } }
+		internal Type MethodType    { get { return FindType(StandardNames.MethodName);   } }
+		internal Type TypeType      { get { return FindType(StandardNames.TypeName);     } }
+		internal Type TypeErrorType { get { return FindType(StandardNames.StandardNamespace + ".TypeError"); } }
+
+		internal int MethodsWithLocalFunctionsCount
+		{
+			get { return methodsWithLocalFunctions != null ? methodsWithLocalFunctions.Count : 0; }
+		}
+
+		internal void AddMethodWithLocalFunctions(Method method)
+		{
+			if (method == null)
+				throw new ArgumentNullException("method");
+
+			if (methodsWithLocalFunctions == null)
+				methodsWithLocalFunctions = new HashSet<Method>();
+			methodsWithLocalFunctions.Add(method);
+		}
+
+		internal void AddLocalExtractor(Action extractor)
+		{
+			if (additionalLocalExtractors == null)
+				additionalLocalExtractors = new List<Action>();
+			additionalLocalExtractors.Add(extractor);
+		}
+
+		internal void AddGeneratorMethod(Method method)
+		{
+			if (method == null)
+				throw new ArgumentNullException("method");
+
+			if (generatorMethods == null)
+				generatorMethods = new HashSet<Method>();
+			generatorMethods.Add(method);
+		}
+
+		internal bool ImportsModule(string name)
+		{
+			return importedModules.Contains(name);
+		}
+
+		internal void AddType(Type type)
+		{
+			if (type == null)
+				throw new ArgumentNullException("type");
+			if (types == null)
+				types = new List<Type>();
+			types.Add(type);
+		}
+
+		internal void AddGlobalFunction(MethodGroup method)
+		{
+			if (method == null)
+				throw new ArgumentNullException("method");
+			if (method.ParentAsNamespace == null)
+				throw new ArgumentException("The method is not global.", "method");
+			if (globalFunctions == null)
+				globalFunctions = new List<MethodGroup>();
+			globalFunctions.Add(method);
+		}
+
+		internal void AddGlobalConstant(GlobalConstant constant)
+		{
+			if (constant == null)
+				throw new ArgumentNullException("constant");
+			if (globalConstants == null)
+				globalConstants = new List<GlobalConstant>();
+			globalConstants.Add(constant);
+		}
+
+		internal void AddGlobalVariable(Document parentDocument, GlobalVariable variable)
+		{
+			if (variable.CaptureField != null)
+				return;
+
+			if (globalsClass == null)
+			{
+				globalsClass = new Class("<global>", AccessLevel.Private, projectNamespace);
+				globalsClass.BaseType = ObjectType;
+				globalsClass.IsStatic = true;
+				AddType(globalsClass);
+			}
+
+			var name = string.Format("{0}@{1}", variable.Name, documents.IndexOf(parentDocument));
+			variable.CaptureField = new Field(name, AccessLevel.Public, globalsClass);
+			globalsClass.DeclareField(variable.CaptureField);
+		}
+
+		private Type FindType(string fullName)
+		{
+			if (typeObjects.ContainsKey(fullName))
+				return typeObjects[fullName];
+
+			return typeObjects[fullName] = projectNamespace.ResolveTypeName(new TypeName(fullName, false), null);
+		}
+
+		internal MethodGroup GetLambdaOperatorMethod(LambdaOperator op)
+		{
+			if (lambdaOpClass == null)
+			{
+				lambdaOpClass = new Class("<lambda>", AccessLevel.Private, projectNamespace);
+				lambdaOpClass.BaseType = ObjectType;
+				lambdaOpClass.IsStatic = true;
+				AddType(lambdaOpClass);
+			}
+
+			var name = lambdaOperatorNames[op];
+			if (lambdaOpClass.ContainsMember(name))
+				return (MethodGroup)lambdaOpClass.GetMember(name);
+			else
+			{
+				// declare it!
+				switch (op)
+				{
+					case LambdaOperator.Plus:
+					case LambdaOperator.Minus:
+					case LambdaOperator.BitwiseNot:
+						{
+							var unaryMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None, new Parameter("a", null));
+							unaryMethod.IsStatic = true;
+							unaryMethod.IsImplDetail = true;
+							unaryMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							unaryMethod.Append(new SimpleInstruction(GetUnaryOpcode(LambdaOperator.Plus)));
+							unaryMethod.Append(new SimpleInstruction(Opcode.Ret));
+							var group = lambdaOpClass.DeclareMethod(unaryMethod);
+
+							if (op == LambdaOperator.BitwiseNot)
+								return group;
+							goto default;
+						}
+					case LambdaOperator.Or:
+						{
+							var orMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+								new Parameter("a", null), new Parameter("b", null));
+							orMethod.IsStatic = true;
+							orMethod.IsImplDetail = true;
+
+							var trueLabel = new Label();
+
+							orMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							orMethod.Append(Branch.IfTrue(trueLabel));
+
+							orMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							orMethod.Append(Branch.IfTrue(trueLabel));
+
+							orMethod.Append(LoadConstant.False());
+							orMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							orMethod.Append(trueLabel);
+							orMethod.Append(LoadConstant.True());
+							orMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							return lambdaOpClass.DeclareMethod(orMethod);
+						}
+					case LambdaOperator.Xor:
+						{
+							var xorMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+								new Parameter("a", null), new Parameter("b", null));
+							xorMethod.IsStatic = true;
+							xorMethod.IsImplDetail = true;
+
+							// "a xor b" is basically the same as "bool(a) != bool(b)".
+							// We can represent this as follows:
+							//    if a {
+							//        if not b:
+							//            return true;
+							//    } else {
+							//        // a is falsy here
+							//        if b:
+							//            return true;
+							//    }
+							//    return false;
+							// Though it doesn't matter which order we test a and b in;
+							// both of them need to be tested, always. In this method,
+							// we test b first.
+
+							var firstFalseLabel = new Label();
+							var retFalseLabel = new Label();
+
+							xorMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true))); // a
+							xorMethod.Append(new LoadLocal(new LocalVariable(1, null, false, true))); // b
+
+							xorMethod.Append(Branch.IfFalse(firstFalseLabel)); // if not b, branch to else
+							{ // if b
+								xorMethod.Append(Branch.IfTrue(retFalseLabel)); // if a and b, return false
+								xorMethod.Append(LoadConstant.True());
+								xorMethod.Append(new SimpleInstruction(Opcode.Ret));
+							}
+							xorMethod.Append(firstFalseLabel);
+							{ // else (if not b)
+								xorMethod.Append(Branch.IfFalse(retFalseLabel)); // if not a and not b, return false
+								xorMethod.Append(LoadConstant.True());
+								xorMethod.Append(new SimpleInstruction(Opcode.Ret));
+							}
+
+							xorMethod.Append(retFalseLabel);
+							xorMethod.Append(LoadConstant.False());
+							xorMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							return lambdaOpClass.DeclareMethod(xorMethod);
+						}
+					case LambdaOperator.And:
+						{
+							var andMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+								new Parameter("a", null), new Parameter("b", null));
+							andMethod.IsStatic = true;
+							andMethod.IsImplDetail = true;
+
+							var falseLabel = new Label();
+
+							andMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							andMethod.Append(Branch.IfFalse(falseLabel));
+
+							andMethod.Append(new LoadLocal(new LocalVariable(1, null, false, true)));
+							andMethod.Append(Branch.IfFalse(falseLabel));
+
+							andMethod.Append(LoadConstant.True());
+							andMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							andMethod.Append(falseLabel);
+							andMethod.Append(LoadConstant.False());
+							andMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							return lambdaOpClass.DeclareMethod(andMethod);
+						}
+					case LambdaOperator.Not:
+						{
+							var notMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None, new Parameter("a", null));
+							notMethod.IsStatic = true;
+							notMethod.IsImplDetail = true;
+
+							var falseLabel = new Label();
+
+							notMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							notMethod.Append(Branch.IfFalse(falseLabel));
+
+							notMethod.Append(LoadConstant.False()); // if a is true, return false
+							notMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							notMethod.Append(falseLabel);
+							notMethod.Append(LoadConstant.True()); // if a is false, return true
+							notMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							return lambdaOpClass.DeclareMethod(notMethod);
+						}
+					default:
+						{
+							// Regular binary operator
+							var binaryMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+								new Parameter("a", null), new Parameter("b", null));
+							binaryMethod.IsStatic = true;
+							binaryMethod.IsImplDetail = true;
+							binaryMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							binaryMethod.Append(new LoadLocal(new LocalVariable(1, null, false, true)));
+							binaryMethod.Append(new SimpleInstruction(GetBinaryOpcode(op)));
+							binaryMethod.Append(new SimpleInstruction(Opcode.Ret));
+							return lambdaOpClass.DeclareMethod(binaryMethod);
+						}
+				}
+			}
+		}
+
+		private Opcode GetBinaryOpcode(LambdaOperator op)
+		{
+			switch (op)
+			{
+				case LambdaOperator.Plus: return Opcode.Add;
+				case LambdaOperator.Minus: return Opcode.Sub;
+				case LambdaOperator.BitwiseOr: return Opcode.Or;
+				case LambdaOperator.BitwiseXor: return Opcode.Xor;
+				case LambdaOperator.Multiplication: return Opcode.Mul;
+				case LambdaOperator.Division: return Opcode.Div;
+				case LambdaOperator.Modulo: return Opcode.Mod;
+				case LambdaOperator.BitwiseAnd: return Opcode.And;
+				case LambdaOperator.Exponentiation: return Opcode.Pow;
+				case LambdaOperator.Hash: return Opcode.Hashop;
+				case LambdaOperator.Dollar: return Opcode.Dollar;
+				case LambdaOperator.ShiftLeft: return Opcode.Shl;
+				case LambdaOperator.ShiftRight: return Opcode.Shr;
+				case LambdaOperator.Equality: return Opcode.Eq;
+				case LambdaOperator.Inequality: return Opcode.Eq;
+				case LambdaOperator.Comparison: return Opcode.Cmp;
+				case LambdaOperator.Less: return Opcode.Lt;
+				case LambdaOperator.Greater: return Opcode.Gt;
+				case LambdaOperator.LessEquals: return Opcode.Lte;
+				case LambdaOperator.GreaterEquals: return Opcode.Gte;
+				case LambdaOperator.FuncApplication: return Opcode.Apply;
+				case LambdaOperator.Concatenation: return Opcode.Concat;
+				default: throw new ArgumentException("Invalid LambdaOperator for binary Opcode conversion.", "op");
+			}
+		}
+
+		private Opcode GetUnaryOpcode(LambdaOperator op)
+		{
+			switch (op)
+			{
+				case LambdaOperator.Plus: return Opcode.Plus;
+				case LambdaOperator.Minus: return Opcode.Neg;
+				case LambdaOperator.BitwiseNot: return Opcode.Not;
+				default: throw new ArgumentException("Invalid LambdaOperator for unary Opcode conversion.", "op");
+			}
+		}
+
+		public void Dispose()
+		{
+			if (nativeLibrary != null)
+				nativeLibrary.Dispose();
+			nativeLibrary = null;
+
+			version = null;
+			metadata = null;
+			sourceFiles = null;
+			documents = null;
+			importedModules = null;
+			methodsWithLocalFunctions = null;
+			additionalLocalExtractors = null;
+			types = null;
+			globalFunctions = null;
+			globalConstants = null;
+			modules = null;
+			projectNamespace = null;
+			mainMethodBody = null;
+			mainMethod = null;
+			outputModule = null;
+
+			typeObjects = null;
+		}
+
+		public void EnsureNativeMethodExists(ParseNode errorNode, string name)
+		{
+			if (nativeLibrary == null)
+				throw new CompileTimeException(errorNode,
+					string.Format("Could not resolve __extern method '{0}': there is no native library loaded.",
+						name));
+
+			if (!SkipExternChecks && !nativeLibrary.ContainsMethod(name))
+				throw new CompileTimeException(errorNode,
+					string.Format("The native library '{0}' does not contain an entry point for '{1}'.",
+						nativeLibrary.FileName, name));
+		}
+
+		/// <summary>
+		/// Compiles the Osprey project to a specific stream.
+		/// </summary>
+		/// <param name="targetPath">The path of the target file of the compilation. Its current contents, if any, will be overwritten.</param>
+		/// <exception cref="ArgumentNullException"><paramref name="targetPath"/> is null.</exception>
+		/// <exception cref="ParseException">An error occurs while parsing a source file.</exception>
+		/// <exception cref="ModuleLoadException">An error occurs while opening a dependent module.</exception>
+		/// <exception cref="CompileTimeException">An error occurs during compilation.</exception>
+		private void Compile(string targetPath)
+		{
+			using (var stream = File.Open(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
+				Compile(stream);
+		}
+
+		/// <summary>
+		/// Compiles the Osprey project to a specific stream.
+		/// </summary>
+		/// <param name="target">The stream that receives the bytes of the compiled program.</param>
+		/// <exception cref="ArgumentNullException"><paramref name="target"/> is null.</exception>
+		/// <exception cref="ParseException">An error occurs while parsing a source file.</exception>
+		/// <exception cref="ModuleLoadException">An error occurs while opening a dependent module.</exception>
+		/// <exception cref="CompileTimeException">An error occurs during compilation.</exception>
+		private void Compile(Stream target)
+		{
+			if (target == null)
+				throw new ArgumentNullException("target");
+			if (!target.CanWrite || !target.CanSeek)
+				throw new ArgumentException("The target stream must be both writable and seekable.", "target");
+
+			// Note: although I could wrap this entire method in a try-catch and force exceptions
+			// into one of the types ParseException, ModuleLoadException or CompileTimeException,
+			// I'm not going to. If any exception other than those is thrown, it's either a bug in
+			// the parser or compiler, or it's an I/O error from somewhere. We don't want to catch
+			// bugs (because they're bugs), nor do we want to catch I/O errors (because they're out
+			// of our control; the most we can do is check that files exist before opening them).
+			//
+			// The only thing we do (in inner methods) is to catch certain exception types, so that
+			// we can assign to the FileName or Document property. This enables the program to report
+			// an error location, which seems beneficial!
+
+			var parseTimer = new Stopwatch();
+
+			// Step 1: Read all the source files and resolve all use directives.
+			// This also loads dependent modules.
+			
+			parseTimer.Start();
+			ProcessFiles();
+			parseTimer.Stop();
+
+			Notice("Time taken to parse (ms): " + parseTimer.Elapsed.TotalMilliseconds);
+
+			// And now we start the real work.
+
+			if (!SilenceNotices)
+			{
+				Notice("Starting compilation at " + DateTime.Now);
+				foreach (var file in sourceFiles.Keys)
+					Notice("Source file: " + file);
+			}
+
+			var compileTimer = Stopwatch.StartNew();
+
+			// Step 2: Using the parse trees we have, build a hierarchical structure of global names
+			// and their respective members. During this step, we do NOT initialize class members.
+			List<Statement> mainMethodContents = null;
+			if (projectType == ProjectType.Application)
+			{
+				// Pretend there's a main method that belongs to the project namespace.
+				// There isn't, of course, but that won't stop us!
+				// NOTE: This method will never actually be /declared/ in the project namespace;
+				// we just pretend it's in there. The compiler will still output metadata about
+				// the existence of a method with the fully qualified name "<main>", so we can
+				// reference it as the main method of the module.
+
+				Notice("Initializing main method...", CompilerVerbosity.Verbose);
+				mainMethodContents = new List<Statement>();
+				mainMethodBody = new Block(mainMethodContents);
+				mainMethod = new Method(MainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
+
+				var mainMethodGroup = new MethodGroup(MainMethodName, projectNamespace, AccessLevel.Private);
+				mainMethodGroup.AddOverload(mainMethod);
+				AddGlobalFunction(mainMethodGroup); // Always first!
+			}
+			BuildProjectNamespace(mainMethodContents);
+
+			// Step 3: Resolve the type names of base classes. Every type must have a base class,
+			// except aves.Object, which is treated specially. We have the following default base
+			// classes (if the type does not explicitly declare a base class):
+			//    class    => aves.Object
+			//    enum     => aves.Enum
+			//    enum set => aves.EnumSet
+			// If these classes cannot be found when needed, the standard module is broken.
+			// During this step, quite sneakily, we also import namespaces for each document.
+			// I could break it into another step, but I don't want to.
+			ResolveBaseTypeNames();
+
+			// Step 4: Initialize class members. We save this step for later because all class
+			// members must be checked against the base class. For example, if the base class defines
+			// a public non-overridable property called 'foo', then a derived class cannot define
+			// a member with the same name (there is no way to distinguish between them). Only
+			// private members are allowed to be "hidden" in derived classes, because they are
+			// invisible there anyway.
+			if (mainMethod != null)
+				mainMethod.InitBody(this);
+			InitializeClassMembers();
+
+			// Step 5: Resolve all names, in every expression in every source file. During this step,
+			// we also mark variables as captured, if they are indeed captured, but the actual trans-
+			// formations take place later.
+			ResolveAllNames();
+
+			// Step 6: Constant folding, where we reduce every expression to a ConstantExpression as far
+			// as possible. During this phase, we also ensure that every constant has a constant value;
+			// it's easy to do while we're at it anyway.
+			FoldConstant();
+
+			// Step 7: Local function extraction! By populating methodsWithLocalFunctions, we've managed
+			// to find out where all the methods with local functions are (duh), so we can now extract
+			// them appropriately. These transformations may involve the creation of closure classes, and
+			// the whole process is described elsewhere.
+			if (methodsWithLocalFunctions != null)
+			{
+				ExtractLocalFunctions();
+				methodsWithLocalFunctions = null; // We no longer need this, so let it be at peace.
+			}
+
+			// Step 8: Extract generator classes, if there are any.
+			if (generatorMethods != null)
+			{
+				ExtractGeneratorClasses();
+				generatorMethods = null; // Goodbye, dear hash set
+			}
+
+			// Step 9: Prepare the output module, which involves adding a bunch of definitions and stuff,
+			// not only for global members, but for everything.
+			PrepareOutputModule();
+
+			// Step 10: Compile method bodies! This is when we really do things: each method gets a MethodBuilder,
+			// which we populate with appropriate instructions, and then all the byte contents of each MethodBuilder
+			// are added to a byte buffer, which becomes the method block of the output module.
+			BuildMethodBodies();
+
+			// Sanity check: we should not encounter any constant string values that haven't been added to this table.
+			// So we lock it to prevent further modification; if something throws, there's a bug in the compiler.
+			outputModule.Members.Strings.Lock();
+
+			// Step 11: Save the output module. Once we've done this, we're all done! Holy carp.
+			outputModule.Save(target);
+
+			compileTimer.Stop();
+			Notice("Compilation finished at " + DateTime.Now);
+			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds);
+
+			Notice("Total time taken (ms): " + (parseTimer.Elapsed + compileTimer.Elapsed).TotalMilliseconds);
+		}
+
+		private void ProcessFiles()
+		{
+			Notice("Parsing source files and adding dependent modules...", CompilerVerbosity.Verbose);
+
+			var projectNs = new Namespace();
+			var importedModules = new HashSet<string>();
+			this.importedModules = importedModules;
+			var modules = new ModulePool(libraryPath, projectNs, this);
+
+			Version foundVersion = null;
+			string versionFile = null;
+
+			// Always load the standard module first.
+			if (!NoStandardModule)
+			{
+				importedModules.Add(StandardNames.StandardModuleName);
+				modules.Load(StandardNames.StandardModuleName);
+			}
+
+			var newFiles = new HashSet<string>(sourceFiles.Select(kvp => Path.GetFullPath(kvp.Key)));
+
+			while (newFiles.Count > 0)
+			{
+				var newNewFiles = new HashSet<string>();
+				foreach (var file in newFiles)
+				{
+					var fileText = File.ReadAllText(file);
+					Document doc;
+					try
+					{
+						doc = Parser.Parse(fileText, ParserOptions);
+
+						if (doc.Version != null)
+						{
+							if (foundVersion != null && foundVersion != doc.Version)
+								throw new ParseException(doc, fileText,
+									string.Format("Version number mismatch; found version {0} in '{1}'.", foundVersion, versionFile));
+							foundVersion = doc.Version;
+							versionFile = file;
+						}
+					}
+					catch (ParseException e)
+					{
+						e.FileName = file;
+						throw; // rethrow it!
+					}
+
+					doc.FileName = file;
+					doc.FileSource = fileText;
+					doc.Compiler = this;
+
+					sourceFiles[file] = doc; // Add first, to avoid self-dependency issues
+					documents.Add(doc);
+					ProcessImports(newNewFiles, importedModules, file, doc);
+				}
+				newFiles = newNewFiles;
+			}
+
+			foreach (var modName in importedModules)
+				if (!modules.HasLoaded(modName))
+				{
+					Notice(CompilerVerbosity.Verbose, "Loading module '{0}'.", modName);
+					modules.Load(modName);
+				}
+
+			this.projectNamespace = projectNs;
+			this.modules = modules;
+			this.version = foundVersion ?? new Version(1, 0, 0, 0);
+
+			Notice("Finished parsing source files and reading dependent modules.", CompilerVerbosity.Verbose);
+
+			if (metadataFile != null)
+			{
+				Notice(CompilerVerbosity.Verbose, "Reading metadata from '{0}'...", metadataFile);
+				metadata = Parser.ParseMetadata(File.ReadAllText(metadataFile));
+				Notice(CompilerVerbosity.Verbose, "Finished reading {0} entr{1} of metadata.", metadata.Count, metadata.Count == 1 ? "y" : "ies");
+			}
+			else
+				metadata = new Dictionary<string, string>();
+
+			if (!metadata.ContainsKey("date"))
+				metadata["date"] = DateTime.Now.ToString("yyyy-MM-dd", CI.InvariantCulture);
+
+			if (!metadata.ContainsKey("compiler"))
+			{
+				var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
+				metadata["compiler"] = string.Format("Osprey Compiler v{0}", assemblyVersion);
+			}
+		}
+
+		private void ProcessImports(HashSet<string> newFiles, HashSet<string> modules, string docFile, Document doc)
+		{
+			foreach (var use in doc.Uses)
+				if (use is UseScriptDirective)
+				{
+					// UseScriptDirective.Name is a StringLiteral, which inherits from ConstantExpression
+					var fileName = ((UseScriptDirective)use).Name.Value.StringValue;
+
+					// Make the file name absolute, but resolve it relative to the document!
+					// If you have the following file structure:
+					//   `-- \main.osp
+					//   `-- \aux.osp
+					//   `-- \inc
+					//     `-- main.osp
+					//     `-- aux.osp
+					// and both of the main.osp files say 'use "aux.osp";', then they refer to the file named
+					// aux.osp in their respective containing directories.
+					var realFile = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(docFile), fileName));
+
+					// If we haven't already parsed this file, add it to newFiles to be processed
+					// This takes care of circular dependencies, e.g.:
+					//   a.osp:
+					//     use "b.osp";
+					//   b.osp:
+					//     use "a.osp";
+					if (realFile == doc.FileName)
+						throw new CompileTimeException(use, "A source file may not include itself.");
+					if (!sourceFiles.ContainsKey(realFile))
+					{
+						Notice(CompilerVerbosity.ExtraVerbose, "Adding source file '{0}' to project, referenced in '{1}'", realFile, docFile);
+						newFiles.Add(realFile);
+					}
+				}
+				else if (use is UseModuleDirective)
+				{
+					var modName = ((UseModuleDirective)use).Name.Parts.JoinString(".");
+					modules.Add(modName);
+					Notice(CompilerVerbosity.ExtraVerbose, "Adding reference to module '{0}', from '{1}'", modName, docFile);
+				}
+		}
+
+		private void BuildProjectNamespace(List<Statement> mainMethodBody)
+		{
+			foreach (var doc in documents)
+				try
+				{
+					BuildDocumentNamespace(doc, mainMethodBody);
+				}
+				catch (CompileTimeException e)
+				{
+					e.Document = doc;
+					throw; // rethrow
+				}
+		}
+
+		private void BuildDocumentNamespace(Document doc, List<Statement> mainMethodBody)
+		{
+			doc.Namespace = new FileNamespace(projectNamespace, this);
+
+			if (doc.Statements.Count > 0)
+			{
+				if (projectType == ProjectType.Module)
+					throw new CompileTimeException(doc.Statements[0],
+						"A project compiled as a module may not contain any global statements or global variables.");
+
+				foreach (var stmt in doc.Statements)
+				{
+					if (stmt is SimpleLocalVariableDeclaration) // var a = x;
+						foreach (var decl in ((SimpleLocalVariableDeclaration)stmt).Declarators)
+						{
+							var globalVar = new GlobalVariable(decl.Name, decl, doc);
+							decl.Variable = globalVar;
+							doc.Namespace.DeclareGlobalVariable(globalVar);
+							//AddGlobalVariable(doc, globalVar);
+						}
+					else if (stmt is ParallelLocalVariableDeclaration) // var (a, b) = list;
+					{
+						var declaration = (ParallelLocalVariableDeclaration)stmt;
+						declaration.Variables = new Variable[declaration.Names.Count];
+						for (var i = 0; i < declaration.Names.Count; i++)
+						{
+							var name = declaration.Names[i];
+
+							var globalVar = new GlobalVariable(name,
+								new VariableDeclarator(name, null)
+								{
+									StartIndex = stmt.EndIndex,
+									EndIndex = stmt.EndIndex,
+								}, doc);
+							declaration.Variables[i] = globalVar;
+							doc.Namespace.DeclareGlobalVariable(globalVar);
+							//AddGlobalVariable(doc, globalVar);
+						}
+					}
+					mainMethodBody.Add(stmt);
+				}
+			}
+			
+			ProcessNamespaceMembers(doc.GlobalDeclarationSpace, projectNamespace);
+		}
+
+		private void ProcessNamespaceMembers(NamespaceDeclaration nsDecl, Namespace parent)
+		{
+			// nsDecl.Name should only be null for the file's global declaration space,
+			// when the file doesn't have 'namespace blah;' at the top, and in that case
+			// parent will be the project namespace.
+			var ns = nsDecl.Name == null ? parent : parent.GetNamespace(nsDecl.Name.Parts.ToArray());
+			nsDecl.Namespace = ns;
+
+			foreach (var typeDecl in nsDecl.Types)
+			{
+				Type type;
+				if (typeDecl is ClassDeclaration)
+					type = new Class((ClassDeclaration)typeDecl, ns);
+				else if (typeDecl is EnumDeclaration)
+					type = new Enum((EnumDeclaration)typeDecl, ns);
+				else
+					throw new Exception("Internal error: type declaration was neither ClassDeclaration nor EnumDeclaration.");
+				typeDecl.Type = type;
+				ns.DeclareType(type);
+				AddType(type);
+				// (Don't initialize the types yet!)
+			}
+
+			foreach (var funcDecl in nsDecl.Functions)
+			{
+				var method = new Method(funcDecl);
+				var group = ns.DeclareMethod(method);
+				if (group.Count == 1) // If the group has one overload, then the one we just added is the first one!
+					AddGlobalFunction(group);
+				method.InitBody(this);
+			}
+
+			foreach (var constDecl in nsDecl.Constants)
+				foreach (var varDecl in constDecl.Declaration.Declarators)
+				{
+					var constant = new GlobalConstant(varDecl.Name, varDecl, constDecl.IsPublic);
+					ns.DeclareConstant(constant);
+					AddGlobalConstant(constant);
+				}
+
+			foreach (var subNs in nsDecl.Namespaces)
+				ProcessNamespaceMembers(subNs, ns);
+		}
+
+		private void ResolveBaseTypeNames()
+		{
+			Notice("Resolving base type names...", CompilerVerbosity.Verbose);
+
+			// Prepare some stuff
+			FindType(StandardNames.TypeRootName);
+			FindType(StandardNames.EnumName);
+			FindType(StandardNames.EnumSetName);
+
+			foreach (var doc in documents)
+				try
+				{
+					foreach (var use in doc.Uses)
+						if (use is UseNamespaceDirective)
+						{
+							var ns = projectNamespace.FindNamespace(((UseNamespaceDirective)use).Name);
+							doc.Namespace.ImportNamespace(ns);
+						}
+
+					ResolveBaseTypeNames(doc.GlobalDeclarationSpace, doc.Namespace);
+				}
+				catch (CompileTimeException e)
+				{
+					e.Document = doc;
+					throw;
+				}
+
+			Notice("All base type names were resolved successfully.", CompilerVerbosity.Verbose);
+		}
+
+		private void ResolveBaseTypeNames(NamespaceDeclaration nsDecl, FileNamespace doc)
+		{
+			foreach (var typeDecl in nsDecl.Types)
+			{
+				var type = typeDecl.Type;
+				if (type == ObjectType)
+				{
+					ValidateObjectType(typeDecl, type);
+					continue;
+				}
+
+				if (typeDecl is ClassDeclaration)
+				{
+					var baseTypeName = ((ClassDeclaration)typeDecl).BaseClass;
+					if (baseTypeName == null)
+						type.BaseType = ObjectType;
+					else
+						type.BaseType = nsDecl.Namespace.ResolveTypeName(baseTypeName, doc);
+
+					if (type.BaseType == EnumType && type != EnumSetType)
+						throw new CompileTimeException(((ClassDeclaration)typeDecl).BaseClass,
+							"The type aves.Enum cannot be inherited from explicitly, except by aves.EnumSet. Create an enum instead.");
+					if (type.BaseType == EnumSetType)
+						throw new CompileTimeException(((ClassDeclaration)typeDecl).BaseClass,
+							"The type aves.EnumSet cannot be inherited from explicitly. Create an enum set instead.");
+				}
+				else // EnumDeclaration
+					type.BaseType = ((EnumDeclaration)typeDecl).IsSet ? EnumSetType : EnumType;
+
+				if (type == EnumType)
+					ValidateEnumType(typeDecl, type);
+				else if (type == EnumSetType)
+					ValidateEnumSetType(typeDecl, type);
+
+				if (verbosity > CompilerVerbosity.NotVerbose && !SilenceNotices)
+					Notice(CompilerVerbosity.Verbose, "Initialized base type of '{0}' to '{1}'.",
+						type.FullName, type.BaseType.FullName);
+			}
+
+			foreach (var subNs in nsDecl.Namespaces)
+				ResolveBaseTypeNames(subNs, doc);
+		}
+
+		private void ValidateObjectType(TypeDeclaration typeDecl, Type type)
+		{
+			if (!(typeDecl is ClassDeclaration))
+				throw new CompileTimeException(typeDecl, "Invalid aves.Object declaration: must be a class.");
+
+			var classDecl = (ClassDeclaration)typeDecl;
+			if (classDecl.IsStatic || classDecl.IsAbstract || classDecl.IsPrimitive || !classDecl.IsInheritable)
+				throw new CompileTimeException(classDecl, "Invalid aves.Object declaration: cannot be marked static, abstract or __primitive, and must be marked inheritable. Otherwise you'll break the type hierarchy!");
+			if (classDecl.BaseClass != null)
+				throw new CompileTimeException(classDecl,
+					"Invalid aves.Object declaration: cannot have any declared base type. This is the root of the type hierarchy!");
+
+			// The only type that is allowed to have a null base type.
+			type.BaseType = null;
+
+			Notice("Initialized base type of aves.Object to null.", CompilerVerbosity.Verbose);
+			Notice("Type aves.Object was declared correctly.", CompilerVerbosity.Verbose);
+		}
+
+		private void ValidateEnumType(TypeDeclaration typeDecl, Type type)
+		{
+			if (!(typeDecl is ClassDeclaration))
+				throw new CompileTimeException(typeDecl, "Invalid aves.Enum declaration: must be a class.");
+
+			var classDecl = (ClassDeclaration)typeDecl;
+			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable || !classDecl.IsAbstract)
+				throw new CompileTimeException(classDecl, "Invalid aves.Enum declaration: cannot be marked static, __primitive or inheritable, and must be marked abstract.");
+			if (type.BaseType != ObjectType)
+				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.Enum declaration: must inherit from aves.Object.");
+
+			Notice("Type aves.Enum was declared correctly.", CompilerVerbosity.Verbose);
+		}
+
+		private void ValidateEnumSetType(TypeDeclaration typeDecl, Type type)
+		{
+			if (!(typeDecl is ClassDeclaration))
+				throw new CompileTimeException(typeDecl, "Invalid aves.EnumSet declaration: must be a class.");
+
+			var classDecl = (ClassDeclaration)typeDecl;
+			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable || !classDecl.IsAbstract)
+				throw new CompileTimeException(classDecl, "Invalid aves.EnumSet declaration: cannot be marked static, __primitive or inheritable, and must be marked abstract.");
+			if (type.BaseType != EnumType)
+				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.EnumSet declaration: must inherit from aves.Enum.");
+
+			Notice("Type aves.EnumSet was declared correctly.", CompilerVerbosity.Verbose);
+		}
+
+		private void InitializeClassMembers()
+		{
+			Notice("Initializing all members with bodies...", CompilerVerbosity.Verbose);
+			
+			foreach (var doc in documents)
+				try
+				{
+					InitializeClassMembers(doc.GlobalDeclarationSpace);
+				}
+				catch (CompileTimeException e)
+				{
+					e.Document = doc;
+					throw;
+				}
+
+			Notice("All member bodies were initialized successfully.", CompilerVerbosity.Verbose);
+		}
+
+		private void InitializeClassMembers(NamespaceDeclaration nsDecl)
+		{
+			foreach (var type in nsDecl.Types)
+				if (type is ClassDeclaration)
+					((Class)type.Type).Init(this);
+
+			foreach (var subNs in nsDecl.Namespaces)
+				InitializeClassMembers(subNs);
+		}
+
+		private void ResolveAllNames()
+		{
+			Notice("Resolving all names...", CompilerVerbosity.Verbose);
+
+			Document doc = null;
+			try
+			{
+				// Names are resolved in two passes: first all global and class constants, then
+				// everything else. We do this so that said constants can be folded as necessary,
+				// without having to worry about whether their names have been resolved.
+
+				var docCount = documents.Count;
+
+				for (var i = 0; i < docCount; i++)
+				{
+					doc = documents[i];
+					ResolveAllNames(doc.GlobalDeclarationSpace, doc.Namespace, firstPass: true);
+				}
+
+				for (var i = 0; i < docCount; i++)
+				{
+					doc = documents[i];
+					ResolveAllNames(doc.GlobalDeclarationSpace, doc.Namespace, firstPass: false);
+
+					// Statements must be resolved relative to the document's FileNamespace, because
+					// of global variables. We cannot loop through the main method body separately.
+					foreach (var stmt in doc.Statements)
+						stmt.ResolveNames(mainMethodBody.DeclSpace, doc.Namespace);
+				}
+			}
+			catch (CompileTimeException e)
+			{
+				e.Document = doc;
+				throw;
+			}
+
+			if (mainMethod != null && mainMethod.HasLocalFunctions)
+				AddMethodWithLocalFunctions(mainMethod);
+
+			Notice("All names were resolved successfully.", CompilerVerbosity.Verbose);
+		}
+
+		private void ResolveAllNames(NamespaceDeclaration nsDecl, FileNamespace doc, bool firstPass)
+		{
+			var context = nsDecl.Namespace;
+
+			if (firstPass)
+			{
+				foreach (var constant in nsDecl.Constants)
+					foreach (var decl in constant.Declaration.Declarators)
+						decl.Value = decl.Value.ResolveNames(context, doc);
+			}
+
+			foreach (var type in nsDecl.Types)
+				type.ResolveNames(context, doc, this, firstPass);
+
+			if (!firstPass)
+			{
+				foreach (var function in nsDecl.Functions)
+				{
+					function.Function.ResolveNames(context, doc);
+					if (function.DeclSpace.HasLocalFunctions)
+						AddMethodWithLocalFunctions(function.DeclSpace);
+					if (function.DeclSpace.IsGenerator)
+						AddGeneratorMethod(function.DeclSpace);
+				}
+			}
+
+			foreach (var subNs in nsDecl.Namespaces)
+				ResolveAllNames(subNs, doc, firstPass);
+		}
+
+		private void FoldConstant()
+		{
+			Notice("Performing constant folding...", CompilerVerbosity.Verbose);
+
+			foreach (var doc in documents)
+				try
+				{
+					FoldConstant(doc.GlobalDeclarationSpace);
+
+					foreach (var stmt in doc.Statements)
+						stmt.FoldConstant();
+				}
+				catch (CompileTimeException e)
+				{
+					e.Document = doc;
+					throw;
+				}
+
+			Notice("All expressions were reduced successfully.", CompilerVerbosity.Verbose);
+		}
+
+		private void FoldConstant(NamespaceDeclaration nsDecl)
+		{
+			foreach (var constant in nsDecl.Constants)
+				constant.FoldConstant();
+
+			foreach (var type in nsDecl.Types)
+				type.FoldConstant();
+
+			foreach (var func in nsDecl.Functions)
+				func.Function.FoldConstant();
+
+			foreach (var subNs in nsDecl.Namespaces)
+				FoldConstant(subNs);
+		}
+
+		private void ExtractLocalFunctions()
+		{
+			Notice("Extracting local functions and closure classes...", CompilerVerbosity.Verbose);
+
+			foreach (var method in methodsWithLocalFunctions)
+			{
+				Class @class;
+				Namespace ns;
+				if (method is LocalMethod)
+				{
+					bool _;
+					var func = ((LocalMethod)method).Function;
+					@class = func.GetContainingClass(out _);
+					ns = func.GetContainingNamespace();
+
+					ProcessLocalFunction(func, null, @class, ns);
+				}
+				else
+				{
+					@class = method.Group.ParentAsClass;
+					if (@class == null)
+						ns = method.Group.ParentAsNamespace;
+					else
+						ns = @class.Parent;
+				}
+
+				if (method.LocalFunctions != null)
+					foreach (var function in method.LocalFunctions)
+						ProcessLocalFunction(function, method, @class, ns);
+
+				// And now we need to transform all references to captured things!
+				// And stuff!
+				// yay
+				method.Body.Node.TransformClosureLocals(null, false);
+			}
+
+			if (additionalLocalExtractors != null)
+			{
+				foreach (var extractor in additionalLocalExtractors)
+					extractor();
+				additionalLocalExtractors = null;
+			}
+
+			Notice("Finished extracting local functions and closure classes.", CompilerVerbosity.Verbose);
+		}
+
+		private void ProcessLocalFunction(LocalFunction function, Method parentMethod, Class parentClass, Namespace parentNs)
+		{
+			var localMethod = function.Method;
+
+			if (!function.HasCaptures)
+			{
+				// If the function doesn't capture any variables, then:
+				//   * If it captures 'this', then it becomes a private instance method in parentClass.
+				//   * Otherwise:
+				//     * If it's in a class method, it becomes a private static method in the same class.
+				//     * If it's in a global function, it becomes a private global function in the same namespace.
+
+				localMethod.IsStatic = !function.CapturesThis;
+				function.CompilationStrategy = function.CapturesThis ?
+					LocalFunctionCompilationStrategy.InstanceMethod :
+					LocalFunctionCompilationStrategy.StaticMethod;
+
+				// Rename the method to make it unique within the container!
+				localMethod.Name = LocalMethod.GetExtractedName(parentMethod ?? localMethod, localMethod);
+				localMethod.Access = AccessLevel.Private; // hidd'n from view
+
+				if (parentClass != null)
+					parentClass.DeclareMethod(localMethod);
+				else
+				{
+					var group = parentNs.DeclareMethod(localMethod);
+					AddGlobalFunction(group);
+				}
+			}
+			else
+			{
+				localMethod.Access = AccessLevel.Public; // not hidd'n, technically speakin'
+				localMethod.IsStatic = false;
+
+				// If the function captures variables, then we need to create a closure class for the containing block.
+				function.Parent.GenerateClosureClass(this);
+
+				function.CompilationStrategy = LocalFunctionCompilationStrategy.ClosureMethod;
+
+				// No need to do anything else! The closure class initializer declares this function as part of the closure class,
+				// and adds fields for all captured variables, and everything! Pretty sweet.
+			}
+
+			if (localMethod.LocalFunctions != null)
+				foreach (var innerFunction in localMethod.LocalFunctions)
+					ProcessLocalFunction(innerFunction, parentMethod, parentClass, parentNs);
+		}
+
+		private void ExtractGeneratorClasses()
+		{
+			Notice("Extracting generator classes...", CompilerVerbosity.Verbose);
+
+			foreach (var method in generatorMethods)
+			{
+				var @class = method.GenerateGeneratorClass(this);
+				AddType(@class);
+			}
+
+			Notice("Finished extracting generator classes.", CompilerVerbosity.Verbose);
+		}
+
+		private void PrepareOutputModule()
+		{
+			var outputModule = new Module(modules, this.moduleName, version);
+			outputModule.Metadata = this.metadata;
+			outputModule.NativeLib = this.nativeLibrary == null ? null : Path.GetFileName(this.nativeLibrary.FileName);
+
+			// Note: although the FullName is computed each time you call the property getter,
+			// it's internally cached by OrderBy. So there's no performance drawback!
+
+			if (types != null)
+				foreach (var type in types.OrderBy(t => t.FullName, StringComparer.InvariantCultureIgnoreCase))
+					AddTypeToOutput(type, outputModule);
+
+			if (this.mainMethod != null)
+			{
+				var mainMethodGroup = mainMethod.Group;
+				outputModule.MainMethod = mainMethodGroup;
+				mainMethodGroup.Module = outputModule;
+				//mainMethodGroup.Id = outputModule.GetMethodId(mainMethodGroup);
+				//Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to function '{1}'.", mainMethodGroup.Id, mainMethodGroup.FullName);
+			}
+
+			if (globalFunctions != null)
+				foreach (var func in globalFunctions.OrderBy(f => f.FullName, StringComparer.InvariantCultureIgnoreCase))
+				{
+					func.Module = outputModule;
+					func.Id = outputModule.GetMethodId(func);
+					Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to function '{1}'.", func.Id, func.FullName);
+				}
+
+			if (globalConstants != null)
+				foreach (var constant in globalConstants.OrderBy(c => c.FullName, StringComparer.InvariantCultureIgnoreCase))
+				{
+					constant.Id = outputModule.GetConstantId(constant);
+					outputModule.GetTypeId(constant.Value.GetTypeObject(this)); // If the type comes from another module, we must reference it!
+					if (constant.Value.Type == ConstantValueType.String)
+						outputModule.GetStringId(constant.Value.StringValue);
+					Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to constant '{1}'.", constant.Id, constant.FullName);
+				}
+
+			// All definitions should now be in place, so we lock the appropriate tables.
+			// The ref tables will not be locked, however, because method bodies may still
+			// add references to things. Note, also, that the string table remains open
+			// for the very same reason.
+			var mems = outputModule.Members;
+			mems.TypeDefs.Lock();
+			mems.FieldDefs.Lock();
+			mems.MethodDefs.Lock();
+			mems.GlobalFuncDefs.Lock();
+			mems.GlobalConstDefs.Lock();
+
+			this.outputModule = outputModule;
+		}
+
+		private void AddTypeToOutput(Type type, Module outputModule)
+		{
+			if (type.Id != 0) return; // Already added!
+
+			if (type.Module == null)
+				type.Module = outputModule;
+			if (type.BaseType != null && type.BaseType.Id == 0)
+				AddTypeToOutput(type.BaseType, outputModule);
+			if (type.SharedType != null && type.SharedType.Id == 0)
+				AddTypeToOutput(type.SharedType, outputModule);
+
+			type.Id = outputModule.GetTypeId(type);
+			Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to type '{1}'.", type.Id, type.FullName);
+
+			if (type.Module == outputModule)
+				// And then we initialize the type's members (if it's a typedef)
+				if (type is Enum)
+				{
+					foreach (var field in ((Enum)type).GetFieldsSorted())
+						field.Id = outputModule.GetFieldId(field);
+				}
+				else // Class
+				{
+					foreach (var member in ((Class)type).GetMembersSorted())
+						if (member is MethodGroup)
+						{
+							var method = (MethodGroup)member;
+							method.Module = outputModule;
+							method.Id = outputModule.GetMethodId(method);
+						}
+						else if (member is Field)
+							((Field)member).Id = outputModule.GetFieldId((Field)member);
+						else if (member is ClassConstant)
+						{
+							var constant = (ClassConstant)member;
+							constant.Id = outputModule.GetFieldId(constant);
+							outputModule.GetTypeId(constant.Value.GetTypeObject(this));
+							if (constant.Value.Type == ConstantValueType.String)
+								outputModule.GetStringId(constant.Value.StringValue);
+						}
+						// Properties and operators have no IDs
+				}
+		}
+
+		private void BuildMethodBodies()
+		{
+			// Note: mainMethod is already in GlobalFuncDefs
+			//if (mainMethod != null)
+			//	mainMethod.Compile(this);
+
+			foreach (var kvp in outputModule.Members.MethodDefs)
+				foreach (var method in kvp.Value)
+					method.Compile(this);
+
+			foreach (var kvp in outputModule.Members.GlobalFuncDefs)
+				foreach (var method in kvp.Value)
+					method.Compile(this);
+		}
+
+		/// <summary>
+		/// Outputs a notice-level compiler message.
+		/// </summary>
+		/// <param name="message">The message to print.</param>
+		public void Notice(string message)
+		{
+			Notice(message, CompilerVerbosity.NotVerbose);
+		}
+		/// <summary>
+		/// Outputs a notice-level compiler message.
+		/// </summary>
+		/// <param name="message">The message to print.</param>
+		/// <param name="verbose">Whether the message counts as verbose; if true, the message is not printed unless the <see cref="CompilerFlags.Verbose"/> flag is specified.</param>
+		public void Notice(string message, CompilerVerbosity level)
+		{
+			if (SilenceNotices || level > verbosity)
+				return;
+
+			Console.Write("[info] ");
+			Console.WriteLine(message);
+		}
+
+		internal void Notice(CompilerVerbosity level, string format, object arg0)
+		{
+			if (SilenceNotices || level > verbosity)
+				return;
+			Notice(string.Format(format, arg0), level);
+		}
+		internal void Notice(CompilerVerbosity level, string format, object arg0, object arg1)
+		{
+			if (SilenceNotices || level > verbosity)
+				return;
+			Notice(string.Format(format, arg0, arg1), level);
+		}
+		internal void Notice(CompilerVerbosity level, string format, object arg0, object arg1, object arg2)
+		{
+			if (SilenceNotices || level > verbosity)
+				return;
+			Notice(string.Format(format, arg0, arg1, arg2), level);
+		}
+		internal void Notice(CompilerVerbosity level, string format, params object[] args)
+		{
+			if (SilenceNotices || level > verbosity)
+				return;
+			Notice(string.Format(format, args), level);
+		}
+
+		/// <summary>
+		/// Outputs a warning-level compiler message.
+		/// </summary>
+		/// <param name="message">The message to print.</param>
+		public void Warning(string message)
+		{
+			Warning(message, CompilerVerbosity.NotVerbose);
+		}
+		/// <summary>
+		/// Outputs a warning-level compiler message.
+		/// </summary>
+		/// <param name="message">The message to print.</param>
+		/// <param name="verbose">Whether the message counts as verbose; if true, the message is not printed unless the <see cref="CompilerFlags.Verbose"/> flag is specified.</param>
+		public void Warning(string message, CompilerVerbosity level)
+		{
+			if (SilenceWarnings || level > verbosity)
+				return;
+
+			Console.Write("[warn] ");
+			Console.WriteLine(message);
+		}
+
+		internal void Warning(CompilerVerbosity level, string format, object arg0)
+		{
+			if (SilenceWarnings || level > verbosity)
+				return;
+			Warning(string.Format(format, arg0), level);
+		}
+		internal void Warning(CompilerVerbosity level, string format, object arg0, object arg1)
+		{
+			if (SilenceWarnings || level > verbosity)
+				return;
+			Warning(string.Format(format, arg0, arg1), level);
+		}
+		internal void Warning(CompilerVerbosity level, string format, object arg0, object arg1, object arg2)
+		{
+			if (SilenceWarnings || level > verbosity)
+				return;
+			Warning(string.Format(format, arg0, arg1, arg2), level);
+		}
+		internal void Warning(CompilerVerbosity level, string format, params object[] args)
+		{
+			if (SilenceWarnings || level > verbosity)
+				return;
+			Warning(string.Format(format, args), level);
+		}
+
+		public static void Compile(CompilerOptions options, string targetPath, params string[] sourceFiles)
+		{
+			using (var c = new Compiler(options, sourceFiles))
+				c.Compile(targetPath);
+		}
+
+		public static void Compile(CompilerOptions options, Stream target, params string[] sourceFiles)
+		{
+			using (var c = new Compiler(options, sourceFiles))
+				c.Compile(target);
+		}
+
+		private const string MainMethodName = "<main>";
+
+		private static Dictionary<LambdaOperator, string> lambdaOperatorNames = new Dictionary<LambdaOperator, string>
+		{
+			{LambdaOperator.Plus, "λ<plus>"},
+			{LambdaOperator.Minus, "λ<minus>"},
+			{LambdaOperator.BitwiseOr, "λ<or>"},
+			{LambdaOperator.BitwiseXor, "λ<xor>"},
+			{LambdaOperator.Multiplication, "λ<mul>"},
+			{LambdaOperator.Division, "λ<div>"},
+			{LambdaOperator.Modulo, "λ<mod>"},
+			{LambdaOperator.BitwiseAnd, "λ<and>"},
+			{LambdaOperator.Exponentiation, "λ<exp>"},
+			{LambdaOperator.Hash, "λ<hash>"},
+			{LambdaOperator.Dollar, "λ<dollar>"},
+			{LambdaOperator.ShiftLeft, "λ<shiftLeft>"},
+			{LambdaOperator.ShiftRight, "λ<shiftRight>"},
+			{LambdaOperator.Equality, "λ<equality>"},
+			{LambdaOperator.Inequality, "λ<inequality>"},
+			{LambdaOperator.Comparison, "λ<cmp>"},
+			{LambdaOperator.Less, "λ<less>"},
+			{LambdaOperator.Greater, "λ<greater>"},
+			{LambdaOperator.LessEquals, "λ<lessequals>"},
+			{LambdaOperator.GreaterEquals, "λ<greaterequals>"},
+			{LambdaOperator.BitwiseNot, "λ<not>"},
+			{LambdaOperator.FuncApplication, "λ<apply>"},
+			{LambdaOperator.Concatenation, "λ<concat>"},
+			{LambdaOperator.Not, "λ<boolNot>"},
+			{LambdaOperator.Or, "λ<boolOr>"},
+			{LambdaOperator.Xor, "λ<boolXor>"},
+			{LambdaOperator.And, "λ<boolAnd>"}
+		};
+	}
+
+	public struct CompilerOptions
+	{
+		public CompilerOptions(CompilerFlags flags, CompilerVerbosity verbosity, ProjectType type)
+		{
+			this.flags = flags;
+			this.verbosity = verbosity;
+			this.type = type;
+			this.libraryPath = null;
+			this.nativeLibrary = null;
+			this.metadataFile = null;
+			this.moduleName = null;
+			this.docFile = null;
+		}
+		public CompilerOptions(CompilerFlags flags, CompilerVerbosity verbosity, ProjectType type,
+			string moduleName, string libraryPath, string nativeLibrary, string metadataFile, string docFile)
+		{
+			this.flags = flags;
+			this.verbosity = verbosity;
+			this.type = type;
+			this.moduleName = moduleName;
+			this.libraryPath = libraryPath;
+			this.nativeLibrary = nativeLibrary;
+			this.metadataFile = metadataFile;
+			this.docFile = docFile;
+		}
+
+		private CompilerFlags flags;
+		/// <summary>
+		/// Gets or sets the compiler flags.
+		/// </summary>
+		public CompilerFlags Flags { get { return flags; } set { flags = value; } }
+
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.UseExtensions"/> flag.
+		/// </summary>
+		public bool UseExtensions
+		{
+			get { return (flags & CompilerFlags.UseExtensions) == CompilerFlags.UseExtensions; }
+			set { ToggleFlag(CompilerFlags.UseExtensions, value); }
+		}
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.NoStandardModule"/> flag.
+		/// </summary>
+		public bool NoStandardModule
+		{
+			get { return (flags & CompilerFlags.NoStandardModule) == CompilerFlags.NoStandardModule; }
+			set { ToggleFlag(CompilerFlags.NoStandardModule, value); }
+		}
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.SilenceWarnings"/> flag.
+		/// </summary>
+		public bool SilenceWarnings
+		{
+			get { return (flags & CompilerFlags.SilenceWarnings) == CompilerFlags.SilenceWarnings; }
+			set { ToggleFlag(CompilerFlags.SilenceWarnings, value); }
+		}
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.SilenceNotices"/> flag.
+		/// </summary>
+		public bool SilenceNotices
+		{
+			get { return (flags & CompilerFlags.SilenceNotices) == CompilerFlags.SilenceNotices; }
+			set { ToggleFlag(CompilerFlags.SilenceNotices, value); }
+		}
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.SkipExternChecks"/> flag.
+		/// </summary>
+		public bool SkipExternChecks
+		{
+			get { return (flags & CompilerFlags.SkipExternChecks) == CompilerFlags.SkipExternChecks; }
+			set { ToggleFlag(CompilerFlags.SkipExternChecks, value); }
+		}
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.ErrorToStdout"/> flag.
+		/// </summary>
+		public bool ErrorToStdout
+		{
+			get { return (flags & CompilerFlags.ErrorToStdout) == CompilerFlags.ErrorToStdout; }
+			set { ToggleFlag(CompilerFlags.ErrorToStdout, value); }
+		}
+
+		private CompilerVerbosity verbosity;
+		/// <summary>
+		/// Gets or sets the verbosity of the compiler.
+		/// </summary>
+		public CompilerVerbosity Verbosity { get { return verbosity; } set { verbosity = value; } }
+
+		private ProjectType type;
+		/// <summary>
+		/// Gets or sets the project type.
+		/// </summary>
+		public ProjectType Type { get { return type; } set { type = value; } }
+
+		private string libraryPath;
+		/// <summary>
+		/// Gets or sets the library path, from which modules are loaded if they are not present in the project directory.
+		/// </summary>
+		public string LibraryPath { get { return libraryPath; } set { libraryPath = value; } }
+
+		private string nativeLibrary;
+		/// <summary>
+		/// Gets or sets the file path of the native library, or null if none is used.
+		/// </summary>
+		public string NativeLibrary { get { return nativeLibrary; } set { nativeLibrary = value; } }
+
+		private string metadataFile;
+		/// <summary>
+		/// Gets or sets the path of the metadata file.
+		/// </summary>
+		public string MetadataFile { get { return metadataFile; } set { metadataFile = value; } }
+
+		private string moduleName;
+		/// <summary>
+		/// Gets or sets the name of the output module.
+		/// </summary>
+		public string ModuleName { get { return moduleName; } set { moduleName = value; } }
+
+		private string docFile;
+		/// <summary>
+		/// Gets or sets the path of the documentation file. If set to null,
+		/// the compiler does not generate a documentation file.
+		/// </summary>
+		public string DocFile { get { return docFile; } set { docFile = value; } }
+
+		private void ToggleFlag(CompilerFlags flag, bool on)
+		{
+			if (on)
+				flags |= flag;
+			else
+				flags &= ~flag;
+		}
+	}
+
+	/// <summary>
+	/// Represents options that are passed to the compiler.
+	/// </summary>
+	[Flags]
+	public enum CompilerFlags
+	{
+		/// <summary>
+		/// Specifies no compiler options.
+		/// </summary>
+		None = 0,
+		/// <summary>
+		/// Specifies that the compiler is allowed to use extension keywords.
+		/// </summary>
+		UseExtensions = 1,
+		/// <summary>
+		/// Specifies that the compiler should not include a reference to the standard module.
+		/// This flag should only be specified when compiling the standard module.
+		/// </summary>
+		NoStandardModule = 2,
+		/// <summary>
+		/// Stops the compiler from outputting warnings to the standard output.
+		/// </summary>
+		/// <remarks>This should not be used in conjunction with <see cref="Verbose"/>.</remarks>
+		SilenceWarnings = 4,
+		/// <summary>
+		/// Stops the compiler from outputting notices to the standard output.
+		/// </summary>
+		/// <remarks>This should not be used in conjunction with <see cref="Verbose"/>.</remarks>
+		SilenceNotices = 8,
+		/// <summary>
+		/// If specified, the compiler does not verify that __extern bodies actually resolve to existing methods.
+		/// Use this flag very cautiously! There's a reason the compiler checks these.
+		/// </summary>
+		SkipExternChecks = 16,
+		/// <summary>
+		/// Specifies the <see cref="SilentWarnings"/> and <see cref="SilenceNotices"/> flags.
+		/// </summary>
+		/// <remarks>This should not be used in conjunction with <see cref="Verbose"/>.</remarks>
+		Silent = SilenceWarnings | SilenceNotices,
+		/// <summary>
+		/// Redirects errors to the standard output stream.
+		/// </summary>
+		ErrorToStdout = 32,
+	}
+
+	/// <summary>
+	/// Specifies the verbosity of the compiler.
+	/// </summary>
+	public enum CompilerVerbosity
+	{
+		/// <summary>
+		/// The compiler outputs no messages beyond normal warnings and notices.
+		/// </summary>
+		NotVerbose = 0,
+		/// <summary>
+		/// The compiler outputs verbose messages.
+		/// </summary>
+		Verbose = 1,
+		/// <summary>
+		/// The compiler outputs a LOT of extra information.
+		/// </summary>
+		ExtraVerbose = 2,
+	}
+
+	/// <summary>
+	/// Specifies the type of a project that is being compiled.
+	/// </summary>
+	public enum ProjectType
+	{
+		/// <summary>
+		/// The project is an application, which is executable and has a main method.
+		/// </summary>
+		Application = 0,
+		/// <summary>
+		/// The project is a module, which only exports members and has no main method.
+		/// </summary>
+		Module = 1,
+	}
+}
