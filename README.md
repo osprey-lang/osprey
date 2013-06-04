@@ -8,7 +8,7 @@ The language that this compiler actually compiles, as well as the bytecode forma
 
 	Specifies the output file.
 
-	Default value: the first source file with its extension replaced by .ovm
+	Default value: the first source file with its extension replaced by `.ovm`
 
 * `/libpath <path>`
 
@@ -24,9 +24,9 @@ The language that this compiler actually compiles, as well as the bytecode forma
 
 * `/noexternchecks`
 
-	Forces the compiler not to check __extern references.
+	Forces the compiler not to check `__extern` references.
 
-	Can only be used if /nativelib is specified.
+	Can only be used if `/nativelib` is specified.
 
 	Even if this parameter is specified, the compiler still makes sure the native library file exists, as it must be copied to the output directory.
 
