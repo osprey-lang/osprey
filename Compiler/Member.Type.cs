@@ -1362,6 +1362,7 @@ namespace Osprey.Members
 					IsAbstract = node.IsAbstract,
 					IsOverridable = node.IsOverridable,
 					IsOverride = node.IsOverride,
+					IsImplDetail = true,
 				};
 		}
 		public PropertyAccessor(ClassMemberMethod method, bool isSetter)
@@ -1481,6 +1482,7 @@ namespace Osprey.Members
 					IsOverridable = node.IsOverridable,
 					IsOverride = node.IsOverride,
 					IsStatic = false,
+					IsImplDetail = true,
 				};
 		}
 
