@@ -1355,7 +1355,7 @@ namespace Osprey.Members
 				};
 
 			isSetter = node.IsSetter;
-			method = new ClassMemberMethod((node.IsSetter ? "<set>" : "<get>") + node.Name,
+			method = new ClassMemberMethod(GetAccessorMethodName(node.IsSetter, node.Name),
 				this, node.Access, node.Body, Splat.None, parameters)
 				{
 					IsStatic = node.IsStatic,
@@ -1405,6 +1405,14 @@ namespace Osprey.Members
 						"A property setter can only contain empty return statements.");
 			}
 		}
+
+		internal static string GetAccessorMethodName(bool isSetter, string propName)
+		{
+			return string.Format(isSetter ? SetterNameFormat : GetterNameFormat, propName);
+		}
+
+		internal const string GetterNameFormat = "get<{0}>";
+		internal const string SetterNameFormat = "set<{0}>";
 	}
 
 	public class Indexer : ClassMember
@@ -1466,7 +1474,7 @@ namespace Osprey.Members
 				};
 
 			this.isSetter = node.IsSetter;
-			method = new ClassMemberMethod(node.IsSetter ? "<set>.item" : "<get>.item",
+			method = new ClassMemberMethod(PropertyAccessor.GetAccessorMethodName(node.IsSetter, ".item"),
 				this, node.Access, node.Body, Splat.None, parameters)
 				{
 					IsAbstract = node.IsAbstract,
@@ -1786,7 +1794,8 @@ namespace Osprey.Members
 			};
 			DeclareField(currentValueField);
 
-			var currentValueGetterMethod = new ClassMemberMethod("<get>current", null, AccessLevel.Public,
+			var currentValueGetterMethod = new ClassMemberMethod(PropertyAccessor.GetAccessorMethodName(false, "current"),
+				null, AccessLevel.Public,
 				new Block(
 					new ReturnStatement(
 						new InstanceMemberAccess(new ThisAccess(), this, currentValueField)
