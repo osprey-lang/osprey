@@ -1424,13 +1424,27 @@ namespace Osprey.Instructions
 		/// </summary>
 		public int ArgCount { get { return argCount; } }
 
+		/// <summary>
+		/// Gets the effective argument count of this instruction. If the static call applies to an instance method,
+		/// then this will be <see cref="ArgCount"/> plus one; otherwise, it will be the same as <see cref="ArgCount"/>.
+		/// </summary>
+		internal int FinalArgCount
+		{
+			get
+			{
+				if (this.Parent == null)
+					throw new InvalidOperationException("Cannot get the final argument count of a static call instruction without a parent.");
+				return argCount +
+					(this.Parent.Module.GetMethod(this.method).IsStatic ? 0 : 1);
+			}
+		}
+
 		public override StackChange StackChange
 		{
 			get
 			{
 				var method = Parent.Module.GetMethod(this.method);
-				return new StackChange(removed: argCount // arguments
-					+ (method.IsStatic ? 0 : 1), // instance, if any
+				return new StackChange(removed: FinalArgCount, // arguments
 					added: 1); // return value
 			}
 		}
@@ -1438,27 +1452,28 @@ namespace Osprey.Instructions
 		public override int GetSize()
 		{
 			return 1 + 4 /* method ID */ +
-				(argCount <= byte.MaxValue ? 1 : 2);
+				(FinalArgCount <= byte.MaxValue ? 1 : 2);
 		}
 
 		public override byte[] GetBytes()
 		{
 			byte[] output;
 
-			if (argCount <= byte.MaxValue)
+			var finalArgc = FinalArgCount;
+			if (finalArgc <= byte.MaxValue)
 			{
 				output = new byte[6];
 				output[0] = (byte)Opcode.Scall_s;
 
-				output[5] = (byte)argCount;
+				output[5] = (byte)finalArgc;
 			}
 			else
 			{
 				output = new byte[7];
 				output[0] = (byte)Opcode.Scall;
 
-				var argcLow = (byte)(argCount & 0x00ff);
-				var argcHigh = (byte)((argCount & 0xff00) >> 8);
+				var argcLow = (byte)(finalArgc & 0x00ff);
+				var argcHigh = (byte)((finalArgc & 0xff00) >> 8);
 				output[5] = argcLow;
 				output[6] = argcHigh;
 			}
@@ -1485,7 +1500,7 @@ namespace Osprey.Instructions
 				sb.Append(']');
 			}
 			sb.Append(' ');
-			sb.Append(argCount);
+			sb.Append(FinalArgCount);
 
 			return sb.ToString();
 		}
