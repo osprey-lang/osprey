@@ -18,10 +18,11 @@ namespace Osprey
 
 			CompilerOptions options;
 			string outFile;
+			Dictionary<string, bool> constants;
 			List<string> sourceFiles;
 			try
 			{
-				var sourceFileIndex = ParseArguments(args, out options, out outFile);
+				var sourceFileIndex = ParseArguments(args, out options, out outFile, out constants);
 				if (sourceFileIndex == -1)
 					throw new ArgumentException("There must be at least one source file.");
 
@@ -53,13 +54,13 @@ namespace Osprey
 			}
 
 #if DEBUG
-			Compiler.Compile(options, outFile, sourceFiles.ToArray());
+			Compiler.Compile(options, outFile, constants, sourceFiles.ToArray());
 			Console.ReadKey(intercept: true);
 #else
 			var err = options.ErrorToStdout ? Console.Out : Console.Error;
 			try
 			{
-				Compiler.Compile(options, outFile, sourceFiles.ToArray());
+				Compiler.Compile(options, outFile, constants, sourceFiles.ToArray());
 			}
 			catch (ParseException e)
 			{
@@ -199,13 +200,16 @@ namespace Osprey
 		/// <param name="options">The <see cref="CompilerOptions"/> that receives the parsed arguments.</param>
 		/// <param name="outFile">The output file, or null if none was specified.</param>
 		/// <returns>The index of the first source file within <paramref name="args"/>.</returns>
-		private static int ParseArguments(string[] args, out CompilerOptions options, out string outFile)
+		private static int ParseArguments(string[] args, out CompilerOptions options,
+			out string outFile, out Dictionary<string, bool> constants)
 		{
 			options = new CompilerOptions();
 			options.UseExtensions = true; // Use extensions by default
 
 			var seenSwitches = new HashSet<string>();
 			outFile = null;
+
+			constants = new Dictionary<string, bool>();
 
 			var argc = args.Length;
 			for (var i = 0; i < args.Length; i++)
@@ -317,6 +321,18 @@ namespace Osprey
 						case "errtostdout":
 							options.ErrorToStdout = true;
 							break;
+
+						case "const":
+							if (i >= argc - 2 || (args[i + 2] != "true" && args[i + 2] != "false"))
+								throw new ArgumentException("'/const' must be followed by a name and either 'true' or 'false'.");
+
+							{
+								var name = args[++i].Trim();
+								if (constants.ContainsKey(name))
+									throw new ArgumentException("Each '/const' declaration must have a unique name.");
+								constants.Add(name, args[++i] == "true");
+							}
+							continue; // Don't add the switch to the set!
 
 						case "f":
 							return i + 1; // Source file list begins here!

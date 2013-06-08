@@ -17,7 +17,7 @@ namespace Osprey
 {
 	public partial class Compiler : IDisposable
 	{
-		private Compiler(CompilerOptions options, params string[] sourceFiles)
+		private Compiler(CompilerOptions options, Dictionary<string, bool> constants, params string[] sourceFiles)
 		{
 			if (sourceFiles == null)
 				throw new ArgumentNullException("sourceFiles");
@@ -36,6 +36,9 @@ namespace Osprey
 			foreach (var file in sourceFiles)
 				this.sourceFiles[file] = null;
 			this.documents = new List<Document>(this.sourceFiles.Count);
+
+			if (constants != null && constants.Count > 0)
+				extraConstants = new Dictionary<string, bool>(constants);
 
 			if (options.NativeLibrary != null)
 				this.nativeLibrary = NativeLibrary.Open(options.NativeLibrary);
@@ -98,6 +101,8 @@ namespace Osprey
 		private Dictionary<string, Document> sourceFiles;
 		private List<Document> documents;
 		private HashSet<string> importedModules;
+
+		private Dictionary<string, bool> extraConstants;
 
 		private HashSet<Method> methodsWithLocalFunctions;
 		private List<Action> additionalLocalExtractors;
@@ -558,6 +563,9 @@ namespace Osprey
 			}
 			BuildProjectNamespace(mainMethodContents);
 
+			if (extraConstants != null)
+				DeclareExtraConstants();
+
 			// Step 3: Resolve the type names of base classes. Every type must have a base class,
 			// except aves.Object, which is treated specially. We have the following default base
 			// classes (if the type does not explicitly declare a base class):
@@ -862,6 +870,45 @@ namespace Osprey
 
 			foreach (var subNs in nsDecl.Namespaces)
 				ProcessNamespaceMembers(subNs, ns);
+		}
+
+		private void DeclareExtraConstants()
+		{
+			Notice("Declaring command-line constants...", CompilerVerbosity.Verbose);
+			foreach (var kvp in extraConstants)
+			{
+				var nameParts = kvp.Key.Split('.');
+
+				var ns = projectNamespace;
+				for (var i = 0; i < nameParts.Length - 1; i++)
+				{
+					var name = nameParts[i];
+					if (ns.ContainsMember(name) && ns.GetMember(name).Kind == MemberKind.Namespace)
+						ns = (Namespace)ns.GetMember(name);
+					else
+					{
+						Notice(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
+						ns = null;
+						break;
+					}
+				}
+
+				if (ns != null)
+				{
+					var lastPart = nameParts[nameParts.Length - 1];
+					if (!ns.ContainsMember(lastPart))
+					{
+						ns.DeclareConstant(new GlobalConstant(lastPart,
+							ConstantValue.CreateBoolean(kvp.Value), AccessLevel.Private));
+						Notice(CompilerVerbosity.Verbose, "Declared constant: {0} = {1}", kvp.Key, kvp.Value);
+					}
+					else
+						Notice(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
+				}
+			}
+			Notice("Finished adding command-line constants.", CompilerVerbosity.Verbose);
+
+			extraConstants = null;
 		}
 
 		private void ResolveBaseTypeNames()
@@ -1436,13 +1483,23 @@ namespace Osprey
 
 		public static void Compile(CompilerOptions options, string targetPath, params string[] sourceFiles)
 		{
-			using (var c = new Compiler(options, sourceFiles))
-				c.Compile(targetPath);
+			Compile(options, targetPath, null, sourceFiles);
 		}
 
 		public static void Compile(CompilerOptions options, Stream target, params string[] sourceFiles)
 		{
-			using (var c = new Compiler(options, sourceFiles))
+			Compile(options, target, null, sourceFiles);
+		}
+
+		public static void Compile(CompilerOptions options, string targetPath, Dictionary<string, bool> constants, params string[] sourceFiles)
+		{
+			using (var c = new Compiler(options, constants, sourceFiles))
+				c.Compile(targetPath);
+		}
+
+		public static void Compile(CompilerOptions options, Stream target, Dictionary<string, bool> constants, params string[] sourceFiles)
+		{
+			using (var c = new Compiler(options, constants, sourceFiles))
 				c.Compile(target);
 		}
 
