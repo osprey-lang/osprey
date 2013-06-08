@@ -1903,7 +1903,7 @@ namespace Osprey
 				case TokenType.CaretAssign: return BinaryOperator.BitwiseXor;
 				case TokenType.ConcatAssign: return BinaryOperator.Concatenation;
 				case TokenType.ShiftLeftAssign: return BinaryOperator.ShiftLeft;
-				case TokenType.ShiftRightASsign: return BinaryOperator.ShiftRight;
+				case TokenType.ShiftRightAssign: return BinaryOperator.ShiftRight;
 				case TokenType.PowerAssign: return BinaryOperator.Exponentiation;
 				case TokenType.HashAssign: return BinaryOperator.Hash;
 				case TokenType.DollarAssign: return BinaryOperator.Dollar;

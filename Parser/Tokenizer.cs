@@ -475,7 +475,6 @@ namespace Osprey
 		{
 			var startIndex = i;
 
-			var ch = source[i];
 			if (IsEOF(i) || !char.IsLetter(source, i) && source[i] != '_' &&
 				char.GetUnicodeCategory(source, i) != UnicodeCategory.LetterNumber)
 				throw new Exception("Internal error: ScanIdentifier called without valid identifier-start-character at i.");
@@ -515,16 +514,11 @@ namespace Osprey
 			switch (ch)
 			{
 				// always single: { } [ ] ( ) , ; ~ @
-				case '{':
-				case '}':
-				case '[':
-				case ']':
-				case '(':
-				case ')':
-				case ',':
-				case ';':
-				case '~':
-				case '@':
+				case '{': case '}':
+				case '[': case ']':
+				case '(': case ')':
+				case ',': case ';':
+				case '~': case '@':
 					break; // So simple!
 				// other combinations:
 				// .  ...  <=>  <<?=?  >>?=?  **?=?
@@ -565,14 +559,10 @@ namespace Osprey
 						goto case '='; // may be followed by =
 					break;
 				// optionally followed by an '=': + | / % & ^ # $ =
-				case '+':
-				case '|':
-				case '/':
-				case '%':
-				case '&':
+				case '+': case '|':
+				case '/': case '%': case '&':
 				case '^':
-				case '#':
-				case '$':
+				case '#': case '$':
 				case '=':
 					if (!IsEOF(i) && source[i] == '=')
 						i++;
@@ -758,7 +748,8 @@ namespace Osprey
 			{"abstract", TokenType.Abstract}, {"and", TokenType.And}, {"async", TokenType.Async},
 			{"base", TokenType.Base}, {"break", TokenType.Break},
 			{"catch", TokenType.Catch}, {"class", TokenType.Class}, {"const", TokenType.Const},
-			{"do", TokenType.Do}, {"else", TokenType.Else}, {"enum", TokenType.Enum},
+			{"do", TokenType.Do},
+			{"else", TokenType.Else}, {"enum", TokenType.Enum},
 			{"false", TokenType.False}, {"finally", TokenType.Finally}, {"for", TokenType.For}, {"function", TokenType.Function},
 			{"get", TokenType.Get}, {"global", TokenType.Global},
 			{"if", TokenType.If}, {"in", TokenType.In}, {"inheritable", TokenType.Inheritable}, {"is", TokenType.Is}, {"iter", TokenType.Iter},
@@ -792,7 +783,7 @@ namespace Osprey
 			{"+=", TokenType.PlusAssign}, {"-=", TokenType.MinusAssign}, {"|=", TokenType.PipeAssign},
 			{"*=", TokenType.MulAssign}, {"/=", TokenType.DivAssign}, {"%=", TokenType.ModAssign}, {"&=", TokenType.AmpAssign},
 			{"^=", TokenType.CaretAssign}, {"::=", TokenType.ConcatAssign},
-			{"<<=", TokenType.ShiftLeftAssign}, {">>=", TokenType.ShiftRightASsign},
+			{"<<=", TokenType.ShiftLeftAssign}, {">>=", TokenType.ShiftRightAssign},
 			{"**=", TokenType.PowerAssign}, {"#=", TokenType.HashAssign}, {"$=", TokenType.DollarAssign},
 			{"@", TokenType.At}, {"...", TokenType.Splat}, {"?.", TokenType.SafeAccess}, {"<=>", TokenType.Compare},
 			{"?(", TokenType.ParenOpenSafe}, {"?[", TokenType.SquareOpenSafe}

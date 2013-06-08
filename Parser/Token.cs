@@ -412,7 +412,7 @@ namespace Osprey
 		/// <summary>&lt;&lt;=</summary>
 		ShiftLeftAssign = 46 | Punctuation | CompoundAssign,
 		/// <summary>&gt;gt;=</summary>
-		ShiftRightASsign = 47 | Punctuation | CompoundAssign,
+		ShiftRightAssign = 47 | Punctuation | CompoundAssign,
 		/// <summary>**=</summary>
 		PowerAssign = 48 | Punctuation | CompoundAssign,
 		/// <summary>#=</summary>
