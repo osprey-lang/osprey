@@ -217,7 +217,7 @@ namespace Osprey
 			}
 			else
 			{
-				var emptySection = true; // false if one or more digits encountered '_'
+				var emptySection = true; // false if one or more digits encountered after '_'
 
 				var hasExp = false;
 				// decimal, either (u)int or real
@@ -227,7 +227,7 @@ namespace Osprey
 					if (ch == '.' && !IsEOF(i + 1) &&
 						source[i + 1] >= '0' && source[i + 1] <= '9')
 					{
-						if (emptySection)
+						if (emptySection && i != startIndex)
 							throw new ParseException(GetErrorToken(i, 1),
 								"Underscore ('_') not followed by one or more digits.");
 						if (isReal)
@@ -257,7 +257,7 @@ namespace Osprey
 								"be followed by an optional sign (+ or -) and one or more digits");
 
 						hasExp = true;
-						// keep scanning decimal numbers (i++ skips the first one)
+						// keep scanning decimal numbers (i++ below skips the first one)
 					}
 					else if (ch == '_')
 					{
