@@ -620,13 +620,13 @@ namespace Osprey
 			return !IsEOF(i) && source[i] == ch;
 		}
 
-		private bool IsNewline(char ch)
+		private static bool IsNewline(char ch)
 		{
 			return ch == '\u000D' || ch == '\u000A' || ch == '\u0085' ||
 				ch == '\u2028' || ch == '\u2029';
 		}
 
-		private bool IsHex(char ch)
+		private static bool IsHex(char ch)
 		{
 			return
 				ch >= '0' && ch <= '9' ||
