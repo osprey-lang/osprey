@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Osprey.Json;
 using Osprey.Nodes;
 
 namespace Osprey
@@ -95,25 +96,15 @@ namespace Osprey
                 return argCount >= paramCount - optionalParamCount && argCount <= paramCount;
         }
 
-		public string ToJsonString()
+		internal JsonObject ToJson()
 		{
-			var sb = new StringBuilder(0x20);
-			sb.Append('{');
+			var output = new JsonObject();
 
-			sb.Append("\"minArgs\"");
-			sb.Append(':');
-			sb.Append((paramCount - optionalParamCount).ToJsonString());
-
+			output.Add("minArgs", new JsonNumber(paramCount - optionalParamCount));
 			if (splat == Splat.None)
-			{
-				sb.Append(',');
-				sb.Append("\"maxArgs\"");
-				sb.Append(':');
-				sb.Append(paramCount.ToJsonString());
-			}
+				output.Add("maxArgs", new JsonNumber(paramCount));
 
-			sb.Append('}');
-			return sb.ToString();
+			return output;
 		}
 
 		private static bool AreAmbiguous(Signature a, Signature b)

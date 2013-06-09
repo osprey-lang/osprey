@@ -219,6 +219,11 @@ namespace Osprey.Nodes
 
 		public string DocString;
 
+		/// <summary>
+		/// The constants that were declared in this declaration.
+		/// </summary>
+		internal GlobalConstant[] Constants;
+
 		public override string ToString(int indent)
 		{
 			return new string('\t', indent) + (IsPublic ? "public " : "") + Declaration.ToString(indent).TrimStart(null);

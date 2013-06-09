@@ -63,6 +63,7 @@
   <ItemGroup>
     <Compile Include="Compiler\StandardNames.cs" />
     <Compile Include="DocGenerator.cs" />
+    <Compile Include="JsonGen.cs" />
     <Compile Include="Module\Module.Saver.cs" />
     <Compile Include="Module\ModuleReader.cs" />
     <Compile Include="Module\Module.Loader.cs" />

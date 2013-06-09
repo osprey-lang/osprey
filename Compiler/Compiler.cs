@@ -861,12 +861,19 @@ namespace Osprey
 			}
 
 			foreach (var constDecl in nsDecl.Constants)
-				foreach (var varDecl in constDecl.Declaration.Declarators)
+			{
+				var declarators = constDecl.Declaration.Declarators;
+				var constants = new GlobalConstant[declarators.Count];
+				for (var i = 0; i < declarators.Count; i++)
 				{
+					var varDecl = declarators[i];
 					var constant = new GlobalConstant(varDecl.Name, varDecl, constDecl.IsPublic);
 					ns.DeclareConstant(constant);
 					AddGlobalConstant(constant);
+					constants[i] = constant;
 				}
+				constDecl.Constants = constants;
+			}
 
 			foreach (var subNs in nsDecl.Namespaces)
 				ProcessNamespaceMembers(subNs, ns);
@@ -1494,13 +1501,21 @@ namespace Osprey
 		public static void Compile(CompilerOptions options, string targetPath, Dictionary<string, bool> constants, params string[] sourceFiles)
 		{
 			using (var c = new Compiler(options, constants, sourceFiles))
+			{
 				c.Compile(targetPath);
+				if (options.DocFile != null)
+					DocGenerator.Generate(c.projectNamespace, c.documents, options.DocFile);
+			}
 		}
 
 		public static void Compile(CompilerOptions options, Stream target, Dictionary<string, bool> constants, params string[] sourceFiles)
 		{
 			using (var c = new Compiler(options, constants, sourceFiles))
+			{
 				c.Compile(target);
+				if (options.DocFile != null)
+					DocGenerator.Generate(c.projectNamespace, c.documents, options.DocFile);
+			}
 		}
 
 		private const string MainMethodName = "<main>";
