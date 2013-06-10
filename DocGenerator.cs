@@ -467,7 +467,7 @@ namespace Osprey
 					case "throws":
 						if (param != null)
 						{
-							if (Throws != null)
+							if (Throws == null)
 								Throws = new List<ThrowsDoc>();
 
 							var ns = context is Namespace? (Namespace)context : context.GetContainingNamespace();
