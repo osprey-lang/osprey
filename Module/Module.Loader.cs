@@ -267,6 +267,8 @@ namespace Osprey
 				typeName = fullName;
 			}
 
+			reader.ReadInt32(); // Skip memberCount
+
 			Type output;
 			var baseTypeName = baseType == null ? null : baseType.FullName;
 			if (baseTypeName == StandardNames.EnumName || baseTypeName == StandardNames.EnumSetName && fullName != StandardNames.EnumSetName)

@@ -256,6 +256,8 @@ namespace Osprey
 			writer.Write(type.BaseType.Id); // baseType
 			writer.Write(0u); // sharedType (always 0 for enums)
 
+			writer.Write(type.members.Count); // memberCount
+
 			// fields
 			writer.BeginCollection(type.members.Count);
 
@@ -307,12 +309,18 @@ namespace Osprey
 				else if (member.Kind == MemberKind.Constant)
 					fields.Add((ClassConstant)member);
 				else if (member is Property)
-					// Note: indexers also claim to of kind MemberKind.Property;
+					// Note: indexers also claim to be of kind MemberKind.Property;
 					// we ignore them in this loop
 					properties.Add((Property)member);
 				else if (member.Kind == MemberKind.MethodGroup) // MethodGroup
 					methods.Add((MethodGroup)member);
 			}
+
+			// memberCount
+			writer.Write(fields.Count +
+				methods.Count +
+				properties.Count +
+				(type.Indexer != null ? 1 : 0));
 
 			// fields
 			if (fields.Count == 0)

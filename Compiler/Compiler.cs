@@ -1371,7 +1371,9 @@ namespace Osprey
 						{
 							var constant = (ClassConstant)member;
 							constant.Id = outputModule.GetFieldId(constant);
-							outputModule.GetTypeId(constant.Value.GetTypeObject(this));
+							// The constant type does not need to be defined at this point, so
+							// don't get an ID for it just yet. We do this only when emitting
+							// the actual bytes for the module.
 							if (constant.Value.Type == ConstantValueType.String)
 								outputModule.GetStringId(constant.Value.StringValue);
 						}
