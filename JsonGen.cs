@@ -23,18 +23,18 @@ namespace Osprey.Json
 		public override string ToString()
 		{
 			var sb = new StringBuilder();
-			this.ToString(sb);
+			this.ToString(sb, 0);
 			return sb.ToString();
 		}
 
-		public abstract void ToString(StringBuilder target);
+		public abstract void ToString(StringBuilder target, int indent);
 
-		public static void ValueToString(JsonValue value, StringBuilder target)
+		public static void ValueToString(JsonValue value, StringBuilder target, int indent)
 		{
 			if (value == null)
 				target.Append("null");
 			else
-				value.ToString(target);
+				value.ToString(target, indent);
 		}
 	}
 
@@ -58,7 +58,7 @@ namespace Osprey.Json
 		private bool value;
 		public bool Value { get { return value; } }
 
-		public override void ToString(StringBuilder target)
+		public override void ToString(StringBuilder target, int indent)
 		{
 			target.Append(value ? "true" : "false");
 		}
@@ -99,7 +99,7 @@ namespace Osprey.Json
 		private double value;
 		public double Value { get { return value; } }
 
-		public override void ToString(StringBuilder target)
+		public override void ToString(StringBuilder target, int indent)
 		{
 			target.Append(value.ToJsonString());
 		}
@@ -131,7 +131,7 @@ namespace Osprey.Json
 		private string value;
 		public string Value { get { return value; } }
 
-		public override void ToString(StringBuilder target)
+		public override void ToString(StringBuilder target, int indent)
 		{
 			target.Append(value.ToJsonString());
 		}
@@ -229,15 +229,18 @@ namespace Osprey.Json
 			return values.GetEnumerator();
 		}
 
-		public override void ToString(StringBuilder target)
+		public override void ToString(StringBuilder target, int indent)
 		{
-			target.Append('[');
+			target.AppendLine("[");
 			for (var i = 0; i < values.Count; i++)
 			{
 				if (i > 0)
-					target.Append(',');
-				ValueToString(values[i], target);
+					target.AppendLine(",");
+				target.Append('\t', indent + 1);
+				ValueToString(values[i], target, indent + 1);
 			}
+			target.AppendLine();
+			target.Append('\t', indent);
 			target.Append(']');
 		}
 
@@ -343,20 +346,23 @@ namespace Osprey.Json
 			return members.GetEnumerator();
 		}
 
-		public override void ToString(StringBuilder target)
+		public override void ToString(StringBuilder target, int indent)
 		{
-			target.Append('{');
+			target.AppendLine("{");
 			var needSep = false;
 			foreach (var kvp in members)
 			{
 				if (needSep)
-					target.Append(',');
+					target.AppendLine(",");
 				else
 					needSep = true;
+				target.Append('\t', indent + 1);
 				target.Append(kvp.Key.ToJsonString());
-				target.Append(':');
-				ValueToString(kvp.Value, target);
+				target.Append(": ");
+				ValueToString(kvp.Value, target, indent + 1);
 			}
+			target.AppendLine();
+			target.Append('\t', indent);
 			target.Append('}');
 		}
 
