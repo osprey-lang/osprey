@@ -1511,6 +1511,12 @@ namespace Osprey
 			using (var c = new Compiler(options, constants, sourceFiles))
 			{
 				c.Compile(targetPath);
+				if (c.nativeLibrary != null)
+				{
+					var libTarget = Path.Combine(Path.GetDirectoryName(targetPath), Path.GetFileName(c.nativeLibrary.FileName));
+					if (libTarget != c.nativeLibrary.FileName)
+						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
+				}
 				if (options.DocFile != null)
 					DocGenerator.Generate(c.projectNamespace, c.documents, options.DocFile);
 			}
@@ -1521,6 +1527,12 @@ namespace Osprey
 			using (var c = new Compiler(options, constants, sourceFiles))
 			{
 				c.Compile(target);
+				if (c.nativeLibrary != null)
+				{
+					var libTarget = Path.Combine(Path.GetDirectoryName(sourceFiles[0]), Path.GetFileName(c.nativeLibrary.FileName));
+					if (libTarget != c.nativeLibrary.FileName)
+						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
+				}
 				if (options.DocFile != null)
 					DocGenerator.Generate(c.projectNamespace, c.documents, options.DocFile);
 			}

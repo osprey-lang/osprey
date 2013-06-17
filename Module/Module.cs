@@ -723,7 +723,7 @@ namespace Osprey
 				if (standardModule != null)
 					throw new InvalidOperationException("The standard module has already been set for this pool.");
 				standardModule = value;
-				loadedModules.Add(value.Name, value);
+				loadedModules[value.Name] = value; // Add to pool if it isn't there already
 			}
 		}
 
