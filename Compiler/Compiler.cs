@@ -653,7 +653,7 @@ namespace Osprey
 			if (!NoStandardModule)
 			{
 				importedModules.Add(StandardNames.StandardModuleName);
-				modules.Load(StandardNames.StandardModuleName);
+				modules.StandardModule = modules.GetOrLoad(StandardNames.StandardModuleName);
 			}
 
 			var newFiles = new HashSet<string>(sourceFiles.Select(kvp => Path.GetFullPath(kvp.Key)));
@@ -1286,6 +1286,12 @@ namespace Osprey
 			var outputModule = new Module(modules, this.moduleName, version);
 			outputModule.Metadata = this.metadata;
 			outputModule.NativeLib = this.nativeLibrary == null ? null : Path.GetFileName(this.nativeLibrary.FileName);
+
+			if (!NoStandardModule)
+				// Note: we have to add a reference to the standard module, even if the code doesn't explicitly
+				// use any members from it. Otherwise the runtime won't load it.
+				// It must also be the first ModuleRef, or the runtime will load things in the wrong order.
+				outputModule.AddModuleRef(modules.StandardModule);
 
 			// Note: although the FullName is computed each time you call the property getter,
 			// it's internally cached by OrderBy. So there's no performance drawback!

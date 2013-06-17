@@ -128,6 +128,16 @@ namespace Osprey
 		}
 
 		/// <summary>
+		/// References the specified module in the current module.
+		/// </summary>
+		/// <param name="module">The module to reference.</param>
+		/// <returns>The token ID of the ModuleRef.</returns>
+		internal uint AddModuleRef(Module module)
+		{
+			return members.ModuleRefs.GetId(module);
+		}
+
+		/// <summary>
 		/// Gets a string ID for a string with the specified value. If the string does not exist in the module,
 		/// it is added to it, and a new ID is created.
 		/// </summary>
