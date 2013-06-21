@@ -623,18 +623,33 @@ namespace Osprey
 			// are added to a byte buffer, which becomes the method block of the output module.
 			BuildMethodBodies();
 
+			// Step 11: Add ref names to output, as they need to be in the strings table. During this step, we also
+			// lock all the ref tables, because they should not change any longer.
+			AddRefNamesToOutput();
+
 			// Sanity check: we should not encounter any constant string values that haven't been added to this table.
 			// So we lock it to prevent further modification; if something throws, there's a bug in the compiler.
 			outputModule.Members.Strings.Lock();
 
-			// Step 11: Save the output module. Once we've done this, we're all done! Holy carp.
+			compileTimer.Stop();
+
+			var posBefore = target.Position;
+
+			// Step 12: Save the output module. Once we've done this, we're all done! Holy carp.
+			var emitTimer = Stopwatch.StartNew();
+
 			outputModule.Save(target);
 
-			compileTimer.Stop();
+			emitTimer.Stop();
+
+			var posAfter = target.Position;
+
 			Notice("Compilation finished at " + DateTime.Now);
 			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds);
+			Notice("Time taken to emit bytes (ms): " + emitTimer.Elapsed.TotalMilliseconds);
 
-			Notice("Total time taken (ms): " + (parseTimer.Elapsed + compileTimer.Elapsed).TotalMilliseconds);
+			Notice("Total time taken (ms): " + (parseTimer.Elapsed + compileTimer.Elapsed + emitTimer.Elapsed).TotalMilliseconds);
+			Notice("Total bytes written: " + (posAfter - posBefore));
 		}
 
 		private void ProcessFiles()
@@ -1312,14 +1327,17 @@ namespace Osprey
 			if (globalFunctions != null)
 				foreach (var func in globalFunctions.OrderBy(f => f.FullName, StringComparer.InvariantCultureIgnoreCase))
 				{
+					outputModule.GetStringId(func.FullName);
 					func.Module = outputModule;
 					func.Id = outputModule.GetMethodId(func);
 					Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to function '{1}'.", func.Id, func.FullName);
+					AddParametersToOutput(func, outputModule);
 				}
 
 			if (globalConstants != null)
 				foreach (var constant in globalConstants.OrderBy(c => c.FullName, StringComparer.InvariantCultureIgnoreCase))
 				{
+					outputModule.GetStringId(constant.FullName);
 					constant.Id = outputModule.GetConstantId(constant);
 					outputModule.GetTypeId(constant.Value.GetTypeObject(this)); // If the type comes from another module, we must reference it!
 					if (constant.Value.Type == ConstantValueType.String)
@@ -1352,6 +1370,7 @@ namespace Osprey
 			if (type.SharedType != null && type.SharedType.Id == 0)
 				AddTypeToOutput(type.SharedType, outputModule);
 
+			outputModule.GetStringId(type.FullName);
 			type.Id = outputModule.GetTypeId(type);
 			Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to type '{1}'.", type.Id, type.FullName);
 
@@ -1360,22 +1379,32 @@ namespace Osprey
 				if (type is Enum)
 				{
 					foreach (var field in ((Enum)type).GetFieldsSorted())
+					{
+						outputModule.GetStringId(field.Name);
 						field.Id = outputModule.GetFieldId(field);
+					}
 				}
 				else // Class
 				{
 					foreach (var member in ((Class)type).GetMembersSorted())
+					{
 						if (member is MethodGroup)
 						{
 							var method = (MethodGroup)member;
+							outputModule.GetStringId(method.Name == "this" ? ".call" : method.Name);
 							method.Module = outputModule;
 							method.Id = outputModule.GetMethodId(method);
+							AddParametersToOutput(method, outputModule);
 						}
 						else if (member is Field)
+						{
+							outputModule.GetStringId(member.Name);
 							((Field)member).Id = outputModule.GetFieldId((Field)member);
+						}
 						else if (member is ClassConstant)
 						{
 							var constant = (ClassConstant)member;
+							outputModule.GetStringId(constant.Name);
 							constant.Id = outputModule.GetFieldId(constant);
 							// The constant type does not need to be defined at this point, so
 							// don't get an ID for it just yet. We do this only when emitting
@@ -1383,8 +1412,19 @@ namespace Osprey
 							if (constant.Value.Type == ConstantValueType.String)
 								outputModule.GetStringId(constant.Value.StringValue);
 						}
+						else if (member is Property || member is Indexer)
+							outputModule.GetStringId(member.Name);
 						// Properties and operators have no IDs
+					}
 				}
+		}
+
+		private void AddParametersToOutput(MethodGroup group, Module outputModule)
+		{
+			foreach (var overload in group)
+				if (overload.Parameters != null)
+					foreach (var param in overload.Parameters)
+						outputModule.GetStringId(param.Name);
 		}
 
 		private void BuildMethodBodies()
@@ -1400,6 +1440,33 @@ namespace Osprey
 			foreach (var kvp in outputModule.Members.GlobalFuncDefs)
 				foreach (var method in kvp.Value)
 					method.Compile(this);
+		}
+
+		private void AddRefNamesToOutput()
+		{
+			var outputModule = this.outputModule;
+			var members = outputModule.Members;
+
+			members.ModuleRefs.Lock();
+			members.TypeRefs.Lock();
+			members.GlobalFuncRefs.Lock();
+			members.MethodRefs.Lock();
+			members.FieldRefs.Lock();
+
+			foreach (var modRef in members.ModuleRefs)
+				outputModule.GetStringId(modRef.Value.Name);
+
+			foreach (var typeRef in members.TypeRefs)
+				outputModule.GetStringId(typeRef.Value.FullName);
+
+			foreach (var funcRef in members.GlobalFuncRefs)
+				outputModule.GetStringId(funcRef.Value.FullName);
+
+			foreach (var methodRef in members.MethodRefs)
+				outputModule.GetStringId(methodRef.Value.Name);
+
+			foreach (var fieldRef in outputModule.Members.FieldRefs)
+				outputModule.GetStringId(fieldRef.Value.Name);
 		}
 
 		/// <summary>

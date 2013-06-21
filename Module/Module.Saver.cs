@@ -47,14 +47,14 @@ namespace Osprey
 			var methodStartTarget = writer.BaseStream.Position;
 			writer.Write(0u);
 
+			WriteStrings(writer, members.Strings); // strings
+
 			// References
 			WriteModuleRefs(writer, members.ModuleRefs); // moduleRefs
 			WriteTypeRefs(writer, members.TypeRefs); // typeRefs
 			WriteFunctionRefs(writer, members.GlobalFuncRefs); // functionRefs
 			WriteFieldRefs(writer, members.FieldRefs); // fieldRefs
 			WriteMethodRefs(writer, members.MethodRefs); // methodRefs
-
-			WriteString(writer, members.Strings); // strings
 
 			// Definitions
 			WriteTypeDefs(writer, members.TypeDefs); // types
@@ -99,6 +99,24 @@ namespace Osprey
 			}
 		}
 
+		private void WriteStrings(ModuleWriter writer, MemberTable<string> strings)
+		{
+			if (strings.Count == 0)
+				writer.Write(0u); // size
+			else
+			{
+				writer.BeginCollection(strings.Count);
+
+				foreach (var str in strings)
+				{
+					writer.Write(str.Key); // id
+					writer.Write(str.Value); // value
+				}
+
+				writer.EndCollection();
+			}
+		}
+
 		private void WriteModuleRefs(ModuleWriter writer, MemberTable<Module> moduleRefs)
 		{
 			if (moduleRefs.Count == 0)
@@ -112,7 +130,7 @@ namespace Osprey
 				foreach (var modRef in moduleRefs)
 				{
 					writer.Write(modRef.Key); // id
-					writer.Write(modRef.Value.name); // name
+					writer.Write(GetStringId(modRef.Value.name)); // name
 					writer.Write(modRef.Value.version); // minVersion
 				}
 
@@ -133,7 +151,7 @@ namespace Osprey
 				foreach (var typeRef in typeRefs)
 				{
 					writer.Write(typeRef.Key); // id
-					writer.Write(typeRef.Value.FullName); // name
+					writer.Write(GetStringId(typeRef.Value.FullName)); // name
 					writer.Write(members.ModuleRefs.GetId(typeRef.Value.Module)); // declModule (ID)
 				}
 
@@ -154,7 +172,7 @@ namespace Osprey
 				foreach (var funcRef in functionRefs)
 				{
 					writer.Write(funcRef.Key); // id
-					writer.Write(funcRef.Value.FullName); // name
+					writer.Write(GetStringId(funcRef.Value.FullName)); // name
 					writer.Write(members.ModuleRefs.GetId(funcRef.Value.Module)); // declModule (ID)
 				}
 
@@ -175,7 +193,7 @@ namespace Osprey
 				foreach (var fieldRef in fieldRefs)
 				{
 					writer.Write(fieldRef.Key); // id
-					writer.Write(fieldRef.Value.Name); // name
+					writer.Write(GetStringId(fieldRef.Value.Name)); // name
 					writer.Write(fieldRef.Value.Parent.Id); // declType
 				}
 
@@ -196,26 +214,8 @@ namespace Osprey
 				foreach (var methodRef in methodRefs)
 				{
 					writer.Write(methodRef.Key); // id
-					writer.Write(methodRef.Value.Name); // name
+					writer.Write(GetStringId(methodRef.Value.Name)); // name
 					writer.Write(methodRef.Value.ParentAsClass.Id); // declType
-				}
-
-				writer.EndCollection();
-			}
-		}
-
-		private void WriteString(ModuleWriter writer, MemberTable<string> strings)
-		{
-			if (strings.Count == 0)
-				writer.Write(0u); // size
-			else
-			{
-				writer.BeginCollection(strings.Count);
-
-				foreach (var str in strings)
-				{
-					writer.Write(str.Key); // id
-					writer.Write(str.Value); // value
 				}
 
 				writer.EndCollection();
@@ -251,7 +251,7 @@ namespace Osprey
 			var flags = TypeFlags.Primitive |
 				(type.Access == AccessLevel.Public ? TypeFlags.Public : TypeFlags.Private);
 			writer.WriteFlags(flags); // flags
-			writer.Write(type.FullName); // name
+			writer.Write(GetStringId(type.FullName)); // name
 
 			writer.Write(type.BaseType.Id); // baseType
 			writer.Write(0u); // sharedType (always 0 for enums)
@@ -265,7 +265,7 @@ namespace Osprey
 			{
 				writer.Write(field.Id); // id
 				writer.WriteFlags(FieldFlags.Public | FieldFlags.HasValue); // flags
-				writer.Write(field.Name); // name
+				writer.Write(GetStringId(field.Name)); // name
 				WriteConstantValue(writer, ConstantValue.CreateEnumValue(field.Value.IntValue, type)); // value
 			}
 
@@ -292,7 +292,7 @@ namespace Osprey
 				flags |= TypeFlags.Sealed;
 
 			writer.WriteFlags(flags); // flags
-			writer.Write(type.FullName); // name
+			writer.Write(GetStringId(type.FullName)); // name
 
 			writer.Write(type.BaseType == null ? 0u : type.BaseType.Id); // baseType
 			writer.Write(type.SharedType == null ? 0u : type.SharedType.Id); // sharedType
@@ -341,7 +341,7 @@ namespace Osprey
 						writer.WriteFlags(GetFieldFlags((ClassConstant)field));
 					}
 
-					writer.Write(field.Name);
+					writer.Write(GetStringId(field.Name));
 
 					if (field.Kind == MemberKind.Constant)
 						WriteConstantValue(writer, ((ClassConstant)field).Value);
@@ -369,14 +369,14 @@ namespace Osprey
 
 				if (type.Indexer != null)
 				{
-					writer.Write(type.Indexer.Name); // name
+					writer.Write(GetStringId(type.Indexer.Name)); // name
 					writer.Write(type.Indexer.GetterId); // getter
 					writer.Write(type.Indexer.SetterId); // setter
 				}
 
 				foreach (var prop in properties)
 				{
-					writer.Write(prop.Name); // name
+					writer.Write(GetStringId(prop.Name)); // name
 					writer.Write(prop.GetterId); // getter
 					writer.Write(prop.SetterId); // setter
 				}
@@ -416,10 +416,12 @@ namespace Osprey
 			writer.Write(method.Id); // Start with the ID
 
 			writer.WriteFlags(GetMethodFlags(method)); // flags
+			string name;
 			if (method.ParentAsClass == null)
-				writer.Write(method.FullName); // full name (global function)
+				name = method.FullName; // full name (global function)
 			else
-				writer.Write(method.Name == "this" ? ".call" : method.Name); // name (class method)
+				name = method.Name == "this" ? ".call" : method.Name; // name (class method)
+			writer.Write(GetStringId(name));
 
 			writer.BeginCollection(method.Count); // overloads!
 
@@ -430,7 +432,7 @@ namespace Osprey
 
 				writer.Write((ushort)overload.Signature.ParameterCount); // paramCount
 				for (var i = 0; i < overload.Signature.ParameterCount; i++) // paramNames
-					writer.Write(overload.Parameters[i].Name);
+					writer.Write(GetStringId(overload.Parameters[i].Name));
 
 				if ((flags & OverloadFlags.ShortHeader) == 0)
 					WriteOverloadHeader(writer, overload);
@@ -554,7 +556,7 @@ namespace Osprey
 					var constant = kvp.Value;
 					writer.WriteFlags(constant.Access == AccessLevel.Private ? ConstantFlags.Private : ConstantFlags.Public); // flags
 
-					writer.Write(constant.FullName); // name
+					writer.Write(GetStringId(constant.FullName)); // name
 					WriteConstantValue(writer, constant.Value);
 				}
 

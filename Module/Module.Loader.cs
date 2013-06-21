@@ -62,6 +62,10 @@ namespace Osprey
 			// Skip typeCount, functionCount, constantCount, fieldCount, methodCount and methodStart
 			reader.Seek(6 * sizeof(int), SeekOrigin.Current);
 
+			// First is the string table, which we must read, because all member names use this,
+			// and it may be used in constants, too.
+			ReadStringTable(reader, output);
+
 			// Now come a bunch of ref tables. In order:
 			//    1. moduleRefs
 			//    2. typeRefs
@@ -78,10 +82,6 @@ namespace Osprey
 			reader.SkipCollection(); // functionRefs
 			reader.SkipCollection(); // fieldRefs
 			reader.SkipCollection(); // methodRefs
-
-			// Following methodRefs is also the strings table, which we cannot skip,
-			// because constant string values will refer to IDs in it.
-			ReadStringTable(reader, output);
 
 			// And now we have types, functions and constants
 			ReadTypeDefs(reader, output);
@@ -113,6 +113,31 @@ namespace Osprey
 			return output;
 		}
 
+		private static void ReadStringTable(ModuleReader reader, Module target)
+		{
+			var size = reader.ReadUInt32();
+			if (size != 0)
+			{
+				var posBefore = reader.BaseStream.Position;
+				var length = reader.ReadInt32(); // number of table entries
+
+				var strings = target.members.Strings;
+
+				for (var i = 0; i < length; i++)
+				{
+					uint id = reader.ReadUInt32();
+					if (id != (StringMask | unchecked((uint)i + 1)))
+						throw new ModuleLoadException(reader.FileName, "Invalid String token ID (must be consecutive).");
+
+					var value = reader.ReadOvumString();
+					strings.Add(value);
+				}
+
+				if (reader.BaseStream.Position != posBefore + size)
+					throw new ModuleLoadException(reader.FileName, "String table reports an inaccurate size.");
+			}
+		}
+
 		private static void ReadModuleRefs(ModuleReader reader, Module target)
 		{
 			var size = reader.ReadUInt32();
@@ -129,7 +154,7 @@ namespace Osprey
 					if (id != (ModuleRefMask | unchecked((uint)i + 1)))
 						throw new ModuleLoadException(reader.FileName, "Invalid ModuleRef token ID (must be consecutive).");
 
-					var refName = reader.ReadOvumString();
+					var refName = target.members.Strings[reader.ReadUInt32()];
 					var refVersion = reader.ReadVersion();
 
 					var mod = target.Pool.GetOrLoad(refName);
@@ -167,7 +192,7 @@ namespace Osprey
 					if (id != (TypeRefMask | unchecked((uint)i + 1)))
 						throw new ModuleLoadException(reader.FileName, "Invalid TypeRef token ID (must be consecutive).");
 
-					var typeName = reader.ReadOvumString();
+					var typeName = target.members.Strings[reader.ReadUInt32()];
 					var declModule = reader.ReadUInt32();
 					var type = target.GetModule(declModule).GetType(typeName);
 
@@ -176,31 +201,6 @@ namespace Osprey
 
 				if (reader.BaseStream.Position != posBefore + size)
 					throw new ModuleLoadException(reader.FileName, "TypeRef table reports an inaccurate size.");
-			}
-		}
-
-		private static void ReadStringTable(ModuleReader reader, Module target)
-		{
-			var size = reader.ReadUInt32();
-			if (size != 0)
-			{
-				var posBefore = reader.BaseStream.Position;
-				var length = reader.ReadInt32(); // number of table entries
-
-				var strings = target.members.Strings;
-
-				for (var i = 0; i < length; i++)
-				{
-					uint id = reader.ReadUInt32();
-					if (id != (StringMask | unchecked((uint)i + 1)))
-						throw new ModuleLoadException(reader.FileName, "Invalid String token ID (must be consecutive).");
-
-					var value = reader.ReadOvumString();
-					strings.Add(value);
-				}
-
-				if (reader.BaseStream.Position != posBefore + size)
-					throw new ModuleLoadException(reader.FileName, "String table reports an inaccurate size.");
 			}
 		}
 
@@ -236,7 +236,7 @@ namespace Osprey
 		{
 			var flags = reader.ReadTypeFlags();
 
-			var fullName = reader.ReadOvumString();
+			var fullName = target.members.Strings[reader.ReadUInt32()];
 
 			uint baseTypeId = reader.ReadUInt32();
 			uint sharedTypeId = reader.ReadUInt32();
@@ -342,7 +342,7 @@ namespace Osprey
 					fieldCounter++;
 
 					var flags = reader.ReadFieldFlags();
-					var name = reader.ReadOvumString();
+					var name = module.members.Strings[reader.ReadUInt32()];
 
 					if ((flags & FieldFlags.HasValue) == FieldFlags.HasValue)
 					{
@@ -404,7 +404,7 @@ namespace Osprey
 						throw new ModuleLoadException(reader.FileName, "Invalid MethodDef token ID (must be consecutive).");
 					methodCounter++;
 
-					var method = ReadSingleMethodDef(reader, target);
+					var method = ReadSingleMethodDef(reader, module, target);
 
 					target.ImportMethodGroup(method);
 					if (method.Name == ".new")
@@ -418,10 +418,10 @@ namespace Osprey
 			}
 		}
 
-		private static MethodGroup ReadSingleMethodDef(ModuleReader reader, NamedMember parent)
+		private static MethodGroup ReadSingleMethodDef(ModuleReader reader, Module module, NamedMember parent)
 		{
 			var methodFlags = reader.ReadMethodFlags();
-			var name = reader.ReadOvumString();
+			var name = module.members.Strings[reader.ReadUInt32()];
 
 			// overloads!
 			var overloadsSize = reader.ReadUInt32();
@@ -449,12 +449,7 @@ namespace Osprey
 
 				ushort paramCount = reader.ReadUInt16();
 				// Skip param names (we don't actually need them!)
-				for (var k = 0; k < paramCount; k++)
-				{
-					var nameLength = reader.ReadInt32();
-					// Skip name contents
-					reader.Seek(/* sizeof(UTF-16 codon) */ 2 * nameLength, SeekOrigin.Current);
-				}
+				reader.Seek(sizeof(uint) * paramCount, SeekOrigin.Current);
 
 				ushort optionalParamCount;
 				if ((flags & OverloadFlags.ShortHeader) == OverloadFlags.ShortHeader)
@@ -518,7 +513,7 @@ namespace Osprey
 				// Note: this is a List<PropertyDef>, not Table<PropertyDef>.
 				for (var i = 0; i < length; i++)
 				{
-					var name = reader.ReadOvumString();
+					var name = module.members.Strings[reader.ReadUInt32()];
 					var getterId = reader.ReadUInt32();
 					var setterId = reader.ReadUInt32();
 
@@ -639,7 +634,7 @@ namespace Osprey
 					fieldCounter++;
 
 					var flags = reader.ReadFieldFlags();
-					var name = reader.ReadOvumString();
+					var name = target.members.Strings[reader.ReadUInt32()];
 
 					var access = GetAccessibility(reader, flags);
 					if (access != AccessLevel.Public)
@@ -708,7 +703,7 @@ namespace Osprey
 					if (id != (GlobalFuncDefMask | (i + 1)))
 						throw new ModuleLoadException(reader.FileName, "Invalid FunctionDef token ID (must be consecutive).");
 
-					var method = ReadSingleMethodDef(reader, target.pool.Namespace);
+					var method = ReadSingleMethodDef(reader, target, target.pool.Namespace);
 					//target.members.GlobalFuncDefs.Add(method);
 					method.Module = target;
 				}
@@ -739,7 +734,7 @@ namespace Osprey
 						throw new ModuleLoadException(reader.FileName, "Invalid ConstantDef token ID (must be consecutive).");
 
 					var flags = reader.ReadConstantFlags();
-					var name = reader.ReadOvumString();
+					var name = target.members.Strings[reader.ReadUInt32()];
 
 					var typeId = reader.ReadUInt32();
 					var value = reader.ReadInt64();
