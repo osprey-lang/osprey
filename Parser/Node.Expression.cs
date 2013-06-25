@@ -1899,9 +1899,10 @@ namespace Osprey.Nodes
 			{
 				bool hasInstance;
 				var @class = context.GetContainingClass(out hasInstance);
+				var thisType = @class;
 				if (Inner is BaseAccess)
 					@class = (Class)@class.BaseType;
-				var member = @class.GetMember(Member, @class, @class);
+				var member = @class.GetMember(Member, instType: thisType, fromType: thisType);
 
 				if (member == null)
 					throw new UndefinedNameException(this, Member,
@@ -1939,7 +1940,7 @@ namespace Osprey.Nodes
 				bool hasInstance;
 				var @class = context.GetContainingClass(out hasInstance);
 
-				var member = knownType.GetMember(Member, @class, @class);
+				var member = knownType.GetMember(Member, instType: @class, fromType: @class);
 
 				if (member == null)
 					throw new UndefinedNameException(this, Member,

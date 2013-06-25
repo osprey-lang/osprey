@@ -72,7 +72,7 @@ namespace Osprey.Members
 					else
 						throw new Exception("Type contains an invalid member type.");
 
-					if (IsAccessible(mem.Access, instType, declType, fromType))
+					if (IsAccessible(mem.Access, instType: instType, declType: declType, fromType: fromType))
 						return mem;
 				}
 
@@ -113,7 +113,11 @@ namespace Osprey.Members
 		/// <returns>True if the member is accessible; otherwise, false.</returns>
 		public static bool IsAccessible(AccessLevel access, Type instType, Type declType, Type fromType)
 		{
-			// Note: this algorithm is basically lifted straight from Ovum.
+			// Note: this algorithm is basically lifted straight from Ovum,
+			// though it does not take shared types into account (because all
+			// accessibility checking is done before the compiler extracts
+			// closure classes and the like, i.e. the things that make use
+			// of type sharing).
 			if (access == AccessLevel.Private)
 				return fromType != null && (declType == fromType || declType == fromType.SharedType);
 
@@ -122,45 +126,14 @@ namespace Osprey.Members
 				if (fromType == null)
 					return false;
 
-				//var tempType = fromType;
-				while (fromType != null && fromType != instType)
-					fromType = fromType.BaseType;
-
-				if (fromType == null)
-					return false;
-
-				while (instType != null && instType != declType)
+				while (instType != null && instType != fromType)
 					instType = instType.BaseType;
 
-				return instType != null;
+				if (instType == null)
+					return false;
 
-				/*var tempType = instType;
-				while (tempType != null && tempType != fromType)
-					tempType = tempType.BaseType;
-
-				if (tempType == null)
-				{
-					var sharedType = fromType.SharedType;
-					while (instType != null && instType != sharedType)
-						instType = instType.BaseType;
-
-					if (instType == null)
-						return false; // instType does not inherit from fromType or fromType.SharedType
-				}
-
-				tempType = fromType;
-				while (tempType != null && tempType != declType)
-					tempType = tempType.BaseType;
-
-				if (tempType == null)
-				{
-					var sharedType = fromType.SharedType;
-					while (sharedType != null && sharedType != declType)
-						sharedType = sharedType.BaseType;
-
-					if (sharedType == null)
-						return false; // neither fromType nor fromType.SharedType inherits from declType
-				}*/
+				while (fromType != null && fromType != declType)
+					fromType = fromType.BaseType;
 			}
 
 			return true; // AccessLevel.Public or accessible
@@ -775,7 +748,7 @@ namespace Osprey.Members
 
 		public override Method FindConstructor(ParseNode errorNode, int argCount, Class fromClass)
 		{
-			if (!IsAccessible(constructors.Access, this, this, fromClass))
+			if (!IsAccessible(constructors.Access, instType: fromClass, declType: this, fromType: fromClass))
 				throw new CompileTimeException(errorNode,
 					string.Format("The constructor of '{0}' is not accessible from this location.",
 						this.FullName));

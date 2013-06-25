@@ -780,7 +780,7 @@ namespace Osprey.Nodes
 				if (@class == null)
 					throw new InvalidOperationException("ConstructorParam found outside class.");
 
-				var member = @class.GetMember(this.Name, @class, @class);
+				var member = @class.GetMember(this.Name, instType: @class, fromType: @class);
 				if (member == null)
 					throw new CompileTimeException(this, string.Format("The type '{0}' does not contain a definition for '{1}'.",
 						@class.FullName, this.Name));
