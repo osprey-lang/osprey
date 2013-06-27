@@ -909,7 +909,7 @@ namespace Osprey
 						ns = (Namespace)ns.GetMember(name);
 					else
 					{
-						Notice(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
+						Warning(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
 						ns = null;
 						break;
 					}
@@ -925,7 +925,7 @@ namespace Osprey
 						Notice(CompilerVerbosity.Verbose, "Declared constant: {0} = {1}", kvp.Key, kvp.Value);
 					}
 					else
-						Notice(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
+						Warning(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
 				}
 			}
 			Notice("Finished adding command-line constants.", CompilerVerbosity.Verbose);
