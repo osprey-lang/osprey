@@ -106,7 +106,7 @@ namespace Osprey.Members
 	public class AmbiguousTypeName : Type
 	{
 		public AmbiguousTypeName(TypeName name, params Type[] types)
-			: base(null, MemberKind.Ambiguous, null)
+			: base(null, MemberKind.Ambiguous, AccessLevel.None, null)
 		{
 			typeName = name;
 			Types.AddRange(types);

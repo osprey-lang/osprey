@@ -79,7 +79,7 @@ namespace Osprey
 	public class AmbiguousTypeNameException : CompileTimeException
 	{
 		public AmbiguousTypeNameException(ParseNode node, AmbiguousTypeName name)
-			: this(node, name, "A type name was unambiguous.", null)
+			: this(node, name, GetDefaultErrorMessage(name), null)
 		{ }
 		public AmbiguousTypeNameException(ParseNode node, AmbiguousTypeName name, string message)
 			: this(node, name, message, null)
@@ -95,6 +95,16 @@ namespace Osprey
 		/// Gets an <see cref="AmbiguousTypeName"/> containing the types that the name resolved to.
 		/// </summary>
 		public AmbiguousTypeName Name { get { return name; } }
+
+		private static string GetDefaultErrorMessage(AmbiguousTypeName name)
+		{
+			var typeName = name.TypeName != null ?
+				name.TypeName.Parts.JoinString(".") :
+				null;
+			return string.Format("The type name '{0}' is ambiguous between the following types: {1}",
+				typeName ?? "(null)",
+				string.Join(", ", name.Types.Select(t => t.FullName)));
+		}
 	}
 
 	/// <summary>
