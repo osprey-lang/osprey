@@ -352,7 +352,7 @@ namespace Osprey.Members
 			if (state == ClassState.Inited)
 				return; // Nothing to do here!
 			if (state == ClassState.Initing)
-				throw new CompileTimeException(Node, "Cyclic class declaration (class inherits from itself).");
+				throw new CompileTimeException(Node, "Cyclic class declaration (class indirectly inherits from itself).");
 
 			state = ClassState.Initing;
 
