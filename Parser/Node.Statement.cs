@@ -1444,11 +1444,9 @@ namespace Osprey.Nodes
 
 			public void Init(Compiler compiler, MethodBuilder method)
 			{
-				var thisArg = method.GetParameter(0);
-
 				if (Counter.IsCaptured && Counter.CaptureField.Parent is GeneratorClass)
 				{
-					method.Append(new LoadLocal(thisArg));
+					method.Append(new LoadLocal(method.GetParameter(0)));
 					Range.Low.Compile(compiler, method);
 					method.Append(StoreField.Create(method.Module, Counter.CaptureField));
 				}
@@ -1463,7 +1461,7 @@ namespace Osprey.Nodes
 				{
 					if (HighField != null)
 					{
-						method.Append(new LoadLocal(thisArg));
+						method.Append(new LoadLocal(method.GetParameter(0)));
 						Range.High.Compile(compiler, method);
 						method.Append(StoreField.Create(method.Module, HighField));
 					}
@@ -1479,7 +1477,7 @@ namespace Osprey.Nodes
 				{
 					if (StepField != null)
 					{
-						method.Append(new LoadLocal(thisArg));
+						method.Append(new LoadLocal(method.GetParameter(0)));
 						Range.Step.Compile(compiler, method);
 						method.Append(StoreField.Create(method.Module, StepField));
 					}

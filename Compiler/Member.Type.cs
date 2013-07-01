@@ -280,10 +280,10 @@ namespace Osprey.Members
 		public Class(string name, AccessLevel access, Namespace parent)
 			: base(name, MemberKind.Class, access, parent)
 		{
-			inited = true;
+			state = ClassState.Inited;
 		}
 
-		private bool inited = false;
+		private ClassState state = ClassState.NotInited;
 
 		public bool IsInheritable { get; internal set; }
 		public bool IsAbstract { get; internal set; }
@@ -349,19 +349,21 @@ namespace Osprey.Members
 
 		public void Init(Compiler compiler)
 		{
-			if (inited)
+			if (state == ClassState.Inited)
 				return; // Nothing to do here!
+			if (state == ClassState.Initing)
+				throw new CompileTimeException(Node, "Cyclic class declaration (class inherits from itself).");
+
+			state = ClassState.Initing;
 
 			if (BaseType is Class) // may be null (but only for aves.Object)
 			{
 				var baseClass = (Class)BaseType;
-				if (!baseClass.inited)
+				if (baseClass.state != ClassState.Inited)
 					baseClass.Init(compiler);
 				if (baseClass.IsAbstract && !this.IsAbstract)
 					InitInheritedAbstractMethods();
 			}
-
-			inited = true;
 
 			var node = Node as ClassDeclaration;
 			if (node == null)
@@ -460,6 +462,8 @@ namespace Osprey.Members
 				DeclareStaticConstructor(staticCtor);
 				staticCtor.InitBody(compiler);
 			}
+
+			state = ClassState.Inited;
 		}
 
 		protected void InitInheritedAbstractMethods()
@@ -1044,6 +1048,13 @@ namespace Osprey.Members
 		internal string GetLambdaName(string nameHint)
 		{
 			return string.Format("<λc>{0}${1}", nameHint ?? "<anon>", lambdaNameCounter++);
+		}
+
+		private enum ClassState
+		{
+			NotInited,
+			Initing,
+			Inited,
 		}
 	}
 
