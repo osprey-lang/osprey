@@ -2084,6 +2084,8 @@ namespace Osprey.Nodes
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
 			context.GetContainingNamespace().ResolveTypeName(Type, document);
+			if (!Type.Type.InheritsFrom(document.Compiler.ErrorType))
+				throw new CompileTimeException(Type, "The type in a catch clause must inherit from aves.Error.");
 			base.ResolveNames(context, document); // Body
 		}
 

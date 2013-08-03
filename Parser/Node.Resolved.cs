@@ -254,7 +254,7 @@ namespace Osprey.Nodes
 				case LocalFunctionCompilationStrategy.ClosureMethod:
 					{
 						/* A local function can be accessed in one of three ways:
-						 *   * From an expression in the body that declares it:
+						 *   1. From an expression in the body that declares it:
 						 *       function a() {
 						 *           function b() { }
 						 *           b(); // <-- a == b.declaringMethod
@@ -262,7 +262,7 @@ namespace Osprey.Nodes
 						 *               b(); // <-- also a == b.declaringMethod
 						 *       }
 						 *       
-						 *   * From inside a local function declared in the same scope
+						 *   2. From inside a local function declared in the same scope
 						 *     as the function being accessed:
 						 *       function a() {
 						 *           function b() {
@@ -273,7 +273,7 @@ namespace Osprey.Nodes
 						 *           }
 						 *       }
 						 *       
-						 *   * From a local function inside the function being accessed
+						 *   3. From a local function inside the function being accessed
 						 *     (with arbitrarily deep nesting):
 						 *       function a() {
 						 *           function b() {

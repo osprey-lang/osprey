@@ -54,6 +54,28 @@ namespace Osprey.Members
 
 		public abstract bool ContainsMember(string name);
 
+		/// <summary>
+		/// Determines whether this type is or inherits from another type.
+		/// </summary>
+		/// <param name="other">The type to test against.</param>
+		/// <returns>True if this type is or inherits from <paramref name="other"/>; otherwise, false.</returns>
+		/// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+		public bool InheritsFrom(Type other)
+		{
+			if (other == null)
+				throw new ArgumentNullException("other");
+
+			var t = this;
+			do
+			{
+				if (t == other)
+					return true;
+				t = t.BaseType;
+			} while (t != null);
+
+			return false;
+		}
+
 		public NamedMember GetMember(string name, Type instType, Type fromType)
 		{
 			var type = this;

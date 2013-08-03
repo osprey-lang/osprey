@@ -279,6 +279,7 @@ namespace Osprey
 				output = ReadClassDef(reader, target, flags, typeName, baseType, sharedType,
 					ref fieldCounter, ref methodCounter);
 			output.Module = target;
+			output.BaseType = baseType;
 
 			if (target.explicitlyImported && output.Access == AccessLevel.Public)
 			{
