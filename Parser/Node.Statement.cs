@@ -876,28 +876,28 @@ namespace Osprey.Nodes
 			}
 			else
 			{
-				var falseLabel = new Label("else");
-				Condition.CompileBoolean(compiler, falseLabel, false, method); // Evaluate the condition
+				var elseLabel = new Label("else");
+				Condition.CompileBoolean(compiler, elseLabel, false, method); // Evaluate the condition
 
 				Body.Compile(compiler, method); // Evaluate the if body
 
 				if (Else != null)
 				{
 					Label endLabel = null;
-					if (!Body.AlwaysTerminates)
+					if (!Body.AlwaysLeaves(this))
 					{
 						endLabel = new Label("if-else-end");
 						method.Append(Branch.Always(endLabel)); // Jump to end of if statement
 					}
 
-					method.Append(falseLabel);
+					method.Append(elseLabel);
 					Else.Compile(compiler, method); // Evaluate the else clause
 
-					if (!Body.AlwaysTerminates)
+					if (!Else.AlwaysLeaves(Else))
 						method.Append(endLabel); // End of if-else
 				}
 				else
-					method.Append(falseLabel);
+					method.Append(elseLabel);
 			}
 		}
 	}

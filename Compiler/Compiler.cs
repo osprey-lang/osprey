@@ -1585,7 +1585,7 @@ namespace Osprey
 				c.Compile(targetPath);
 				if (c.nativeLibrary != null)
 				{
-					var libTarget = Path.Combine(Path.GetDirectoryName(targetPath), Path.GetFileName(c.nativeLibrary.FileName));
+					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(targetPath), Path.GetFileName(c.nativeLibrary.FileName)));
 					if (libTarget != c.nativeLibrary.FileName)
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
 				}
@@ -1601,7 +1601,7 @@ namespace Osprey
 				c.Compile(target);
 				if (c.nativeLibrary != null)
 				{
-					var libTarget = Path.Combine(Path.GetDirectoryName(sourceFiles[0]), Path.GetFileName(c.nativeLibrary.FileName));
+					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFiles[0]), Path.GetFileName(c.nativeLibrary.FileName)));
 					if (libTarget != c.nativeLibrary.FileName)
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
 				}
