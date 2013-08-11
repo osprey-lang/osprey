@@ -955,7 +955,7 @@ namespace Osprey.Members
 		/// <param name="clause">A <see cref="TryStatement"/> or <see cref="CatchClause"/> to test whether the loop is outside it, or null.</param>
 		/// <param name="isLeave">If <see cref="clause"/> is null: true if the loop is outside a protected block, otherwise false. If <see cref="clause"/> is not null: true if the loop lies outside that clause, otherwise false.</param>
 		/// <returns>The <see cref="IterationStatement"/> corresponding to the loop.</returns>
-		public IterationStatement FindLoop(ParseNode errorNode, string label, CompoundStatement clause, out bool isLeave)
+		public IterationStatement FindLoop(ParseNode errorNode, string label, out bool isLeave)
 		{
 			// Never cross the streams.
 			var crossesFinally = false;
@@ -976,7 +976,7 @@ namespace Osprey.Members
 				if (owner is FinallyClause)
 					crossesFinally = true; // Oh dear
 				if (owner is TryStatement || owner is CatchClause)
-					isLeave = isLeave || clause == null || clause == owner;
+					isLeave = true;
 
 				block = block.Parent; // This will stop at the method boundary. That's okay.
 			} while (block != null);

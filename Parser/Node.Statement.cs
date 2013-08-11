@@ -11,10 +11,6 @@ namespace Osprey.Nodes
 	public abstract class Statement : ParseNode
 	{
 		/// <summary>
-		/// Determines whether the statement always terminates the current execution when evaluated.
-		/// </summary>
-		public virtual bool AlwaysTerminates { get { return false; } }
-		/// <summary>
 		/// Determines whether the statement ever returns a value on any branch of execution.
 		/// </summary>
 		public virtual bool CanReturn { get { return false; } }
@@ -33,11 +29,6 @@ namespace Osprey.Nodes
 		/// for the reachability of their end point.
 		/// </remarks>
 		public virtual bool IsEndReachable { get { return true; } }
-
-		/// <summary>
-		/// Determines whether the statement always leaves the specified protected block when evaluated.
-		/// </summary>
-		public virtual bool AlwaysLeaves(CompoundStatement block) { return false; }
 
 		public virtual void FoldConstant() { }
 
@@ -77,17 +68,6 @@ namespace Osprey.Nodes
 
 		/// <summary>The declaration space associated with the block.</summary>
 		internal BlockSpace DeclSpace;
-
-		private bool? alwaysTerminates = null;
-		public override bool AlwaysTerminates
-		{
-			get
-			{
-				if (alwaysTerminates == null)
-					alwaysTerminates = Statements.Any(stmt => stmt.AlwaysTerminates);
-				return alwaysTerminates.Value;
-			}
-		}
 
 		private bool? canReturn = null;
 		public override bool CanReturn
@@ -146,14 +126,6 @@ namespace Osprey.Nodes
 				}
 				return isEndReachable.Value;
 			}
-		}
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			foreach (var stmt in Statements)
-				if (stmt.AlwaysLeaves(block))
-					return true;
-			return false;
 		}
 
 		internal List<AssignmentExpression> Initializer;
@@ -717,18 +689,11 @@ namespace Osprey.Nodes
 
 		internal BlockSpace BodyBlock { get { return ((Block)Body).DeclSpace; } }
 
-		public override bool AlwaysTerminates { get { return Body.AlwaysTerminates; } }
-
 		public override bool CanReturn { get { return Body.CanReturn; } }
 
 		public override bool CanYield { get { return Body.CanYield; } }
 
 		public override bool IsEndReachable { get { return Body.IsEndReachable; } }
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			return Body.AlwaysLeaves(block);
-		}
 
 		public override void FoldConstant()
 		{
@@ -784,37 +749,6 @@ namespace Osprey.Nodes
 
 		/// <summary>The else clause of the if statement, or null if there is none.</summary>
 		public ElseClause Else;
-
-		public override bool AlwaysTerminates
-		{
-			get
-			{
-				// An if statement only returns if there is an else clause and both
-				// the else and if clauses always return. e.g.:
-				//    if a == someValue {
-				//        return 1;
-				//    } else {
-				//        return -1;
-				//    }
-				// In this case, both branches always return a value. But not e.g. here:
-				//    if x == 42 {
-				//       return answer;
-				//    } else {
-				//       foundAnswer = false;
-				//    }
-				// If the else is evaluated, then the statement does not return.
-				if (Condition is ConstantExpression)
-				{
-					var condValue = ((ConstantExpression)Condition).Value;
-					if (condValue.IsTrue)
-						return Body.AlwaysTerminates;
-					else if (Else != null)
-						return Else.AlwaysTerminates;
-					return false;
-				}
-				return Else != null && Else.AlwaysTerminates && Body.AlwaysTerminates;
-			}
-		}
 		
 		public override bool CanReturn
 		{
@@ -861,23 +795,9 @@ namespace Osprey.Nodes
 				}
 				else
 				{
-					return Else == null || Body.IsEndReachable && Else.IsEndReachable;
+					return Else == null || Body.IsEndReachable || Else.IsEndReachable;
 				}
 			}
-		}
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			if (Condition is ConstantExpression)
-			{
-				var condValue = ((ConstantExpression)Condition).Value;
-				if (condValue.IsTrue)
-					return Body.AlwaysLeaves(block);
-				else if (Else != null)
-					return Else.AlwaysLeaves(block);
-				return false;
-			}
-			return Else != null && Else.AlwaysLeaves(block) && Body.AlwaysLeaves(block);
 		}
 
 		public override string ToString(int indent)
@@ -1111,30 +1031,13 @@ namespace Osprey.Nodes
 			}
 		}
 
-		public override bool AlwaysTerminates
+		public override bool IsEndReachable
 		{
 			get
 			{
-				// Similar to if statements, a for statement is only guaranteed to return
-				// if there is an else clause and both the for and the else return.
-				//    for x in list {
-				//        if x == 10:
-				//            return x;
-				//    } else {
-				//        return null;
-				//    }
-				return Else != null && Else.AlwaysTerminates &&
-					Body.AlwaysTerminates;
+				return Else == null ||
+					(BreakCount > 0 || Body.IsEndReachable && Else.IsEndReachable);
 			}
-		}
-
-		// On the topic of reachability, we have the following rule:
-		// • The end of the for statement is reachable if the statement is reachable.
-		// Basically, the end is always reachable if the statement is evaluated.
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			return Else != null && Else.AlwaysLeaves(block) && Body.AlwaysLeaves(block);
 		}
 
 		public override string ToString(int indent)
@@ -1741,17 +1644,6 @@ namespace Osprey.Nodes
 		/// <summary>Gets the condition for the loop.</summary>
 		public Expression Condition;
 
-		public override bool AlwaysTerminates
-		{
-			get
-			{
-				if (Condition is ConstantExpression &&
-					!((ConstantExpression)Condition).Value.IsTrue)
-					return false;
-				return base.AlwaysTerminates;
-			}
-		}
-
 		public override bool CanReturn
 		{
 			get
@@ -1952,27 +1844,6 @@ namespace Osprey.Nodes
 		// It is not possible to have a TryStatement with no CatchClauses and
 		// no FinallyClause.
 
-		private bool? alwaysReturns = null;
-		public override bool AlwaysTerminates
-		{
-			get
-			{
-				// A try-catch-finally always returns if:
-				//   * The try block always returns
-				//   and
-				//   * Catches is empty
-				//     or
-				//     All catch clauses return
-				// Finally clauses are not allowed to return, which is checked
-				// in another step of the compilation.
-				if (alwaysReturns == null)
-					alwaysReturns = Body.AlwaysTerminates &&
-						(Catches.Count == 0 || Catches.All(@catch => @catch.AlwaysTerminates));
-
-				return alwaysReturns.Value;
-			}
-		}
-
 		private bool? canReturn = null;
 		public override bool CanReturn
 		{
@@ -2000,12 +1871,6 @@ namespace Osprey.Nodes
 
 				return isEndReachable.Value;
 			}
-		}
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			return Body.AlwaysLeaves(block) &&
-				(Catches.Count == 0 || Catches.All(stmt => stmt.AlwaysLeaves(block)));
 		}
 
 		public override string ToString(int indent)
@@ -2275,17 +2140,9 @@ namespace Osprey.Nodes
 		private Field stateField;
 		private int lastIterIndex;
 
-		// It may be hard to believe, but return statements always return.
-		public override bool AlwaysTerminates { get { return true; } }
-
 		public override bool CanReturn { get { return true; } }
 
 		public override bool IsEndReachable { get { return false; } }
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			return true;
-		}
 
 		public override string ToString(int indent)
 		{
@@ -2389,20 +2246,11 @@ namespace Osprey.Nodes
 		/// <summary>The return values of the yield statement.</summary>
 		public List<Expression> ReturnValues;
 
-		// Yield statements always terminate the moveNext() method,
-		// so for the purposes of AlwaysTerminates, they always return.
-		public override bool AlwaysTerminates { get { return true; } }
-
 		public override bool CanYield { get { return true; } }
 
 		internal int GeneratorState;
 		internal Label StateLabel;
 		private GeneratorClass genClass;
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			return true;
-		}
 
 		public override string ToString(int indent)
 		{
@@ -2487,13 +2335,6 @@ namespace Osprey.Nodes
 
 		public override bool IsEndReachable { get { return false; } }
 
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			bool result;
-			parent.FindLoop(this, Label, block, out result);
-			return result;
-		}
-
 		public override string ToString(int indent)
 		{
 			return new string('\t', indent) + (Label == null ? "next;" : "next " + Label + ";");
@@ -2505,7 +2346,7 @@ namespace Osprey.Nodes
 			if (context is BlockSpace)
 			{
 				parent = (BlockSpace)context;
-				var loop = parent.FindLoop(this, Label, null, out isLeave);
+				var loop = parent.FindLoop(this, Label, out isLeave);
 
 				if (loop is DoWhileStatement && ((DoWhileStatement)loop).Condition == null)
 					throw new CompileTimeException(this, "A 'next' statement may not refer to a 'do {...};' statement. Use 'break' instead.");
@@ -2540,13 +2381,6 @@ namespace Osprey.Nodes
 
 		public override bool IsEndReachable { get { return false; } }
 
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			bool result;
-			parent.FindLoop(this, Label, block, out result);
-			return result;
-		}
-
 		public override string ToString(int indent)
 		{
 			return new string('\t', indent) + (Label == null ? "next;" : "next " + Label + ";");
@@ -2557,7 +2391,7 @@ namespace Osprey.Nodes
 			if (context is BlockSpace)
 			{
 				parent = (BlockSpace)context;
-				var loop = parent.FindLoop(this, Label, null, out isLeave);
+				var loop = parent.FindLoop(this, Label, out isLeave);
 				loop.BreakCount++;
 			}
 		}
@@ -2583,16 +2417,7 @@ namespace Osprey.Nodes
 		/// <summary>The value associated with the throw statement.</summary>
 		public Expression Value;
 
-		// Throw statements always terminate the method.
-		// It's not a clean termination, but it's a termination!
-		public override bool AlwaysTerminates { get { return true; } }
-
 		public override bool IsEndReachable { get { return false; } }
-
-		public override bool AlwaysLeaves(CompoundStatement block)
-		{
-			return true;
-		}
 
 		public override string ToString(int indent)
 		{

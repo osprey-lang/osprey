@@ -425,7 +425,7 @@ namespace Osprey.Members
 			else
 			{
 				Body.Node.Compile(compiler, mb);
-				if (!Body.Node.AlwaysTerminates)
+				if (Body.Node.IsEndReachable)
 					mb.Append(new SimpleInstruction(Opcode.Retnull));
 			}
 
