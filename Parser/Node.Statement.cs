@@ -24,6 +24,17 @@ namespace Osprey.Nodes
 		public virtual bool CanYield { get { return false; } }
 
 		/// <summary>
+		/// Determines whether the end of the statement is reachable,
+		/// assuming the statement itself is reachable.
+		/// </summary>
+		/// <remarks>
+		/// This property is only examined if the statement itself is reachable.
+		/// Hence, statements are free to assume that they are reachable if queried
+		/// for the reachability of their end point.
+		/// </remarks>
+		public virtual bool IsEndReachable { get { return true; } }
+
+		/// <summary>
 		/// Determines whether the statement always leaves the specified protected block when evaluated.
 		/// </summary>
 		public virtual bool AlwaysLeaves(CompoundStatement block) { return false; }
@@ -84,7 +95,16 @@ namespace Osprey.Nodes
 			get
 			{
 				if (!canReturn.HasValue)
-					canReturn = Statements.Any(stmt => stmt.CanReturn);
+				{
+					canReturn = false;
+					foreach (var stmt in Statements)
+					{
+						if (stmt.CanReturn)
+							canReturn = true;
+						if (!stmt.IsEndReachable)
+							break; // don't examine any other statements
+					}
+				}
 				return canReturn.Value;
 			}
 		}
@@ -95,8 +115,36 @@ namespace Osprey.Nodes
 			get
 			{
 				if (!canYield.HasValue)
-					canYield = Statements.Any(stmt => stmt.CanYield);
+				{
+					canYield = false;
+					foreach (var stmt in Statements)
+					{
+						if (stmt.CanYield)
+							canYield = true;
+						if (!stmt.IsEndReachable)
+							break; // don't examine any other statements
+					}
+				}
 				return canYield.Value;
+			}
+		}
+
+		private bool? isEndReachable = null;
+		public override bool IsEndReachable
+		{
+			get
+			{
+				if (!isEndReachable.HasValue)
+				{
+					isEndReachable = true;
+					foreach (var stmt in Statements)
+						if (!stmt.IsEndReachable)
+						{
+							isEndReachable = false;
+							break;
+						}
+				}
+				return isEndReachable.Value;
 			}
 		}
 
@@ -250,14 +298,17 @@ namespace Osprey.Nodes
 				foreach (var expr in Initializer)
 					expr.Compile(compiler, method);
 
-			for (var i = 0; i < Statements.Count; i++)
+			var iMax = Statements.Count - 1;
+			for (var i = 0; i <= iMax; i++)
 			{
 				var stmt = Statements[i];
 				stmt.Compile(compiler, method);
-				if (i < Statements.Count - 1 && DeclSpace.Parent == null && stmt.AlwaysTerminates)
+
+				if (!stmt.IsEndReachable)
 				{
-					compiler.Warning("Unreachable code detected.");
-					break; // End of the line, baby
+					if (i < iMax)
+						compiler.Warning("Unreachable code detected.");
+					break;
 				}
 			}
 
@@ -672,6 +723,8 @@ namespace Osprey.Nodes
 
 		public override bool CanYield { get { return Body.CanYield; } }
 
+		public override bool IsEndReachable { get { return Body.IsEndReachable; } }
+
 		public override bool AlwaysLeaves(CompoundStatement block)
 		{
 			return Body.AlwaysLeaves(block);
@@ -797,6 +850,22 @@ namespace Osprey.Nodes
 			}
 		}
 
+		public override bool IsEndReachable
+		{
+			get
+			{
+				if (Condition is ConstantExpression)
+				{
+					var cond = ((ConstantExpression)Condition).Value;
+					return cond.IsTrue ? Body.IsEndReachable : Else == null || Else.IsEndReachable;
+				}
+				else
+				{
+					return Else == null || Body.IsEndReachable && Else.IsEndReachable;
+				}
+			}
+		}
+
 		public override bool AlwaysLeaves(CompoundStatement block)
 		{
 			if (Condition is ConstantExpression)
@@ -884,7 +953,7 @@ namespace Osprey.Nodes
 				if (Else != null)
 				{
 					Label endLabel = null;
-					if (!Body.AlwaysLeaves(this))
+					if (Body.IsEndReachable)
 					{
 						endLabel = new Label("if-else-end");
 						method.Append(Branch.Always(endLabel)); // Jump to end of if statement
@@ -893,7 +962,7 @@ namespace Osprey.Nodes
 					method.Append(elseLabel);
 					Else.Compile(compiler, method); // Evaluate the else clause
 
-					if (!Else.AlwaysLeaves(Else))
+					if (Body.IsEndReachable)
 						method.Append(endLabel); // End of if-else
 				}
 				else
@@ -942,6 +1011,11 @@ namespace Osprey.Nodes
 
 		/// <summary>The label associated with the iteration statement, or null if there is none.</summary>
 		public string Label;
+
+		/// <summary>The number of reachable 'break' statements that refer to this loop.</summary>
+		internal int BreakCount;
+		/// <summary>The number of reachable 'next' statements that refer to this loop.</summary>
+		internal int NextCount;
 
 		public override string ToString(int indent)
 		{
@@ -1053,6 +1127,10 @@ namespace Osprey.Nodes
 					Body.AlwaysTerminates;
 			}
 		}
+
+		// On the topic of reachability, we have the following rule:
+		// • The end of the for statement is reachable if the statement is reachable.
+		// Basically, the end is always reachable if the statement is evaluated.
 
 		public override bool AlwaysLeaves(CompoundStatement block)
 		{
@@ -1696,6 +1774,15 @@ namespace Osprey.Nodes
 			}
 		}
 
+		public override bool IsEndReachable
+		{
+			get
+			{
+				var cond = Condition as ConstantExpression;
+				return BreakCount > 0 || cond == null || !cond.Value.IsTrue;
+			}
+		}
+
 		public override string ToString(int indent)
 		{
 			var sb = new StringBuilder(base.ToString(indent) + "while ");
@@ -1736,7 +1823,8 @@ namespace Osprey.Nodes
 			var loopState = new LoopState(Label, loopCond, loopEnd);
 			method.PushState(loopState); // Enter the loop
 
-			method.Append(Branch.Always(loopCond)); // Branch to condition
+			if (!(Condition is ConstantExpression))
+				method.Append(Branch.Always(loopCond)); // Branch to condition if non-constant
 			{ // Body
 				method.Append(loopBody);
 				Body.Compile(compiler, method); // Evaluate the body
@@ -1762,6 +1850,24 @@ namespace Osprey.Nodes
 
 		/// <summary>The condition for the loop.</summary>
 		public Expression Condition;
+
+		public override bool IsEndReachable
+		{
+			get
+			{
+				var cond = Condition as ConstantExpression;
+				return BreakCount > 0 ||
+					IsConditionReachable && (cond == null || !cond.Value.IsTrue);
+			}
+		}
+
+		private bool IsConditionReachable
+		{
+			get
+			{
+				return Body.IsEndReachable || NextCount > 0;
+			}
+		}
 
 		public override string ToString(int indent)
 		{
@@ -1806,7 +1912,7 @@ namespace Osprey.Nodes
 
 			Body.Compile(compiler, method); // Körper
 
-			if (Condition != null)
+			if (Condition != null && IsConditionReachable)
 			{ // Condition
 				method.Append(loopCond);
 
@@ -1877,6 +1983,22 @@ namespace Osprey.Nodes
 				if (!canReturn.HasValue)
 					canReturn = Body.CanReturn || (Catches.Count > 0 && Catches.Any(stmt => stmt.CanReturn));
 				return canReturn.Value;
+			}
+		}
+
+		private bool? isEndReachable = null;
+		public override bool IsEndReachable
+		{
+			get
+			{
+				if (!isEndReachable.HasValue)
+					isEndReachable = (Body.IsEndReachable ||
+						Catches.Count == 0 ||
+						Catches.Any(c => c.IsEndReachable))
+						&&
+						(Finally == null || Finally.IsEndReachable);
+
+				return isEndReachable.Value;
 			}
 		}
 
@@ -1967,7 +2089,7 @@ namespace Osprey.Nodes
 			var endLabel = new Label("try-end");
 
 			Body.Compile(compiler, method); // Evaluate the try body
-			if (!Body.AlwaysLeaves(this))
+			if (Body.IsEndReachable)
 				method.Append(Branch.Leave(endLabel)); // Leave the try block
 
 			if (Catches.Count > 0)
@@ -1982,7 +2104,7 @@ namespace Osprey.Nodes
 					var catchBlock = tryCatch.AddCatch(method.Module.GetTypeId(caughtType));
 
 					@catch.Compile(compiler, method); // Evaluate the catch body
-					if (!@catch.AlwaysLeaves(@catch))
+					if (@catch.IsEndReachable)
 						method.Append(Branch.Leave(endLabel)); // Leave the catch block
 
 					catchBlock.EndBlock();
@@ -2012,8 +2134,7 @@ namespace Osprey.Nodes
 				state.ReturnLocal.Done(); // Done!
 			}
 
-			if (!AlwaysTerminates)
-				method.Append(endLabel);
+			method.Append(endLabel);
 		}
 
 		internal static bool FindTryState(MethodBuilder method, out TryState result)
@@ -2158,6 +2279,8 @@ namespace Osprey.Nodes
 		public override bool AlwaysTerminates { get { return true; } }
 
 		public override bool CanReturn { get { return true; } }
+
+		public override bool IsEndReachable { get { return false; } }
 
 		public override bool AlwaysLeaves(CompoundStatement block)
 		{
@@ -2362,6 +2485,8 @@ namespace Osprey.Nodes
 		private BlockSpace parent;
 		private bool isLeave = false;
 
+		public override bool IsEndReachable { get { return false; } }
+
 		public override bool AlwaysLeaves(CompoundStatement block)
 		{
 			bool result;
@@ -2384,6 +2509,8 @@ namespace Osprey.Nodes
 
 				if (loop is DoWhileStatement && ((DoWhileStatement)loop).Condition == null)
 					throw new CompileTimeException(this, "A 'next' statement may not refer to a 'do {...};' statement. Use 'break' instead.");
+
+				loop.NextCount++;
 			}
 		}
 
@@ -2411,6 +2538,8 @@ namespace Osprey.Nodes
 		private BlockSpace parent;
 		private bool isLeave = false;
 
+		public override bool IsEndReachable { get { return false; } }
+
 		public override bool AlwaysLeaves(CompoundStatement block)
 		{
 			bool result;
@@ -2428,7 +2557,8 @@ namespace Osprey.Nodes
 			if (context is BlockSpace)
 			{
 				parent = (BlockSpace)context;
-				parent.FindLoop(this, Label, null, out isLeave);
+				var loop = parent.FindLoop(this, Label, null, out isLeave);
+				loop.BreakCount++;
 			}
 		}
 
@@ -2456,6 +2586,8 @@ namespace Osprey.Nodes
 		// Throw statements always terminate the method.
 		// It's not a clean termination, but it's a termination!
 		public override bool AlwaysTerminates { get { return true; } }
+
+		public override bool IsEndReachable { get { return false; } }
 
 		public override bool AlwaysLeaves(CompoundStatement block)
 		{

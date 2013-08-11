@@ -17,28 +17,36 @@ namespace Osprey
 			try { Console.InputEncoding = Encoding.UTF8; } catch { }
 
 			CompilerOptions options;
+			bool silenceErrors;
 			string outFile;
 			Dictionary<string, bool> constants;
 			List<string> sourceFiles;
 			try
 			{
-				var sourceFileIndex = ParseArguments(args, out options, out outFile, out constants);
-				if (sourceFileIndex == -1)
-					throw new ArgumentException("There must be at least one source file.");
+				var sourceFileIndex = ParseArguments(args, out options, out silenceErrors, out outFile, out constants);
 
 				sourceFiles = new List<string>();
-				for (var i = sourceFileIndex; i < args.Length; i++)
-				{
-					var path = args[i];
-					var dirPart = Path.GetDirectoryName(args[i]);
-					var filePart = Path.GetFileName(args[i]);
+				if (sourceFileIndex != -1)
+					for (var i = sourceFileIndex; i < args.Length; i++)
+					{
+						var path = args[i];
+						var dirPart = Path.GetDirectoryName(args[i]);
+						var filePart = Path.GetFileName(args[i]);
 
-					if (dirPart.Length == 0)
-						dirPart = Environment.CurrentDirectory;
+						if (dirPart.Length == 0)
+							dirPart = Environment.CurrentDirectory;
 
-					foreach (var file in Directory.EnumerateFiles(dirPart, filePart))
-						sourceFiles.Add(Path.Combine(dirPart, file));
-				}
+						var matchingFiles = Directory.GetFiles(dirPart, filePart);
+						if (matchingFiles.Length == 0 &&
+							!(filePart.Contains('*') || filePart.Contains('?')))
+							throw new ArgumentException(string.Format("Could not find a matching file for non-wildcard path: {0}", args[i]));
+
+						foreach (var file in matchingFiles)
+							sourceFiles.Add(Path.Combine(dirPart, file));
+					}
+
+				if (sourceFiles.Count == 0)
+					throw new ArgumentException("There must be at least one source file.");
 
 				if (outFile == null)
 					outFile = Path.Combine(Path.GetDirectoryName(sourceFiles[0]),
@@ -64,38 +72,50 @@ namespace Osprey
 			}
 			catch (ParseException e)
 			{
-				err.Write("[error] Parse error: ");
-				Console.ForegroundColor = ConsoleColor.Red;
-				err.Write(e.Message);
-				Console.ForegroundColor = ConsoleColor.Gray;
-				err.WriteLine();
-				PrintErrorLocation(e);
+				if (!silenceErrors)
+				{
+					err.Write("[error] Parse error: ");
+					Console.ForegroundColor = ConsoleColor.Red;
+					err.Write(e.Message);
+					Console.ForegroundColor = ConsoleColor.Gray;
+					err.WriteLine();
+					PrintErrorLocation(e);
+				}
 			}
 			catch (CompileTimeException e)
 			{
-				err.Write("[error] Compiler error: ");
-				Console.ForegroundColor = ConsoleColor.Red;
-				err.Write(e.Message);
-				Console.ForegroundColor = ConsoleColor.Gray;
-				err.WriteLine();
-				if (e.Node != null)
-					PrintErrorLocation(e);
+				if (!silenceErrors)
+				{
+					err.Write("[error] Compiler error: ");
+					Console.ForegroundColor = ConsoleColor.Red;
+					err.Write(e.Message);
+					Console.ForegroundColor = ConsoleColor.Gray;
+					err.WriteLine();
+					if (e.Node != null)
+						PrintErrorLocation(e);
+				}
 			}
 			catch (ModuleLoadException e)
 			{
-				err.Write("[error] Module load error: ");
-				Console.ForegroundColor = ConsoleColor.Red;
-				err.Write(e.Message);
-				Console.ForegroundColor = ConsoleColor.Gray;
-				err.WriteLine();
-				err.WriteLine("Module file: {0}", e.FileName);
+				if (!silenceErrors)
+				{
+					err.Write("[error] Module load error: ");
+					Console.ForegroundColor = ConsoleColor.Red;
+					err.Write(e.Message);
+					Console.ForegroundColor = ConsoleColor.Gray;
+					err.WriteLine();
+					err.WriteLine("Module file: {0}", e.FileName);
+				}
 			}
 			catch (Exception e)
 			{
-				Console.Error.WriteLine("[error] Other exception:");
-				Console.ForegroundColor = ConsoleColor.Red;
-				Console.Error.WriteLine(e.ToString());
-				Console.ForegroundColor = ConsoleColor.Gray;
+				if (!silenceErrors)
+				{
+					Console.Error.WriteLine("[error] Other exception:");
+					Console.ForegroundColor = ConsoleColor.Red;
+					Console.Error.WriteLine(e.ToString());
+					Console.ForegroundColor = ConsoleColor.Gray;
+				}
 			}
 #endif
 		}
@@ -201,10 +221,12 @@ namespace Osprey
 		/// <param name="outFile">The output file, or null if none was specified.</param>
 		/// <returns>The index of the first source file within <paramref name="args"/>.</returns>
 		private static int ParseArguments(string[] args, out CompilerOptions options,
-			out string outFile, out Dictionary<string, bool> constants)
+			out bool silenceErrors, out string outFile, out Dictionary<string, bool> constants)
 		{
 			options = new CompilerOptions();
 			options.UseExtensions = true; // Use extensions by default
+
+			silenceErrors = false;
 
 			var seenSwitches = new HashSet<string>();
 			outFile = null;
@@ -294,6 +316,7 @@ namespace Osprey
 								throw new ArgumentException("'/silent' cannot be used together with '/nowarn' or '/noinfo'.");
 							options.SilenceNotices = true;
 							options.SilenceWarnings = true;
+							silenceErrors = true;
 							break;
 
 						case "nowarn":
