@@ -368,17 +368,12 @@ namespace Osprey
 			// First pass: walk through all the instructions.
 			// During this pass, initialize all the target instructions of
 			// branches and switches, and assume they're all short jumps.
-			// Also set the (initial) byteOffset of each instruction.
-			var branches = new List<Instruction>();
-			var offset = 0;
 			foreach (var instr in instructions)
-			{
 				if (instr is Branch)
 				{
 					var br = instr as Branch;
 					if (br.targetInstr == null)
 						br.targetInstr = FindInstruction(br, br.Target);
-					branches.Add(br);
 				}
 				else if (instr is Switch)
 				{
@@ -391,9 +386,24 @@ namespace Osprey
 							target.Instr = FindInstruction(sw, target.Label);
 						targets[k] = target;
 					}
-					branches.Add(sw);
 				}
 
+			// Second pass: remove unreachable instructions.
+			// Because the branch resolver abover optimizes branch targets
+			// under certain situations, we may need to remove instructions
+			// that are now unreachable.
+			GetMaxStack(true);
+
+			// Third pass: generate a list of branches, and update the byte offset of everything.
+			// Note: we do this here instead of the loop above because instructions may have been
+			// removed. Either we duplicate code for re-updating the byte offsets, or we loop over
+			// the instructions unconditionally a second time. Guess which one I went for!
+			var branches = new List<Instruction>();
+			var offset = 0;
+			foreach (var instr in instructions)
+			{
+				if (instr is Branch || instr is Switch)
+					branches.Add(instr);
 				instr.ByteOffset = offset;
 				offset += instr.GetSize();
 			}
@@ -401,7 +411,7 @@ namespace Osprey
 			// If the method actually has any branching going on, then we need to do a few more things!
 			if (branches.Count > 0)
 			{
-				// Second pass: calculate the offset of each target instruction
+				// Fourth pass: calculate the offset of each target instruction
 				// for each branch and switch instruction.
 				// Remember instructions that definitely need to be long jumps.
 				//
@@ -485,6 +495,11 @@ namespace Osprey
 
 		public int GetMaxStack()
 		{
+			return GetMaxStack(false);
+		}
+
+		private int GetMaxStack(bool removeUnreachable)
+		{
 			if (this.maxStack.HasValue)
 				return this.maxStack.Value;
 
@@ -500,33 +515,7 @@ namespace Osprey
 			branches.Enqueue(new BranchDescription(target: 0, stackCount: 0));
 
 			if (tryBlocks != null)
-			{
-				var tries = new Queue<TryBlock>(tryBlocks);
-
-				while (tries.Count > 0)
-				{
-					var @try = tries.Dequeue();
-					if (@try.HasChildTryBlocks)
-						tries.EnqueueRange(@try.childTryBlocks);
-
-					if (@try.Kind == TryBlockKind.TryFinally)
-					{
-						var @finally = @try.Finally;
-						@finally.Start.AddRestriction(InstructionRestrictions.CannotFallThroughTo);
-						branches.Enqueue(new BranchDescription(@finally.Start.Index, 0));
-						if (@finally.HasChildTryBlocks)
-							tries.EnqueueRange(@finally.childTryBlocks);
-					}
-					else // TryCatch
-						foreach (var @catch in @try.Catches)
-						{
-							@catch.Start.AddRestriction(InstructionRestrictions.CannotFallThroughTo);
-							branches.Enqueue(new BranchDescription(@catch.Start.Index, 1));
-							if (@catch.HasChildTryBlocks)
-								tries.EnqueueRange(@catch.childTryBlocks);
-						}
-				}
-			}
+				AddTryBranches(branches);
 
 			var maxStack = 0;
 
@@ -592,8 +581,43 @@ namespace Osprey
 				}
 			}
 
+			if (removeUnreachable)
+				for (int i = 0, j = 0; i < knownCounts.Length; i++, j++)
+					if (knownCounts[i] == -1)
+						// The instruction has not been visited; hence, it is unreachable.
+						instructions.RemoveAt(j--);
+
 			this.maxStack = maxStack;
 			return maxStack;
+		}
+
+		private void AddTryBranches(Queue<BranchDescription> branches)
+		{
+			var tries = new Queue<TryBlock>(tryBlocks);
+
+			while (tries.Count > 0)
+			{
+				var @try = tries.Dequeue();
+				if (@try.HasChildTryBlocks)
+					tries.EnqueueRange(@try.childTryBlocks);
+
+				if (@try.Kind == TryBlockKind.TryFinally)
+				{
+					var @finally = @try.Finally;
+					@finally.Start.AddRestriction(InstructionRestrictions.CannotFallThroughTo);
+					branches.Enqueue(new BranchDescription(@finally.Start.Index, 0));
+					if (@finally.HasChildTryBlocks)
+						tries.EnqueueRange(@finally.childTryBlocks);
+				}
+				else // TryCatch
+					foreach (var @catch in @try.Catches)
+					{
+						@catch.Start.AddRestriction(InstructionRestrictions.CannotFallThroughTo);
+						branches.Enqueue(new BranchDescription(@catch.Start.Index, 1));
+						if (@catch.HasChildTryBlocks)
+							tries.EnqueueRange(@catch.childTryBlocks);
+					}
+			}
 		}
 
 		public string ToStringFull()

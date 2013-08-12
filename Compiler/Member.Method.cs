@@ -478,27 +478,37 @@ namespace Osprey.Members
 
 		private void CompileGenerator(Compiler compiler, MethodBuilder builder)
 		{
-			var yieldLabels = new List<Label>(Yields.Count + 1);
-			var endLabel = new Label("generator-end");
-
 			var stateField = ((GeneratorClass)this.Group.ParentAsClass).StateField;
 
-			yieldLabels.AddRange(Yields.Select(y => y.StateLabel));
-			yieldLabels.Add(endLabel);
+			var stateSwitch = new Switch(); // The target list will be updated later
 
 			builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
 			builder.Append(LoadField.Create(builder.Module, stateField)); // Load this.'<>state'
-			builder.Append(new Switch(yieldLabels)); // Switch on this.'<>state'
+			builder.Append(stateSwitch); // Switch on this.'<>state'
+
+			// This list will be repopulated when traversing all the statements,
+			// to make sure it only contains reachable yields.
+			Yields.Clear();
 
 			Body.Node.Compile(compiler, builder);
 
-			builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
-			builder.Append(new LoadConstantInt(Yields.Count)); // Load the last state
-			builder.Append(StoreField.Create(builder.Module, stateField)); // Store value in this.'<>state'
+			var yieldLabels = new List<Label>(Yields.Select(y => y.StateLabel));
 
-			builder.Append(endLabel);
-			builder.Append(LoadConstant.False());
-			builder.Append(new SimpleInstruction(Opcode.Ret));
+			if (Body.Node.IsEndReachable)
+			{
+				var endLabel = new Label("generator-end");
+				yieldLabels.Add(endLabel);
+
+				builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
+				builder.Append(new LoadConstantInt(Yields.Count)); // Load the last state
+				builder.Append(StoreField.Create(builder.Module, stateField)); // Store value in this.'<>state'
+
+				builder.Append(endLabel);
+				builder.Append(LoadConstant.False());
+				builder.Append(new SimpleInstruction(Opcode.Ret));
+			}
+
+			stateSwitch.SetTargets(yieldLabels);
 		}
 
 		IDeclarationSpace IDeclarationSpace.Parent { get { return Group == null ? null : (IDeclarationSpace)Group.Parent; } }

@@ -29,7 +29,7 @@ namespace Osprey.Nodes
 		/// for the reachability of their end point.
 		/// </remarks>
 		public virtual bool IsEndReachable { get { return true; } }
-
+		
 		public virtual void FoldConstant() { }
 
 		public virtual void ResolveNames(IDeclarationSpace context, FileNamespace document) { }
@@ -1036,7 +1036,9 @@ namespace Osprey.Nodes
 			get
 			{
 				return Else == null ||
-					(BreakCount > 0 || Body.IsEndReachable && Else.IsEndReachable);
+					BreakCount > 0 ||
+					Body.IsEndReachable ||
+					Else.IsEndReachable;
 			}
 		}
 
@@ -1211,7 +1213,8 @@ namespace Osprey.Nodes
 
 				method.Append(Branch.Always(loopCond)); // Jump to condition (to re-test the counter)
 			}
-			method.Append(loopEnd); // end of loop; also 'break' target
+			if (this.IsEndReachable)
+				method.Append(loopEnd); // end of loop; also 'break' target
 
 			method.PopState(expected: loopState); // Exit loop
 
@@ -1236,7 +1239,7 @@ namespace Osprey.Nodes
 				IterField = tempFields != null ? tempFields[0] : null,
 			};
 
-			// First, evaluate the 'xs' expression
+			// First, evaluate the 'xs' expression and fetch an Iterator for it
 			iterState.Init(compiler, method, List);
 
 			var loopCond = new Label("for-start");
@@ -1259,7 +1262,8 @@ namespace Osprey.Nodes
 				Body.Compile(compiler, method);
 				method.Append(Branch.Always(loopCond)); // Move to next value
 			}
-			method.Append(loopEnd); // End of loop; also 'break' target
+			if (this.IsEndReachable)
+				method.Append(loopEnd); // End of loop; also 'break' target
 
 			method.PopState(expected: loopState); // Exit the loop
 
@@ -1340,7 +1344,8 @@ namespace Osprey.Nodes
 				Else.Compile(compiler, method);
 			}
 
-			method.Append(loopEnd);
+			if (this.IsEndReachable)
+				method.Append(loopEnd);
 		}
 
 		private void CompileWithIteratorAndElse(Compiler compiler, MethodBuilder method)
@@ -1390,6 +1395,8 @@ namespace Osprey.Nodes
 					Body.Compile(compiler, method);
 				}
 				{ // Loop increment
+					method.Append(loopNext);
+
 					iterState.LoadIterator(compiler, method); // Load iterator
 					method.Append(new LoadMember(method.Module.GetStringId("moveNext")));
 					method.Append(new Call(0)); // Call iterLoc.moveNext()
@@ -1406,7 +1413,8 @@ namespace Osprey.Nodes
 				Else.Compile(compiler, method);
 			}
 
-			method.Append(loopEnd);
+			if (this.IsEndReachable)
+				method.Append(loopEnd);
 
 			iterState.Done();
 		}
@@ -1575,12 +1583,14 @@ namespace Osprey.Nodes
 				{
 					method.Append(new LoadLocal(method.GetParameter(0)));
 					inner.Compile(compiler, method);
+					method.Append(new SimpleInstruction(Opcode.Lditer));
 					method.Append(StoreField.Create(method.Module, IterField));
 				}
 				else
 				{
 					IterLoc = method.GetAnonymousLocal();
 					inner.Compile(compiler, method);
+					method.Append(new SimpleInstruction(Opcode.Lditer));
 					method.Append(new StoreLocal(IterLoc));
 				}
 			}
@@ -1726,7 +1736,8 @@ namespace Osprey.Nodes
 				Condition.CompileBoolean(compiler, loopBody, true, method);
 				// Fall through for false
 			}
-			method.Append(loopEnd);
+			if (this.IsEndReachable)
+				method.Append(loopEnd);
 
 			method.PopState(expected: loopState); // Exit the loop
 		}
@@ -1811,7 +1822,8 @@ namespace Osprey.Nodes
 				Condition.CompileBoolean(compiler, loopStart, true, method);
 				// Fall through for false (negated: true)
 			}
-			method.Append(loopEnd);
+			if (this.IsEndReachable)
+				method.Append(loopEnd);
 
 			method.PopState(expected: loopState);
 		}
@@ -2248,7 +2260,7 @@ namespace Osprey.Nodes
 
 		public override bool CanYield { get { return true; } }
 
-		internal int GeneratorState;
+		internal Method ParentMethod;
 		internal Label StateLabel;
 		private GeneratorClass genClass;
 
@@ -2284,8 +2296,6 @@ namespace Osprey.Nodes
 				throw new CompileTimeException(this, "Cannot yield inside a try, catch or finally.");
 
 			block.Method.AddYield(this);
-			GeneratorState = block.Method.Yields.Count - 1;
-			StateLabel = new Label(string.Format("yield-{0}-continue", GeneratorState));
 
 			for (var i = 0; i < ReturnValues.Count; i++)
 				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document);
@@ -2297,7 +2307,10 @@ namespace Osprey.Nodes
 				ReturnValues[i] = ReturnValues[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			if (forGenerator)
+			{
 				genClass = currentBlock.Method.GeneratorClass;
+				ParentMethod = genClass.MoveNextMethod;
+			}
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -2305,12 +2318,17 @@ namespace Osprey.Nodes
 			// Note: parser wraps multiple yield values in a ListLiteralExpression.
 			// Hence, ReturnValues only ever contains a single value.
 
+			ParentMethod.Yields.Add(this); // Mark this yield as reachable
+
 			method.Append(new LoadLocal(method.GetParameter(0))); // Load 'this'
 			ReturnValues[0].Compile(compiler, method); // Evaluate yield value
 			method.Append(StoreField.Create(method.Module, genClass.CurrentValueField)); // Update the current value field
 
+			var generatorState = ParentMethod.Yields.Count - 1;
+			StateLabel = new Label(string.Format("yield-{0}-continue", generatorState));
+
 			method.Append(new LoadLocal(method.GetParameter(0))); // Load 'this'
-			method.Append(new LoadConstantInt(GeneratorState)); // Load the state associated with this yield
+			method.Append(new LoadConstantInt(generatorState)); // Load the state associated with this yield
 			method.Append(StoreField.Create(method.Module, genClass.StateField)); // Update the state field
 
 			method.Append(LoadConstant.True()); // Load true
@@ -2383,7 +2401,7 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			return new string('\t', indent) + (Label == null ? "next;" : "next " + Label + ";");
+			return new string('\t', indent) + (Label == null ? "break;" : "break " + Label + ";");
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)

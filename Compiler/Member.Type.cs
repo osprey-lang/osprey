@@ -1784,6 +1784,18 @@ namespace Osprey.Members
 		private Field thisField;
 		public Field ThisField { get { return thisField; } }
 
+		public Method MoveNextMethod
+		{
+			get
+			{
+				var m = GetMember("moveNext");
+				if (m.Kind == MemberKind.MethodGroup)
+					return ((MethodGroup)m)[0];
+
+				return null;
+			}
+		}
+
 		private List<AnonField> anonFields;
 
 		private void AddDefaultMembers()

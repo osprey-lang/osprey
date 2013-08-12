@@ -661,22 +661,20 @@ namespace Osprey.Instructions
 	{
 		public Switch(List<Label> targets)
 		{
+			if (targets == null)
+				throw new ArgumentNullException("targets");
+
 			this.targets = new List<SwitchTarget>(targets.Count);
 			for (var i = 0; i < targets.Count; i++)
 				this.targets.Add(new SwitchTarget { Label = targets[i] });
 		}
 
-		internal List<SwitchTarget> targets;
-		/// <summary>
-		/// Gets an array of the targets of the switch instruction.
-		/// </summary>
-		public Label[] Targets
+		internal Switch()
 		{
-			get
-			{
-				return targets.Select(t => t.Label).ToArray();
-			}
+			this.targets = new List<SwitchTarget>();
 		}
+
+		internal List<SwitchTarget> targets;
 
 		/// <summary>
 		/// Gets the number of targets the switch has.
@@ -686,6 +684,24 @@ namespace Osprey.Instructions
 		internal bool isShortJump = true;
 
 		public override StackChange StackChange { get { return new StackChange(1, 0); } }
+
+		/// <summary>
+		/// Gets an array of the targets of the switch instruction.
+		/// </summary>
+		public Label[] GetTargets()
+		{
+			return targets.Select(t => t.Label).ToArray();
+		}
+
+		internal void SetTargets(IEnumerable<Label> targets)
+		{
+			if (targets == null)
+				throw new ArgumentNullException("targets");
+
+			this.targets = new List<SwitchTarget>(
+				targets.Select(t => new SwitchTarget { Label = t })
+			);
+		}
 
 		public override int GetSize()
 		{
