@@ -1275,12 +1275,14 @@ namespace Osprey
 				localMethod.IsStatic = false;
 
 				// If the function captures variables, then we need to create a closure class for the containing block.
-				function.Parent.GenerateClosureClass(this);
+				var closure = function.Parent.GenerateClosureClass(this);
+				// Although the closure class initializer adds fields for all captured variables, it does NOT
+				// declare local functions as methods, so we must do that explicitly.
+				closure.DeclareFunctionMethod(function);
+				if (function.CapturesThis)
+					closure.DeclareThisField();
 
 				function.CompilationStrategy = LocalFunctionCompilationStrategy.ClosureMethod;
-
-				// No need to do anything else! The closure class initializer declares this function as part of the closure class,
-				// and adds fields for all captured variables, and everything! Pretty sweet.
 			}
 
 			if (localMethod.LocalFunctions != null)

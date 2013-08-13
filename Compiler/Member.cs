@@ -1128,21 +1128,10 @@ namespace Osprey.Members
 			ns.DeclareType(closure);
 			compiler.AddType(closure);
 
-			bool capturesThis = false;
-			// And then we declare all the variables and functions that have been captured
+			// And then we declare fields for all the variables that have been captured
 			foreach (var member in members.Values)
 				if (member.Kind == MemberKind.Variable && ((Variable)member).IsCaptured)
 					closure.DeclareVariableField((Variable)member);
-				else if (member.Kind == MemberKind.LocalFunction)
-				{
-					var function = (LocalFunction)member;
-					if (function.HasCaptures)
-						closure.DeclareFunctionMethod(function);
-					capturesThis = capturesThis || function.CapturesThis;
-				}
-
-			if (capturesThis)
-				closure.DeclareThisField();
 
 			if (capturedBlocks != null)
 				foreach (var block in capturedBlocks)
