@@ -140,7 +140,7 @@ namespace Osprey
 		internal Type MethodType    { get { return FindType(StandardNames.MethodName);   } }
 		internal Type TypeType      { get { return FindType(StandardNames.TypeName);     } }
 		internal Type ErrorType     { get { return FindType(StandardNames.ErrorName);    } }
-		internal Type TypeErrorType { get { return FindType(StandardNames.StandardNamespace + ".TypeError"); } }
+		internal Type TypeErrorType { get { return FindType(StandardNames.GetStandardName("TypeError")); } }
 
 		internal int MethodsWithLocalFunctionsCount
 		{

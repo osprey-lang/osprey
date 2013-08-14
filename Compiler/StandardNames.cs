@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Osprey
 {
-	internal sealed class StandardNames
+	internal static class StandardNames
 	{
 		public const string StandardModuleName = "aves";
 
@@ -28,5 +28,10 @@ namespace Osprey
 		public const string MethodName = StandardNamespace + ".Method";
 		public const string ErrorName = StandardNamespace + ".Error";
 		public const string TypeName = StandardNamespace + ".Type";
+
+		public static string GetStandardName(string name)
+		{
+			return StandardNamespace + "." + name;
+		}
 	}
 }

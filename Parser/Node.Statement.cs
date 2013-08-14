@@ -604,6 +604,9 @@ namespace Osprey.Nodes
 			foreach (var param in Parameters)
 				param.ResolveNames(context, document);
 			Body.ResolveNames(context, document);
+
+			if (DeclSpace != null && DeclSpace.Method.IsGenerator)
+				document.Compiler.AddGeneratorMethod(DeclSpace.Method);
 		}
 
 		public override void DeclareNames(BlockSpace parent)
