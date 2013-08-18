@@ -11,7 +11,7 @@ namespace Osprey.Nodes
 	public abstract class Statement : ParseNode
 	{
 		/// <summary>
-		/// Determines whether the statement ever returns a value on any branch of execution.
+		/// Determines whether the statement ever explicitly returns on any branch of execution.
 		/// </summary>
 		public virtual bool CanReturn { get { return false; } }
 		/// <summary>
@@ -166,31 +166,8 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			List<LocalFunctionDeclaration> localFunctions = null;
-			// Local function declarations are deferred until later.
-			// Remember: the containing method has a list of all its local functions!
 			foreach (var stmt in Statements)
-				if (stmt is LocalFunctionDeclaration)
-				{
-					if (localFunctions == null)
-						localFunctions = new List<LocalFunctionDeclaration>();
-					localFunctions.Add((LocalFunctionDeclaration)stmt);
-				}
-				else
-					stmt.ResolveNames(this.DeclSpace, document);
-
-			// If this block is the body of a method (whether it be a LocalMethod or a "normal" Method),
-			// we need to resolve names inside the local functions now.
-			//if (DeclSpace.Parent == null)
-			//{
-			//	var method = DeclSpace.Method;
-			//	if (method.HasLocalFunctions)
-			//		foreach (var function in method.LocalFunctions)
-			//			((LocalFunctionDeclaration)function.Node).ResolveNames(context, document);
-			//}
-			if (localFunctions != null)
-				foreach (var func in localFunctions)
-					func.ResolveNames(context, document);
+				stmt.ResolveNames(this.DeclSpace, document);
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -258,7 +235,11 @@ namespace Osprey.Nodes
 			}
 
 			foreach (var stmt in Statements)
+			{
 				stmt.TransformClosureLocals(DeclSpace, forGenerator);
+				if (!stmt.IsEndReachable)
+					break;
+			}
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -2153,7 +2134,6 @@ namespace Osprey.Nodes
 		public List<Expression> ReturnValues;
 
 		private Field stateField;
-		private int lastIterIndex;
 
 		public override bool CanReturn { get { return true; } }
 
@@ -2202,10 +2182,7 @@ namespace Osprey.Nodes
 				ReturnValues[i] = ReturnValues[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			if (forGenerator)
-			{
 				stateField = currentBlock.Method.GeneratorClass.StateField;
-				lastIterIndex = currentBlock.Method.Yields.Count;
-			}
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -2215,7 +2192,7 @@ namespace Osprey.Nodes
 			if (inGenerator)
 			{
 				method.Append(new LoadLocal(method.GetParameter(0))); // Load this
-				method.Append(new LoadConstantInt(lastIterIndex)); // Load the end-of-iteration state
+				method.Append(new LoadConstantInt(0)); // Load the end-of-iteration state
 				method.Append(StoreField.Create(method.Module, stateField)); // Update this.'<>state'
 			}
 

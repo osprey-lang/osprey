@@ -1566,7 +1566,8 @@ namespace Osprey.Members
 
 			if (this.Parent.Method != function.Parent.Method)
 			{
-				if (this.Parent.Method is LocalMethod)
+				if (this.Parent.Method is LocalMethod &&
+					function.Parent != this.Method.Body) // cannot "capture" own child
 				{
 					((LocalMethod)Parent.Method).Function.Capture(function);
 					// Also capture the block that declares the function:

@@ -489,26 +489,28 @@ namespace Osprey.Members
 			// This list will be repopulated when traversing all the statements,
 			// to make sure it only contains reachable yields.
 			Yields.Clear();
+			var canEnd = Body.Node.IsEndReachable || Body.Node.CanReturn;
+			if (canEnd)
+				Yields.Add(null); // End label placeholder thing
 
 			Body.Node.Compile(compiler, builder);
 
-			var yieldLabels = new List<Label>(Yields.Select(y => y.StateLabel));
+			var endLabel = canEnd ? new Label("generator-end") : null;
+			stateSwitch.SetTargets(Yields.Select(y => y == null ? endLabel : y.StateLabel));
 
-			if (Body.Node.IsEndReachable)
+			if (canEnd)
 			{
-				var endLabel = new Label("generator-end");
-				yieldLabels.Add(endLabel);
-
-				builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
-				builder.Append(new LoadConstantInt(Yields.Count)); // Load the last state
-				builder.Append(StoreField.Create(builder.Module, stateField)); // Store value in this.'<>state'
+				if (Body.Node.IsEndReachable)
+				{
+					builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
+					builder.Append(new LoadConstantInt(0)); // Load the end state
+					builder.Append(StoreField.Create(builder.Module, stateField)); // Store value in this.'<>state'
+				}
 
 				builder.Append(endLabel);
 				builder.Append(LoadConstant.False());
 				builder.Append(new SimpleInstruction(Opcode.Ret));
 			}
-
-			stateSwitch.SetTargets(yieldLabels);
 		}
 
 		IDeclarationSpace IDeclarationSpace.Parent { get { return Group == null ? null : (IDeclarationSpace)Group.Parent; } }
