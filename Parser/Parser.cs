@@ -2332,7 +2332,7 @@ namespace Osprey
 				{
 					i++;
 					if (Accept(i, TokenType.Iter))
-						return new IteratorLookup(left)
+						left = new IteratorLookup(left)
 						{
 							StartIndex = left.StartIndex,
 							EndIndex = tok[i++].EndIndex,

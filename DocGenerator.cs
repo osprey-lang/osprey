@@ -279,7 +279,7 @@ namespace Osprey
 				{
 					// If this is the case, then the entire line is whitespace.
 					if (currentKeyword != null)
-						nextSep = '\n';
+						nextSep = ParagraphSeparator;
 				}
 				else if (currentKeyword == null || indent <= lastIndent)
 				{
@@ -292,16 +292,14 @@ namespace Osprey
 
 						currentKeyword = match.Groups[1].Value;
 						currentParam = match.Groups[2].Success ? match.Groups[2].Value.Trim() : null;
-						currentValue = new StringBuilder(match.Groups[3].Value.Trim());
+
+						currentValue = AppendDocLine(null, match.Groups[3].Value, ref nextSep);
 						lastIndent = indent;
 					}
 				}
 				else
 				{
-					if (currentValue.Length > 0)
-						currentValue.Append(nextSep);
-					currentValue.Append(realLine.Trim());
-					nextSep = ' ';
+					AppendDocLine(currentValue, realLine, ref nextSep);
 				}
 			}
 
@@ -310,6 +308,28 @@ namespace Osprey
 					currentValue.ToString(), context, document);
 
 			return output;
+		}
+
+		private static StringBuilder AppendDocLine(StringBuilder currentValue, string line, ref char nextSep)
+		{
+			var forcedLineBreak = line.EndsWith("\\");
+			if (forcedLineBreak)
+				line = line.Substring(0, line.Length - 1);
+
+			line = line.Trim();
+
+			if (currentValue == null)
+				currentValue = new StringBuilder(line);
+			else
+			{
+				if (currentValue.Length > 0)
+					currentValue.Append(nextSep);
+				currentValue.Append(line);
+			}
+
+			nextSep = forcedLineBreak ? '\n' : ' ';
+
+			return currentValue;
 		}
 
 		private static string GetDocName(Type type)
@@ -340,7 +360,9 @@ namespace Osprey
 
 		private static Regex SingleLineStartRegex = new Regex(@"^\s*///");
 		private static Regex MultilineStartRegex = new Regex(@"^\s*\**");
-		private static Regex FormatKeywordRegex = new Regex(@"^\s*([a-zA-Z]+)\s*([^:]+)?\:\s(.*)$");
+		private static Regex FormatKeywordRegex = new Regex(@"^\s*([a-zA-Z]+)\s*([^:]+)?\:(?:\s(.*))?$");
+
+		private const char ParagraphSeparator = '\u2029';
 
 		private class DocGenState
 		{
