@@ -155,6 +155,8 @@ namespace Osprey.Instructions
 		Scall = 0x36,
 		Apply = 0x37,
 		Sapply = 0x38,
+		Callmem_s = 0x7f,
+		Callmem = 0x80,
 		// Control flow
 		Retnull = 0x39,
 		Ret = 0x3a,
@@ -1459,7 +1461,6 @@ namespace Osprey.Instructions
 		{
 			get
 			{
-				var method = Parent.Module.GetMethod(this.method);
 				return new StackChange(removed: FinalArgCount, // arguments
 					added: 1); // return value
 			}
@@ -1554,6 +1555,82 @@ namespace Osprey.Instructions
 			if (Parent != null)
 				return string.Format("sapply {0:X8} [{1}]", method, Parent.Module.GetMethod(method).FullName);
 			return "sapply " + method.ToString("x8");
+		}
+	}
+
+	public sealed class CallMember : Instruction
+	{
+		public CallMember(uint memberName, int argCount)
+		{
+			this.memberName = memberName;
+			this.argCount = argCount;
+		}
+
+		private uint memberName;
+		/// <summary>
+		/// Gets the string ID of the name of the member to be invoked.
+		/// </summary>
+		public uint MemberName { get { return memberName; } }
+
+		private int argCount;
+		/// <summary>
+		/// Gets the number of arguments to invoke the member with.
+		/// </summary>
+		public int ArgCount { get { return argCount; } }
+
+		public override StackChange StackChange
+		{
+			get
+			{
+				return new StackChange(removed: argCount + 1, // arguments + instance
+					added: 1); // return value
+			}
+		}
+
+		public override int GetSize()
+		{
+			return 1 + 4 /*member ID*/ +
+				(argCount <= byte.MaxValue ? 1 : 2);
+		}
+
+		public override byte[] GetBytes()
+		{
+			var output = new byte[GetSize()];
+
+			if (argCount <= byte.MaxValue)
+			{
+				output[0] = (byte)Opcode.Callmem_s;
+				output[5] = (byte)argCount;
+			}
+			else
+			{
+				output[1] = (byte)Opcode.Callmem;
+				output.CopyBytes((ushort)argCount, 5);
+			}
+
+			output.CopyBytes(memberName, 1);
+
+			return output;
+		}
+
+		public override string ToString()
+		{
+			var output = new StringBuilder(32);
+
+			output.Append("callmem");
+			if (argCount <= byte.MaxValue)
+				output.Append(".s");
+
+			output.Append(' ');
+
+			output.Append(memberName.ToString("X8"));
+			if (Parent != null)
+				output.AppendFormat("[{0}]", Parent.Module.Members.Strings[memberName]);
+
+			output.Append(' ');
+			output.Append(argCount);
+
+			return output.ToString();
 		}
 	}
 

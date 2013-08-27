@@ -2933,7 +2933,8 @@ namespace Osprey.Nodes
 					}
 				}
 
-				// Fall through for default compilation
+				CompileAsMemberCall(compiler, method, access.Inner, access.Member.Name);
+				return;
 			}
 			else if (Inner is StaticMethodAccess)
 			{
@@ -2944,11 +2945,28 @@ namespace Osprey.Nodes
 				method.Append(new StaticCall(method.Module.GetMethodId(methodGroup), Arguments.Count)); // Call it!
 				return;
 			}
+			else if (Inner is MemberAccess)
+			{
+				// "Normal" member access without a known instance type,
+				// compile to CallMember instruction!
+				var access = (MemberAccess)Inner;
+
+				CompileAsMemberCall(compiler, method, access.Inner, access.Member);
+				return;
+			}
 
 			// Default compilation
-			Inner.Compile(compiler, method); // Evaluate the invocable expression
-			CompileArguments(compiler, method); // Evaluate eaech argument
+			Inner.Compile(compiler, method); // Evaluate the invokable expression
+			CompileArguments(compiler, method); // Evaluate each argument
 			method.Append(new Call(Arguments.Count)); // !ti llaC
+		}
+
+		private void CompileAsMemberCall(Compiler compiler, MethodBuilder method, Expression instance, string memberName)
+		{
+			instance.Compile(compiler, method); // Evaluate the instance expression
+			CompileArguments(compiler, method); // Evaluate each argument
+			method.Append(new CallMember(method.Module.GetStringId(memberName), Arguments.Count)); // Call the member!
+			return;
 		}
 
 		private void CompileArguments(Compiler compiler, MethodBuilder method)
