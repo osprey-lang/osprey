@@ -2582,9 +2582,10 @@ namespace Osprey.Nodes
 
 		private void CompileOneToMany(Compiler compiler, MethodBuilder method)
 		{
-			if (Targets.All(IsLocalAccess))
+			if (AreAllTargetsLocalAccess())
 			{
-				var unpackTargets = Targets.Select(t => ((LocalVariableAccess)t).GetLocal(method));
+				var _method = method;
+				var unpackTargets = Targets.Select(t => ((LocalVariableAccess)t).GetLocal(_method));
 
 				Values[0].Compile(compiler, method);
 				compiler.Unpack(method, unpackTargets);
@@ -2632,7 +2633,7 @@ namespace Osprey.Nodes
 
 		private void CompileManyToMany(Compiler compiler, MethodBuilder method)
 		{
-			if (Targets.All(IsLocalAccess))
+			if (AreAllTargetsLocalAccess())
 			{
 				// Optimise parallel assignments to all-locals.
 				// The store is guaranteed not to have any side-effects of any kind
@@ -2702,9 +2703,14 @@ namespace Osprey.Nodes
 			}
 		}
 
-		private static bool IsLocalAccess(Expression e)
+		private bool AreAllTargetsLocalAccess()
 		{
-			return e is LocalVariableAccess;
+			HashSet<Variable> variables = new HashSet<Variable>();
+			foreach (var e in Targets)
+				if (!(e is LocalVariableAccess) ||
+					!variables.Add(((LocalVariableAccess)e).Variable))
+					return false;
+			return true;
 		}
 	}
 

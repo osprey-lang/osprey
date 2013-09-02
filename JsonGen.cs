@@ -23,7 +23,11 @@ namespace Osprey.Json
 		public override string ToString()
 		{
 			var sb = new StringBuilder();
+#if DEBUG
 			this.ToString(sb, 0);
+#else
+			this.ToString(sb, -1);
+#endif
 			return sb.ToString();
 		}
 
@@ -231,16 +235,33 @@ namespace Osprey.Json
 
 		public override void ToString(StringBuilder target, int indent)
 		{
-			target.AppendLine("[");
+			if (indent < 0)
+				target.Append('[');
+			else
+				target.AppendLine("[");
+
 			for (var i = 0; i < values.Count; i++)
 			{
 				if (i > 0)
-					target.AppendLine(",");
-				target.Append('\t', indent + 1);
-				ValueToString(values[i], target, indent + 1);
+					if (indent < 0)
+						target.Append(',');
+					else
+						target.AppendLine(",");
+
+				if (indent >= 0)
+				{
+					target.Append('\t', indent + 1);
+					ValueToString(values[i], target, indent + 1);
+				}
+				else
+					ValueToString(values[i], target, -1);
 			}
-			target.AppendLine();
-			target.Append('\t', indent);
+
+			if (indent >= 0)
+			{
+				target.AppendLine();
+				target.Append('\t', indent);
+			}
 			target.Append(']');
 		}
 
@@ -348,21 +369,42 @@ namespace Osprey.Json
 
 		public override void ToString(StringBuilder target, int indent)
 		{
-			target.AppendLine("{");
+			if (indent < 0)
+				target.Append('{');
+			else
+				target.AppendLine("{");
+
 			var needSep = false;
 			foreach (var kvp in members)
 			{
 				if (needSep)
-					target.AppendLine(",");
+					if (indent < 0)
+						target.Append(',');
+					else
+						target.AppendLine(",");
 				else
 					needSep = true;
-				target.Append('\t', indent + 1);
-				target.Append(kvp.Key.ToJsonString());
-				target.Append(": ");
-				ValueToString(kvp.Value, target, indent + 1);
+
+				if (indent >= 0)
+				{
+					target.Append('\t', indent + 1);
+					target.Append(kvp.Key.ToJsonString());
+					target.Append(": ");
+					ValueToString(kvp.Value, target, indent + 1);
+				}
+				else
+				{
+					target.Append(kvp.Key.ToJsonString());
+					target.Append(':');
+					ValueToString(kvp.Value, target, -1);
+				}
 			}
-			target.AppendLine();
-			target.Append('\t', indent);
+
+			if (indent >= 0)
+			{
+				target.AppendLine();
+				target.Append('\t', indent);
+			}
 			target.Append('}');
 		}
 

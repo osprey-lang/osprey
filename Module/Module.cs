@@ -30,6 +30,7 @@ namespace Osprey
 			if (!imported)
 			{
 				this.methodBlock = new MemoryStream(2048); // Initialize to 2k capacity
+				this.methodBodies = new Dictionary<byte[], uint>(MethodBlockComparer.Instance);
 				this.metadata = new Dictionary<string, string>();
 			}
 
@@ -112,6 +113,7 @@ namespace Osprey
 		internal ModulePool Pool { get { return pool; } }
 
 		private MemoryStream methodBlock;
+		private Dictionary<byte[], uint> methodBodies;
 		/// <summary>
 		/// Gets the method block of the module. This is always null for imported methods.
 		/// </summary>
@@ -374,9 +376,13 @@ namespace Osprey
 			if (body == null)
 				throw new ArgumentNullException("body");
 
-			var offset = checked((uint)methodBlock.Length);
-
-			methodBlock.Write(body, 0, body.Length);
+			uint offset;
+			if (!methodBodies.TryGetValue(body, out offset))
+			{
+				offset = checked((uint)methodBlock.Length);
+				methodBlock.Write(body, 0, body.Length);
+				methodBodies[body] = offset;
+			}
 
 			return offset;
 		}
@@ -596,6 +602,60 @@ namespace Osprey
 			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
 			{
 				return EnumerateEntries().GetEnumerator();
+			}
+		}
+
+		private class MethodBlockComparer : IEqualityComparer<byte[]>
+		{
+			public bool Equals(byte[] x, byte[] y)
+			{
+				if (x == null || y == null)
+					return x == y;
+				if (x.Length != y.Length)
+					return false;
+
+				var iMax = x.Length;
+				for (var i = 0; i < iMax; i++)
+					if (x[i] != y[i])
+						return false;
+
+				return true;
+			}
+
+			public int GetHashCode(byte[] obj)
+			{
+				var hash = 0;
+
+				var i = 0;
+				var length = obj.Length - 4;
+				while (i < length)
+				{
+					unchecked
+					{
+						hash ^= obj[i];
+						hash ^= 7 * obj[i + 1];
+						hash ^= 13 * obj[i + 2];
+						hash ^= 23 * obj[i + 3];
+					}
+					i += 4;
+				}
+
+				while (i < obj.Length)
+				{
+					hash ^= obj[i] << (3 * i % 4);
+					i++;
+				}
+
+				return hash;
+			}
+
+			private static MethodBlockComparer instance;
+			public static MethodBlockComparer Instance
+			{
+				get
+				{
+					return instance ?? (instance = new MethodBlockComparer());
+				}
 			}
 		}
 
