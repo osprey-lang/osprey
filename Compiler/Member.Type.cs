@@ -41,7 +41,7 @@ namespace Osprey.Members
 		internal uint Id;
 
 		/// <summary>Gets the fully qualified name of the type.</summary>
-		public string FullName
+		public override string FullName
 		{
 			get
 			{
@@ -248,7 +248,7 @@ namespace Osprey.Members
 			this.value = ConstantValue.CreateEnumValue(value, parent);
 		}
 
-		public string FullName
+		public override string FullName
 		{
 			get { return Parent.FullName + "." + this.Name; }
 		}
@@ -1093,7 +1093,7 @@ namespace Osprey.Members
 		/// </summary>
 		public Class Parent { get; internal set; }
 
-		public string FullName { get { return Parent.FullName + "." + this.Name; } }
+		public override string FullName { get { return Parent.FullName + "." + this.Name; } }
 
 		private MemberFlags flags;
 
@@ -1256,7 +1256,7 @@ namespace Osprey.Members
 				if (getter != null)
 					throw new DeclarationException(getter.Node, "The property already has a getter.");
 				if (setter != null)
-					ValidateAccessors(value, setter);
+					ValidateAccessors(value.Method, setter.Method);
 				SetField(value, out getter);
 			}
 		}
@@ -1269,7 +1269,7 @@ namespace Osprey.Members
 				if (setter != null)
 					throw new DeclarationException(setter.Node, "The property already has a setter.");
 				if (getter != null)
-					ValidateAccessors(getter, value);
+					ValidateAccessors(getter.Method, value.Method);
 				SetField(value, out setter);
 			}
 		}
@@ -1309,27 +1309,18 @@ namespace Osprey.Members
 			field = value;
 		}
 
-		internal static void ValidateAccessors(PropertyAccessor getter, PropertyAccessor setter)
+		internal static void ValidateAccessors(Method getter, Method setter)
 		{
-			// Since the getter and setter MAY have no declared accessibility while being overrides,
-			// we wait with checking the accessibility until we've found the correct methods to override.
-			//if (GetDeclaredAccessibility(getter) != GetDeclaredAccessibility(setter))
-			//	throw new InconsistentAccessibilityException(
-			//		"The getter and setter of a property accessor must both have the same declared accessibility.");
-
-			var getterMethod = getter.Method;
-			var setterMethod = setter.Method;
-
-			if (getterMethod.IsAbstract != setterMethod.IsAbstract)
+			if (getter.IsAbstract != setter.IsAbstract)
 				throw new DeclarationException(getter.Node, "If either property accessor is marked abstract, then both must be.");
 
-			if (getterMethod.IsOverridable != setterMethod.IsOverridable)
+			if (getter.IsOverridable != setter.IsOverridable)
 				throw new DeclarationException(getter.Node, "If either property accessor is marked overridable, then both must be.");
 
-			if (getterMethod.IsOverride != setterMethod.IsOverride)
+			if (getter.IsOverride != setter.IsOverride)
 				throw new DeclarationException(getter.Node, "If either property accessor is marked override, then both must be.");
 
-			if (getterMethod.IsStatic != setterMethod.IsStatic)
+			if (getter.IsStatic != setter.IsStatic)
 				throw new DeclarationException(getter.Node, "If either property accessor is marked static, then both must be.");
 		}
 	}

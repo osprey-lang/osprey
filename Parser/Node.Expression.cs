@@ -1450,7 +1450,9 @@ namespace Osprey.Nodes
 						return new LocalFunctionAccess(function);
 					}
 				case MemberKind.Ambiguous:
-					throw new AmbiguousNameException(this, (AmbiguousMember)member, "The name '" + Name + "' is ambiguous in this context.");
+					throw new AmbiguousNameException(this, (AmbiguousMember)member,
+						"The name '" + Name + "' is ambiguous between the following members: " +
+						((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", "));
 				default:
 					throw new InvalidOperationException("SimpleNameExpression resolved to an invalid member kind.");
 			}

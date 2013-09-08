@@ -18,7 +18,7 @@ namespace Osprey.Members
 			Parent = parent;
 		}
 
-		public string FullName
+		public override string FullName
 		{
 			get
 			{

@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Osprey.Instructions;
 using Osprey.Members;
 using Osprey.Nodes;
 using CI = System.Globalization.CultureInfo;
 using Enum = Osprey.Members.Enum;
-using Type = Osprey.Members.Type;
 using Switch = Osprey.Instructions.Switch;
-using System.Reflection;
+using Type = Osprey.Members.Type;
 
 namespace Osprey
 {
@@ -528,7 +528,7 @@ namespace Osprey
 			ProcessFiles();
 			parseTimer.Stop();
 
-			Notice("Time taken to parse (ms): " + parseTimer.Elapsed.TotalMilliseconds);
+			Notice("Time taken to parse (ms): " + parseTimer.Elapsed.TotalMilliseconds.ToString(CI.InvariantCulture));
 
 			// And now we start the real work.
 
@@ -646,11 +646,12 @@ namespace Osprey
 			var posAfter = target.Position;
 
 			Notice("Compilation finished at " + DateTime.Now);
-			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds);
-			Notice("Time taken to emit bytes (ms): " + emitTimer.Elapsed.TotalMilliseconds);
+			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds.ToString(CI.InvariantCulture));
+			Notice("Time taken to emit bytes (ms): " + emitTimer.Elapsed.TotalMilliseconds.ToString(CI.InvariantCulture));
 
-			Notice("Total time taken (ms): " + (parseTimer.Elapsed + compileTimer.Elapsed + emitTimer.Elapsed).TotalMilliseconds);
-			Notice("Total bytes written: " + (posAfter - posBefore));
+			var totalTime = parseTimer.Elapsed + compileTimer.Elapsed + emitTimer.Elapsed;
+			Notice("Total time taken (ms): " + totalTime.TotalMilliseconds.ToString(CI.InvariantCulture));
+			Notice("Total bytes written: " + (posAfter - posBefore).ToString(CI.InvariantCulture));
 		}
 
 		private void ProcessFiles()

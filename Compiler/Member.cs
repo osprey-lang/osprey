@@ -56,6 +56,12 @@ namespace Osprey.Members
 		/// <summary>Gets the name of the member.</summary>
 		public string Name { get { return name; } internal set { name = value; } }
 
+		/// <summary>
+		/// Gets the fully qualified name of the member.
+		/// This may be the same as <see cref="Name"/>.
+		/// </summary>
+		public virtual string FullName { get { return name; } }
+
 		// The name is writable because local methods may need to change the name.
 
 		public override string ToString()
@@ -240,7 +246,7 @@ namespace Osprey.Members
 		/// <summary>
 		/// Gets the fully qualified name of the namespace.
 		/// </summary>
-		public string FullName
+		public override string FullName
 		{
 			get
 			{
@@ -732,7 +738,7 @@ namespace Osprey.Members
 			this.value = value;
 		}
 
-		public string FullName
+		public override string FullName
 		{
 			get
 			{
