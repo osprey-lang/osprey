@@ -749,7 +749,7 @@ namespace Osprey
 				if (use is UseScriptDirective)
 				{
 					// UseScriptDirective.Name is a StringLiteral, which inherits from ConstantExpression
-					var fileName = ((UseScriptDirective)use).Name.Value.StringValue;
+					var fileName = ((UseScriptDirective)use).Name.StringValue;
 
 					// Make the file name absolute, but resolve it relative to the document!
 					// If you have the following file structure:
@@ -952,6 +952,11 @@ namespace Osprey
 							var ns = projectNamespace.FindNamespace(((UseNamespaceDirective)use).Name);
 							doc.Namespace.ImportNamespace(ns);
 						}
+
+					// If the document has "namespace blah;" at the top,
+					// then we act as if it also had "use namespace blah;".
+					if (doc.GlobalDeclarationSpace.Name != null)
+						doc.Namespace.ImportNamespace(doc.GlobalDeclarationSpace.Namespace);
 
 					ResolveBaseTypeNames(doc.GlobalDeclarationSpace, doc.Namespace);
 				}
@@ -1592,7 +1597,7 @@ namespace Osprey
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
 				}
 				if (options.DocFile != null)
-					DocGenerator.Generate(c.projectNamespace, c.documents, options.DocFile);
+					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile);
 			}
 		}
 
@@ -1608,7 +1613,7 @@ namespace Osprey
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
 				}
 				if (options.DocFile != null)
-					DocGenerator.Generate(c.projectNamespace, c.documents, options.DocFile);
+					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile);
 			}
 		}
 

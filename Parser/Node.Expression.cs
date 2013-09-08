@@ -1883,7 +1883,8 @@ namespace Osprey.Nodes
 					return GetNamespaceMemberAccess(ns.GetMember(Member));
 
 				throw new UndefinedNameException(this, Member,
-					"The namespace '" + ns.FullName + "' does not contain a definition for the specified name.");
+					string.Format("The namespace '{0}' does not contain a definition for '{1}'.",
+						ns.FullName, Member));
 			}
 			if (Inner is TypeAccess)
 			{

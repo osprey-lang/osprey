@@ -16,7 +16,7 @@ namespace Osprey
 	/// </summary>
 	internal static class DocGenerator
 	{
-		public static void Generate(Namespace projectNamespace, IEnumerable<Document> documents, string outputPath)
+		public static void Generate(Namespace projectNamespace, Compiler compiler, IEnumerable<Document> documents, string outputPath)
 		{
 			if (projectNamespace == null)
 				throw new ArgumentNullException("projectNamespace");
@@ -26,11 +26,13 @@ namespace Osprey
 				throw new ArgumentNullException("outputPath");
 
 			using (var file = File.Open(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-				Generate(projectNamespace, documents, file);
+				Generate(projectNamespace, compiler, documents, file);
 		}
 
-		public static void Generate(Namespace projectNamespace, IEnumerable<Document> documents, Stream output)
+		public static void Generate(Namespace projectNamespace, Compiler compiler, IEnumerable<Document> documents, Stream output)
 		{
+			compiler.Notice("[doc] Generating documentation file...");
+
 			if (projectNamespace == null)
 				throw new ArgumentNullException("projectNamespace");
 			if (documents == null)
@@ -48,6 +50,7 @@ namespace Osprey
 			using (var writer = new StreamWriter(output))
 				writer.Write(result.ToString());
 
+			compiler.Notice("[doc] Finished generating documentation file.");
 			// Done!
 		}
 
@@ -90,7 +93,13 @@ namespace Osprey
 			if (type.DocString != null)
 			{
 				var doc = ParseDocString(type.DocString, type.Type, document);
-				doc.ToJson(result);
+				if (doc.IsValidForType)
+					doc.ToJson(result);
+				else
+					document.Compiler.Warning(string.Format(
+						"[doc] Ignoring documentation for type '{0}' " +
+						"(types cannot have documentation for parameters, return value or thrown errors).",
+						type.Type.FullName));
 			}
 
 			if (type is EnumDeclaration)
@@ -112,10 +121,17 @@ namespace Osprey
 					var field = @enum.Members[i];
 					if (field.DocString != null)
 					{
-						if (fieldDocs == null)
-							fieldDocs = new JsonObject();
 						var doc = ParseDocString(field.DocString, @enum.Type, document);
-						fieldDocs[field.Name] = doc.ToJson();
+						if (doc.IsValidForField)
+						{
+							if (fieldDocs == null)
+								fieldDocs = new JsonObject();
+							fieldDocs[field.Name] = doc.ToJson();
+						}
+						else
+							document.Compiler.Warning(string.Format(InvalidFieldDoc,
+								@enum.Type.FullName + "." + field.Name,
+								"enum field"));
 					}
 				}
 
@@ -135,21 +151,36 @@ namespace Osprey
 				foreach (var field in @class.Fields)
 					if (field.DocString != null && field.Declarators.Count == 1)
 					{
-						if (fieldDocs == null)
-							fieldDocs = new JsonObject();
 						var firstDecl = field.Declarators[0];
 						var doc = ParseDocString(field.DocString, context, document);
-						fieldDocs[firstDecl.Name] = doc.ToJson();
+
+						if (doc.IsValidForField)
+						{
+							if (fieldDocs == null)
+								fieldDocs = new JsonObject();
+							fieldDocs[firstDecl.Name] = doc.ToJson();
+						}
+						else
+							document.Compiler.Warning(string.Format(InvalidFieldDoc,
+								@class.Type.FullName + "." + firstDecl.Name,
+								"field"));
 					}
 
 				foreach (var field in @class.Constants)
 					if (field.DocString != null && field.Declarators.Count == 1)
 					{
-						if (fieldDocs == null)
-							fieldDocs = new JsonObject();
 						var firstDecl = field.Declarators[0];
 						var doc = ParseDocString(field.DocString, context, document);
-						fieldDocs[firstDecl.Name] = doc.ToJson();
+						if (doc.IsValidForField)
+						{
+							if (fieldDocs == null)
+								fieldDocs = new JsonObject();
+							fieldDocs[firstDecl.Name] = doc.ToJson();
+						}
+						else
+							document.Compiler.Warning(string.Format(InvalidFieldDoc,
+								@class.Type.FullName + "." + firstDecl.Name,
+								"class constant"));
 					}
 
 				if (fieldDocs != null)
@@ -158,38 +189,46 @@ namespace Osprey
 
 			{ // methods: instance, static, constructors, operators
 				JsonObject methodDocs = null;
-				Action<string, Signature, MemberDoc> addMethodDoc = null;
-				addMethodDoc = (name, signature, doc) =>
-				{
-					if (methodDocs == null)
-						methodDocs = new JsonObject();
+				Action<Method, MemberDoc, IEnumerable<Parameter>, Compiler> addMethodDoc =
+					(method, doc, parameters, compiler) =>
+					{
+						if (!VerifyParameters(method.Group.FullName, doc, parameters, compiler))
+							return;
 
-					JsonArray overloads;
-					if (methodDocs.ContainsKey(name))
-						overloads = (JsonArray)methodDocs[name];
-					else
-						methodDocs[name] = overloads = new JsonArray();
+						if (methodDocs == null)
+							methodDocs = new JsonObject();
 
-					var jsonDoc = new JsonObject();
-					jsonDoc.Add("signature", signature.ToJson());
-					doc.ToJson(jsonDoc);
-					overloads.Add(jsonDoc);
-				};
+						var name = method.Name;
+
+						JsonArray overloads;
+						if (methodDocs.ContainsKey(name))
+							overloads = (JsonArray)methodDocs[name];
+						else
+							methodDocs[name] = overloads = new JsonArray();
+
+						var jsonDoc = new JsonObject();
+						jsonDoc.Add("signature", method.Signature.ToJson());
+						doc.ToJson(jsonDoc);
+						overloads.Add(jsonDoc);
+					};
 
 				foreach (var method in @class.Methods)
 					if (method.DocString != null)
-						addMethodDoc(method.DeclSpace.Name, method.DeclSpace.Signature,
-							ParseDocString(method.DocString, context, document));
+						addMethodDoc(method.DeclSpace,
+							ParseDocString(method.DocString, context, document),
+							method.Parameters, document.Compiler);
 
 				foreach (var ctor in @class.Constructors)
 					if (ctor.DocString != null)
-						addMethodDoc(".new", ctor.DeclSpace.Signature,
-							ParseDocString(ctor.DocString, context, document));
+						addMethodDoc(ctor.DeclSpace,
+							ParseDocString(ctor.DocString, context, document),
+							ctor.Parameters, document.Compiler);
 
 				foreach (var op in @class.Operators)
 					if (op.DocString != null)
-						addMethodDoc(op.DeclSpace.Name, op.DeclSpace.Signature,
-							ParseDocString(op.DocString, context, document));
+						addMethodDoc(op.DeclSpace,
+							ParseDocString(op.DocString, context, document),
+							op.DeclSpace.Parameters, document.Compiler);
 
 				if (methodDocs != null)
 					target["methods"] = methodDocs;
@@ -226,6 +265,10 @@ namespace Osprey
 				return null;
 
 			var doc = ParseDocString(function.DocString, function.DeclSpace, document);
+			if (!VerifyParameters(function.DeclSpace.Group.FullName,
+				doc, function.Function.Parameters, document.Compiler))
+				return null;
+
 			var jsonDoc = new JsonObject();
 			jsonDoc.Add("signature", function.DeclSpace.Signature.ToJson());
 			doc.ToJson(jsonDoc);
@@ -242,6 +285,12 @@ namespace Osprey
 			var firstDecl = constant.Declaration.Declarators[0];
 			var globalConst = constant.Constants[0];
 			var doc = ParseDocString(constant.DocString, globalConst.Parent, document);
+
+			if (!doc.IsValidForField)
+			{
+				document.Compiler.Warning(string.Format(InvalidFieldDoc, constant.Constants[0].FullName, "global constant"));
+				return null;
+			}
 
 			return doc.ToJson();
 		}
@@ -332,6 +381,27 @@ namespace Osprey
 			return currentValue;
 		}
 
+		private static bool VerifyParameters(string memberName, MemberDoc documentation,
+			IEnumerable<Parameter> parameters, Compiler compiler)
+		{
+			if (parameters == null)
+				throw new ArgumentNullException("parameters");
+
+			if (documentation.Parameters == null)
+				return true;
+
+			var paramDict = parameters.ToDictionary(p => p.Name);
+			var firstInvalidParam = documentation.Parameters
+				.Select(kvp => kvp.Key)
+				.FirstOrDefault(p => !paramDict.ContainsKey(p));
+
+			if (firstInvalidParam != null)
+				compiler.Warning(string.Format("[doc] Ignoring documentation for '{0}' (parameter '{1}' does not exist).",
+					memberName, firstInvalidParam));
+
+			return firstInvalidParam == null;
+		}
+
 		private static string GetDocName(Type type)
 		{
 			return string.Format("{0} {1}", type.Module.Name, type.FullName);
@@ -363,6 +433,10 @@ namespace Osprey
 		private static Regex FormatKeywordRegex = new Regex(@"^\s*([a-zA-Z]+)\s*([^:]+)?\:(?:\s(.*))?$");
 
 		private const char ParagraphSeparator = '\u2029';
+
+		private const string InvalidFieldDoc =
+			"[doc] Ignoring documentation for {1} '{0}' " +
+			"({1}s cannot have documentation for parameters, return value or thrown errors).";
 
 		private class DocGenState
 		{
@@ -422,7 +496,8 @@ namespace Osprey
 			/// </summary>
 			public string Summary;
 			/// <summary>
-			/// A description of the return value of the member. (Applicable to property getters and methods)
+			/// A description of the return value of the member.
+			/// (Applicable to property getters, methods and operators)
 			/// </summary>
 			public string Returns;
 			/// <summary>
@@ -431,13 +506,33 @@ namespace Osprey
 			public string Remarks;
 
 			/// <summary>
-			/// Parameter documentation. (Applicable to parametrised members, e.g. methods, constructors, operators, etc.)
+			/// Parameter documentation. This member is null if there are no parameters.
+			/// (Applicable to parametrised members, e.g. methods, constructors, operators, etc.)
 			/// </summary>
 			public Dictionary<string, string> Parameters;
 			/// <summary>
-			/// Throws declarations. (Applicable to everything except fields and constants)
+			/// Throws declarations. This member is null if there is no throws documentation.
+			/// (Applicable to everything except fields and constants)
 			/// </summary>
 			public List<ThrowsDoc> Throws;
+
+			public bool IsValidForField
+			{
+				get
+				{
+					return Returns == null &&
+						Parameters == null &&
+						Throws == null;
+				}
+			}
+
+			public bool IsValidForType
+			{
+				get
+				{
+					return Returns == null && Parameters == null && Throws == null;
+				}
+			}
 
 			/// <summary>
 			/// Adds documentation for the specified keyword.
