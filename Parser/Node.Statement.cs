@@ -1947,7 +1947,7 @@ namespace Osprey.Nodes
 				}
 			}
 
-			var endLabel = new Label("try-end");
+			var endLabel = Body.IsEndReachable || Catches.Any(c => c.IsEndReachable) ? new Label("try-end") : null;
 
 			Body.Compile(compiler, method); // Evaluate the try body
 			if (Body.IsEndReachable)
@@ -1995,7 +1995,8 @@ namespace Osprey.Nodes
 				state.ReturnLocal.Done(); // Done!
 			}
 
-			method.Append(endLabel);
+			if (endLabel != null)
+				method.Append(endLabel);
 		}
 
 		internal static bool FindTryState(MethodBuilder method, out TryState result)

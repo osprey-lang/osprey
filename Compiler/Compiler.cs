@@ -260,7 +260,7 @@ namespace Osprey
 							unaryMethod.IsStatic = true;
 							unaryMethod.IsImplDetail = true;
 							unaryMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
-							unaryMethod.Append(new SimpleInstruction(GetUnaryOpcode(LambdaOperator.Plus)));
+							unaryMethod.Append(new SimpleInstruction(GetUnaryOpcode(op)));
 							unaryMethod.Append(new SimpleInstruction(Opcode.Ret));
 							var group = lambdaOpClass.DeclareMethod(unaryMethod);
 
