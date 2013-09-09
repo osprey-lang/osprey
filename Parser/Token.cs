@@ -213,7 +213,7 @@ namespace Osprey
 		Abstract = 1 | Keyword | MemberModifier,
 		/// <summary>and</summary>
 		And = 2 | Keyword | LambdaOperator,
-		/// <summary>async</summary>
+		/// <summary>async (unused)</summary>
 		Async = 3 | Keyword,
 		/// <summary>base</summary>
 		Base = 4 | Keyword,
@@ -305,6 +305,8 @@ namespace Osprey
 		Xor = 47 | Keyword | LambdaOperator,
 		/// <summary>yield</summary>
 		Yield = 48 | Keyword,
+		/// <summary>ref (unused)</summary>
+		Ref = 49 | Keyword,
 		#endregion
 
 		#region Literals

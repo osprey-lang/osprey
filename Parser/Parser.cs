@@ -2537,6 +2537,8 @@ namespace Osprey
 			}
 			if (Accept(i, TokenType.Async))
 				throw new ParseException(tok[i], "The keyword 'async' is reserved for future use.");
+			if (Accept(i, TokenType.Ref))
+				throw new ParseException(tok[i], "The keyword 'ref' is reserved for future use.");
 
 			throw new ParseException(tok[i]);
 		}

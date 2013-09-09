@@ -757,7 +757,7 @@ namespace Osprey
 			{"null", TokenType.Null},
 			{"operator", TokenType.Operator}, {"or", TokenType.Or}, {"overridable", TokenType.Overridable}, {"override", TokenType.Override},
 			{"private", TokenType.Private}, {"protected", TokenType.Protected}, {"public", TokenType.Public},
-			{"refeq", TokenType.Refeq}, {"return", TokenType.Return},
+			{"ref", TokenType.Ref}, {"refeq", TokenType.Refeq}, {"return", TokenType.Return},
 			{"set", TokenType.Set}, {"static", TokenType.Static},
 			{"this", TokenType.This}, {"throw", TokenType.Throw}, {"true", TokenType.True},
 			{"try", TokenType.Try}, {"typeof", TokenType.Typeof},
