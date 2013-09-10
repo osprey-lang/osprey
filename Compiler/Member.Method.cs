@@ -448,13 +448,14 @@ namespace Osprey.Members
 			// Calculate the total number of required parameters, including
 			// the instance if there is one.
 
-			var requiredParams = Signature.ParameterCount - Signature.OptionalParameterCount;
+			var offset = IsStatic ? 0 : 1; // 'this' is a required, unnamed parameter
+			var requiredParams = Signature.ParameterCount - Signature.OptionalParameterCount + offset;
 
 			builder.Append(new SimpleInstruction(Opcode.Ldargc)); // Load argument count
-			if (requiredParams != 0 || !IsStatic)
+			if (requiredParams != 0)
 			{
 				// Make sure ldargc is 0 when all optional parameters are missing
-				builder.Append(new LoadConstantInt(requiredParams + (IsStatic ? 0 : 1))); // 'this' is a required, unnamed parameter
+				builder.Append(new LoadConstantInt(requiredParams));
 				builder.Append(new SimpleInstruction(Opcode.Sub));
 			}
 
@@ -471,7 +472,7 @@ namespace Osprey.Members
 			{
 				builder.Append(jumpTargets[i]); // The label for this parameter
 				var index = requiredParams + i;
-				Parameters[index].DefaultValue.Compile(compiler, builder); // Evaluate the value
+				Parameters[index - offset].DefaultValue.Compile(compiler, builder); // Evaluate the value
 				builder.Append(new StoreLocal(builder.GetParameter(index))); // Store!
 				// Fall through to the next parameter, which is also missing
 			}
