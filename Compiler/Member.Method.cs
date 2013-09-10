@@ -420,7 +420,7 @@ namespace Osprey.Members
 			if (Signature.Splat == Splat.None && Signature.OptionalParameterCount > 0)
 				CompileOptionalParams(compiler, mb);
 
-			if (Parameters.Any(p => p is ConstructorParam))
+			if (Parameters != null && Parameters.Any(p => p is ConstructorParam))
 				CompileConstructorParams(compiler, mb);
 
 			if (IsGenerator)
