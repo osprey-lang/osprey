@@ -420,6 +420,9 @@ namespace Osprey.Members
 			if (Signature.Splat == Splat.None && Signature.OptionalParameterCount > 0)
 				CompileOptionalParams(compiler, mb);
 
+			if (Parameters.Any(p => p is ConstructorParam))
+				CompileConstructorParams(compiler, mb);
+
 			if (IsGenerator)
 				CompileGenerator(compiler, mb);
 			else
@@ -474,6 +477,27 @@ namespace Osprey.Members
 			}
 
 			builder.Append(endLabel);
+		}
+
+		private void CompileConstructorParams(Compiler compiler, MethodBuilder builder)
+		{
+			for (var i = 0; i < Parameters.Length; i++)
+			{
+				var param = Parameters[i] as ConstructorParam;
+				if (param != null && param.HasThisPrefix)
+				{
+					builder.Append(new LoadLocal(builder.GetParameter(0))); // load this
+					builder.Append(new LoadLocal(builder.GetParameter(i + 1))); // load the argument value
+
+					if (param.Member.Kind == MemberKind.Property)
+					{
+						builder.Append(new StaticCall(((Property)param.Member).SetterId, 1));
+						builder.Append(new SimpleInstruction(Opcode.Pop));
+					}
+					else // Field
+						builder.Append(StoreField.Create(builder.Module, (Field)param.Member));
+				}
+			}
 		}
 
 		private void CompileGenerator(Compiler compiler, MethodBuilder builder)
