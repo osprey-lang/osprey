@@ -366,8 +366,15 @@ namespace Osprey.Nodes
 					else
 					{
 						var variable = method.GetLocal(decl.Name);
-						decl.Value.Compile(compiler, method); // Evaluate expression
-						method.Append(new StoreLocal(variable));
+
+						var value = decl.Value;
+						if (value is ILocalResultExpression)
+							((ILocalResultExpression)value).SetTargetVariable(variable);
+
+						value.Compile(compiler, method); // Evaluate expression
+
+						if (!(value is ILocalResultExpression))
+							method.Append(new StoreLocal(variable));
 					}
 				}
 		}

@@ -240,6 +240,20 @@ namespace Osprey.Nodes
 		}
 	}
 
+	/// <summary>
+	/// Used by expressions whose result is temporarily stored in a local variable,
+	/// such as is the case with list and hash creation expressions. When a local
+	/// variable is initialized with such an expression, the result can be stored
+	/// directly in that variable, removing the need for a temporary local.
+	/// 
+	/// Note that this is safe ONLY in the variable initializer, since that is the
+	/// only place where the variable is guaranteed not to be referred to.
+	/// </summary>
+	public interface ILocalResultExpression
+	{
+		void SetTargetVariable(LocalVariable target);
+	}
+
 	public abstract class AssignableExpression : Expression
 	{
 		internal bool IsAssignment = false;
@@ -3015,7 +3029,7 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class ListLiteralExpression : ListExpression
+	public sealed class ListLiteralExpression : ListExpression, ILocalResultExpression
 	{
 		public ListLiteralExpression(List<Expression> values)
 		{
@@ -3024,6 +3038,8 @@ namespace Osprey.Nodes
 
 		/// <summary>The values contained in the list.</summary>
 		public List<Expression> Values;
+
+		private LocalVariable target;
 
 		public override string ToString(int indent)
 		{
@@ -3061,7 +3077,7 @@ namespace Osprey.Nodes
 			else
 			{
 				// Create the list
-				var listLocal = method.GetAnonymousLocal();
+				var listLocal = target ?? method.GetAnonymousLocal();
 
 				method.Append(new CreateList(unchecked((uint)Values.Count))); // Create the list
 				method.Append(new StoreLocal(listLocal)); // Store it in the local
@@ -3077,14 +3093,21 @@ namespace Osprey.Nodes
 					method.Append(new SimpleInstruction(Opcode.Pop)); // Pop the result of the call
 				}
 
-				method.Append(new LoadLocal(listLocal)); // Load the list (result of expression)
-
-				listLocal.Done();
+				if (listLocal.IsAnonymous)
+				{
+					method.Append(new LoadLocal(listLocal)); // Load the list (result of expression)
+					listLocal.Done();
+				}
 			}
+		}
+
+		public void SetTargetVariable(LocalVariable target)
+		{
+			this.target = target;
 		}
 	}
 
-	public sealed class RangeExpression : ListExpression
+	public sealed class RangeExpression : ListExpression, ILocalResultExpression
 	{
 		public RangeExpression(Expression low, Expression high, Expression step)
 		{
@@ -3099,6 +3122,8 @@ namespace Osprey.Nodes
 		public Expression High;
 		/// <summary>The distance between each item in the range.</summary>
 		public Expression Step;
+
+		private LocalVariable target;
 
 		public override string ToString(int indent)
 		{
@@ -3158,7 +3183,7 @@ namespace Osprey.Nodes
 			}
 
 			// Create the list
-			var listLoc = method.GetAnonymousLocal();
+			var listLoc = target ?? method.GetAnonymousLocal();
 			method.Append(new CreateList(4));
 			method.Append(new StoreLocal(listLoc));
 
@@ -3206,16 +3231,25 @@ namespace Osprey.Nodes
 				method.Append(Branch.IfTrue(loopStart)); // If so, branch to start of body
 				// If false, fall through to the end
 			}
-			method.Append(new LoadLocal(listLoc)); // Load the list (result of expression)
 
-			listLoc.Done();
+			if (listLoc.IsAnonymous)
+			{
+				method.Append(new LoadLocal(listLoc)); // Load the list (result of expression)
+				listLoc.Done();
+			}
+
 			counter.Done();
 			if (!highInlined) highLoc.Done();
 			if (!stepInlined) stepLoc.Done();
 		}
+
+		public void SetTargetVariable(LocalVariable target)
+		{
+			this.target = target;
+		}
 	}
 
-	public sealed class ListComprehension : ListExpression
+	public sealed class ListComprehension : ListExpression, ILocalResultExpression
 	{
 		public ListComprehension(bool isGenerator, List<Expression> expr, List<ListCompIterator> iterators)
 		{
@@ -3234,6 +3268,8 @@ namespace Osprey.Nodes
 		public List<ListCompIterator> Iterators;
 
 		internal BlockSpace ImplicitBlock;
+
+		private LocalVariable target;
 
 		public override string ToString(int indent)
 		{
@@ -3283,16 +3319,23 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			var listLoc = method.GetAnonymousLocal();
+			var listLoc = target ?? method.GetAnonymousLocal();
 			// Initialize the list local
 			method.Append(new CreateList(0));
 			method.Append(new StoreLocal(listLoc));
 
 			Iterators[0].Compile(compiler, method, 0, this, listLoc);
 
-			method.Append(new LoadLocal(listLoc)); // Load the result of the expression
+			if (listLoc.IsAnonymous)
+			{
+				method.Append(new LoadLocal(listLoc)); // Load the result of the expression
+				listLoc.Done();
+			}
+		}
 
-			listLoc.Done();
+		public void SetTargetVariable(LocalVariable target)
+		{
+			this.target = target;
 		}
 	}
 
@@ -3479,7 +3522,7 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class HashLiteralExpression : Expression
+	public sealed class HashLiteralExpression : Expression, ILocalResultExpression
 	{
 		public HashLiteralExpression(List<HashMember> members)
 		{
@@ -3488,6 +3531,8 @@ namespace Osprey.Nodes
 
 		/// <summary>The members of the hash.</summary>
 		public List<HashMember> Members;
+
+		private LocalVariable target;
 
 		public override bool IsTypeKnown(Compiler compiler) { return true; }
 
@@ -3543,7 +3588,7 @@ namespace Osprey.Nodes
 			else
 			{
 				// Create the hash
-				var hashLocal = method.GetAnonymousLocal();
+				var hashLocal = target ?? method.GetAnonymousLocal();
 
 				method.Append(new CreateHash(unchecked((uint)Members.Count))); // Create the hash
 				method.Append(new StoreLocal(hashLocal)); // Store it in the local
@@ -3560,10 +3605,17 @@ namespace Osprey.Nodes
 					method.Append(new SimpleInstruction(Opcode.Pop));
 				}
 
-				method.Append(new LoadLocal(hashLocal)); // Load the hash (result of expression)
-
-				hashLocal.Done();
+				if (hashLocal.IsAnonymous)
+				{
+					method.Append(new LoadLocal(hashLocal)); // Load the hash (result of expression)
+					hashLocal.Done();
+				}
 			}
+		}
+
+		public void SetTargetVariable(LocalVariable target)
+		{
+			this.target = target;
 		}
 	}
 
