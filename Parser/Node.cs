@@ -723,10 +723,19 @@ namespace Osprey.Nodes
 			var index = 0;
 			if (!IsStatic)
 			{
+				// Do not generate initializer code for fields assigned to
+				// in 'this' parameters.
+				var fieldParams = new HashSet<Field>(Parameters
+					.Where(p => p.HasThisPrefix && p.Member.Kind == MemberKind.Field)
+					.Select(p => (Field)p.Member));
+
 				foreach (var field in fields)
 				{
-					var inner = new InstanceMemberAccess(new ThisAccess(), @class,
-						(Field)@class.GetMember(field.Name));
+					var f = (Field)@class.GetMember(field.Name);
+					if (fieldParams.Contains(f))
+						continue;
+
+					var inner = new InstanceMemberAccess(new ThisAccess(), @class, f);
 					inner.IsAssignment = true;
 					Body.Initializer.Insert(index++, new AssignmentExpression(inner, field.Value)
 					{

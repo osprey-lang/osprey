@@ -1336,8 +1336,12 @@ namespace Osprey.Nodes
 						var field = ((Field)member);
 						if (field.IsStatic)
 							return new StaticFieldAccess(field);
-						if (field.Parent == containingClass && !hasInstance)
+						if (!hasInstance)
+						{
+							if (context.IsInFieldInitializer())
+								throw new InstanceMemberAccessException(this, field, "Cannot refer to instance members in a field initializer.");
 							throw new InstanceMemberAccessException(this, field);
+						}
 
 						var inner = new ThisAccess();
 						inner.ResolveNames(context, document);
@@ -1353,8 +1357,12 @@ namespace Osprey.Nodes
 						var method = ((MethodGroup)member);
 						if (method.IsStatic)
 							return new StaticMethodAccess(method);
-						if (method.ParentAsClass == containingClass && !hasInstance)
+						if (!hasInstance)
+						{
+							if (context.IsInFieldInitializer())
+								throw new InstanceMemberAccessException(this, method, "Cannot refer to instance members in a field initializer.");
 							throw new InstanceMemberAccessException(this, method);
+						}
 
 						var inner = new ThisAccess();
 						inner.ResolveNames(context, document);
@@ -1366,8 +1374,12 @@ namespace Osprey.Nodes
 						var prop = ((Property)member);
 						if (prop.IsStatic)
 							return new StaticPropertyAccess(prop);
-						if (prop.Parent == containingClass && !hasInstance)
+						if (!hasInstance)
+						{
+							if (context.IsInFieldInitializer())
+								throw new InstanceMemberAccessException(this, prop, "Cannot refer to instance members in a field initializer.");
 							throw new InstanceMemberAccessException(this, prop);
+						}
 
 						if (block != null && block.Method is LocalMethod)
 							((LocalMethod)block.Method).Function.CapturesThis = true;
@@ -1892,7 +1904,10 @@ namespace Osprey.Nodes
 			{
 				var type = ((TypeAccess)Inner).Type;
 				if (type.ContainsMember(Member))
-					return GetTypeMemberAccess(type.GetMember(Member), context);
+				{
+					bool _;
+					return GetTypeMemberAccess(type.GetMember(Member, null, context.GetContainingClass(out _)), context);
+				}
 
 				throw new UndefinedNameException(this, Member,
 					string.Format("The type '{0}' does not contain a definition for '{1}'.",
@@ -1983,7 +1998,7 @@ namespace Osprey.Nodes
 
 			LocalVariable valueLocal = null;
 			value.Compile(compiler, method); // Evaluate the value
-			if (useValue)
+			if (useValue && !value.CanSafelyInline)
 			{
 				valueLocal = method.GetAnonymousLocal();
 				method.Append(new SimpleInstruction(Opcode.Dup));
@@ -1993,10 +2008,13 @@ namespace Osprey.Nodes
 			method.Append(new StoreMember(method.Module.GetStringId(Member))); // Store the value in the member
 
 			if (useValue)
-			{
-				method.Append(new LoadLocal(valueLocal));
-				valueLocal.Done();
-			}
+				if (value.CanSafelyInline)
+					value.Compile(compiler, method);
+				else
+				{
+					method.Append(new LoadLocal(valueLocal));
+					valueLocal.Done();
+				}
 		}
 
 		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)
@@ -2124,7 +2142,12 @@ namespace Osprey.Nodes
 			bool hasInstance;
 			context.GetContainingClass(out hasInstance);
 			if (!hasInstance)
+			{
+				if (context.IsInFieldInitializer())
+					throw new CompileTimeException(this, "Cannot refer to 'this' in a field initializer.");
+
 				throw new CompileTimeException(this, "'this' can only be used in an instance method.");
+			}
 
 			var block = context as BlockSpace;
 			if (block != null && block.Method is LocalMethod)
@@ -2346,7 +2369,7 @@ namespace Osprey.Nodes
 
 			value.Compile(compiler, method);
 			LocalVariable valueLocal = null;
-			if (useValue)
+			if (useValue && !value.CanSafelyInline)
 			{
 				valueLocal = method.GetAnonymousLocal();
 				method.Append(new SimpleInstruction(Opcode.Dup));
@@ -2356,10 +2379,13 @@ namespace Osprey.Nodes
 			method.Append(new StoreIndexer(Arguments.Count));
 
 			if (useValue)
-			{
-				method.Append(new LoadLocal(valueLocal));
-				valueLocal.Done();
-			}
+				if (value.CanSafelyInline)
+					value.Compile(compiler, method);
+				else
+				{
+					method.Append(new LoadLocal(valueLocal));
+					valueLocal.Done();
+				}
 		}
 
 		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)

@@ -453,7 +453,7 @@ namespace Osprey.Nodes
 
 			LocalVariable valueLocal = null;
 			value.Compile(compiler, method); // And the value
-			if (useValue)
+			if (useValue && !value.CanSafelyInline)
 			{
 				valueLocal = method.GetAnonymousLocal();
 				method.Append(new SimpleInstruction(Opcode.Dup));
@@ -476,10 +476,13 @@ namespace Osprey.Nodes
 			}
 
 			if (useValue)
-			{
-				method.Append(new LoadLocal(valueLocal));
-				valueLocal.Done();
-			}
+				if (value.CanSafelyInline)
+					value.Compile(compiler, method);
+				else
+				{
+					method.Append(new LoadLocal(valueLocal));
+					valueLocal.Done();
+				}
 		}
 
 		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)
@@ -892,6 +895,8 @@ namespace Osprey.Nodes
 		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
 		{
 			value.Compile(compiler, method);
+			if (useValue)
+				method.Append(new SimpleInstruction(Opcode.Dup));
 			Store(compiler, method);
 		}
 

@@ -70,6 +70,36 @@ namespace Osprey
 			}
 		}
 
+		public static bool IsInFieldInitializer(this IDeclarationSpace context)
+		{
+			if (context == null)
+				throw new ArgumentNullException("context");
+
+			// If we encounter a Class before a Method (unless it's a LocalMethod),
+			// then it must be a field initializer.
+			// Examples:
+			//   class C {
+			//      public x = "chirp";          context: Class
+			//      public y = @= "birds";       context: LocalMethod <- Class
+			//      public z() {                 context: Method <- Class
+			//         function i() {            context: LocalMethod <- Method <- Class
+			//            return "feathers";
+			//         }
+			//         return i();
+			//      }
+			//   }
+			do
+			{
+				if (context is Method && !(context is LocalMethod))
+					return false;
+				if (context is Class)
+					return true;
+				context = context.Parent;
+			} while (context !=	null);
+
+			return false;
+		}
+
 		private static void CopyBytesInternal<T>(T[] array, byte[] bytes, int offset)
 		{
 			if (!BitConverter.IsLittleEndian)
