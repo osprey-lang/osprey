@@ -79,7 +79,7 @@ namespace Osprey
 					err.Write(e.Message);
 					Console.ForegroundColor = ConsoleColor.Gray;
 					err.WriteLine();
-					PrintErrorLocation(e);
+					PrintErrorLocation(e, err);
 				}
 			}
 			catch (CompileTimeException e)
@@ -92,7 +92,7 @@ namespace Osprey
 					Console.ForegroundColor = ConsoleColor.Gray;
 					err.WriteLine();
 					if (e.Node != null)
-						PrintErrorLocation(e);
+						PrintErrorLocation(e, err);
 				}
 			}
 			catch (ModuleLoadException e)
@@ -120,39 +120,46 @@ namespace Osprey
 #endif
 		}
 
-		private static void PrintHighlighted(string code)
+		private static void PrintHighlighted(string code, TextWriter target)
 		{
+			Console.BackgroundColor = ConsoleColor.Black;
+
 			var tokenizer = new Tokenizer(code, TokenizerFlags.IncludeComments);
 			var lastEndIndex = 0;
-			foreach (var tok in tokenizer)
+			try
 			{
-				if (tok.Index > lastEndIndex)
-					Console.Write(code.Substring(lastEndIndex, tok.Index - lastEndIndex));
+				foreach (var tok in tokenizer)
+				{
+					if (tok.Index > lastEndIndex)
+						target.Write(code.Substring(lastEndIndex, tok.Index - lastEndIndex));
 
-				if (tok.Match(TokenType.Keyword) || tok.Type == TokenType.At)
-					Console.ForegroundColor = ConsoleColor.Cyan;
-				else if (tok.Match(TokenType.Punctuation))
-					Console.ForegroundColor = ConsoleColor.Gray;
-				else if (tok.Match(TokenType.Integer) || tok.Match(TokenType.Real))
-					Console.ForegroundColor = ConsoleColor.Magenta;
-				else if (tok.Match(TokenType.String))
-					Console.ForegroundColor = ConsoleColor.Red;
-				else
-					Console.ForegroundColor = ConsoleColor.White;
+					if (tok.Match(TokenType.Keyword) || tok.Type == TokenType.At)
+						Console.ForegroundColor = ConsoleColor.Cyan;
+					else if (tok.Match(TokenType.Punctuation))
+						Console.ForegroundColor = ConsoleColor.Gray;
+					else if (tok.Match(TokenType.Integer) || tok.Match(TokenType.Real))
+						Console.ForegroundColor = ConsoleColor.Magenta;
+					else if (tok.Match(TokenType.String))
+						Console.ForegroundColor = ConsoleColor.Red;
+					else if (tok.Type == TokenType.Comment)
+						Console.ForegroundColor = ConsoleColor.DarkGreen;
+					else
+						Console.ForegroundColor = ConsoleColor.White;
 
-				Console.Write(tok.Value);
-				lastEndIndex = tok.EndIndex;
+					target.Write(tok.Value);
+					lastEndIndex = tok.EndIndex;
+				}
 			}
+			catch (ParseException e)
+			{ }
 
 			if (code.Length > lastEndIndex)
-				Console.WriteLine(code.Substring(lastEndIndex, code.Length - lastEndIndex));
-			else
-				Console.WriteLine();
+				target.Write(code.Substring(lastEndIndex, code.Length - lastEndIndex));
 
-			Console.ForegroundColor = ConsoleColor.Gray;
+			Console.ResetColor();
 		}
 
-		private static void PrintErrorLocation(ParseException e)
+		private static void PrintErrorLocation(ParseException e, TextWriter errorStream)
 		{
 			var index = e.Token != null ?
 				e.Token.Index :
@@ -160,57 +167,95 @@ namespace Osprey
 			var length = e.Token != null ?
 				e.Token.Value.Length :
 				e.Node.EndIndex - e.Node.StartIndex;
-			PrintErrorLocation(e.FileName, e.GetFileSource(), index, length);
+			PrintErrorLocation(e.FileName, e.GetFileSource(), index, length, errorStream);
 		}
 
-		private static void PrintErrorLocation(CompileTimeException e)
+		private static void PrintErrorLocation(CompileTimeException e, TextWriter errorStream)
 		{
 			PrintErrorLocation(e.Document.FileName, e.Document.FileSource,
-				e.Node.StartIndex, e.Node.EndIndex - e.Node.StartIndex);
+				e.Node.StartIndex, e.Node.EndIndex - e.Node.StartIndex,
+				errorStream);
 		}
 
-		private static void PrintErrorLocation(string fileName, string fileSource, int charIndex, int length)
+		private static void PrintErrorLocation(string fileName, string fileSource, int charIndex, int length, TextWriter err)
 		{
-			var err = Console.Error;
-
 			int column;
 			var lineNumber = Token.GetLineNumber(fileSource, charIndex, 1, out column);
-			var lines = fileSource.Split(new string[] { Environment.NewLine, "\n" }, lineNumber + 2, StringSplitOptions.None);
+			err.WriteLine("At line {0}, character {1}, in {2}:", lineNumber, column, fileName);
 
-			if (lineNumber > lines.Length)
-				err.WriteLine("At line {0}, character {1}, in {2}.", lineNumber, column, fileName);
+			int startIndex;
+			var context = FindContext(fileSource, charIndex, length, out startIndex);
+
+			charIndex -= startIndex;
+			if (charIndex > 0)
+				err.Write(context.Substring(0, charIndex));
+
+			Console.BackgroundColor = ConsoleColor.DarkRed;
+			Console.ForegroundColor = ConsoleColor.White;
+
+			var errorCode = context.Substring(charIndex, length);
+			if (errorCode.Length == 1 && IsLineSeparator(errorCode[0]))
+				err.Write(" ");
 			else
+				err.Write(errorCode);
+
+			Console.ResetColor();
+
+			if (charIndex + length < context.Length)
+				err.Write(context.Substring(charIndex + length));
+
+			err.WriteLine();
+		}
+
+		private static string FindContext(string fileSource, int charIndex, int length, out int startIndex)
+		{
+			const int maxContext = 2; // how many lines to fetch above and below the error location (at most)
+
+			var lines = 0;
+			var start = charIndex;
+			while (start > 0)
 			{
-				err.WriteLine("At line {0}, character {1}, in {2}:", lineNumber, column, fileName);
+				var ch = fileSource[start - 1];
+				if (IsLineSeparator(ch))
+				{
+					if (lines == maxContext)
+						break;
 
-				column--;
+					// \r\n counts as a unit
+					if (start > 1 && ch == '\n' && fileSource[start - 2] == '\r')
+						start--;
+					lines++;
+				}
 
-				// Print some context before...
-				if (lineNumber > 1)
-					err.WriteLine(lines[lineNumber - 2]);
-
-				var line = lines[lineNumber - 1];
-				if (column > 0)
-					err.Write(line.Substring(0, column));
-
-				Console.BackgroundColor = ConsoleColor.DarkRed;
-				Console.ForegroundColor = ConsoleColor.White;
-				if (column >= line.Length)
-					err.Write(" ");
-				else
-					err.Write(line.Substring(column, length));
-				Console.BackgroundColor = ConsoleColor.Black;
-				Console.ForegroundColor = ConsoleColor.Gray;
-
-				if (column + length < line.Length)
-					err.Write(line.Substring(column + length));
-
-				err.WriteLine();
-
-				// ... and after!
-				if (lineNumber < lines.Length)
-					err.WriteLine(lines[lineNumber]);
+				start--;
 			}
+
+			lines = 0;
+			var end = charIndex + length;
+			while (end < fileSource.Length - 1)
+			{
+				var ch = fileSource[end + 1];
+				if (IsLineSeparator(ch))
+				{
+					if (lines == maxContext)
+						break;
+
+					// \r\n counts as a unit
+					if (end < fileSource.Length - 2 && ch == '\r' && fileSource[end + 2] == '\n')
+						end++;
+					lines++;
+				}
+
+				end++;
+			}
+
+			startIndex = start;
+			return fileSource.Substring(start, end - start + 1);
+		}
+
+		private static bool IsLineSeparator(char ch)
+		{
+			return ch == '\n' || ch == '\r' || ch == '\u2028' || ch == '\u2029';
 		}
 
 		/// <summary>

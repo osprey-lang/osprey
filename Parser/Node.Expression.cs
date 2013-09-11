@@ -827,9 +827,9 @@ namespace Osprey.Nodes
 			negated ^= this.Negated;
 
 			if (negated)
-				method.Append(Branch.RefNotEquals(falseLabel));
-			else
 				method.Append(Branch.RefEquals(falseLabel));
+			else
+				method.Append(Branch.RefNotEquals(falseLabel));
 
 			// Fall through for true
 		}
