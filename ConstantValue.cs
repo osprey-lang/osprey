@@ -319,11 +319,15 @@ namespace Osprey
 					// (or true for != or not refeq).
 					return true;
 
+				case BinaryOperator.LessThan:
+				case BinaryOperator.LessEqual:
+				case BinaryOperator.GreaterThan:
+				case BinaryOperator.GreaterEqual:
 				case BinaryOperator.Comparison:
-					return this.IsNumeric && right.IsNumeric ||
-						this.type == ConstantValueType.String && right.type == ConstantValueType.String ||
-						// enum
-						right.type == ConstantValueType.Enum && this.enumType == right.enumType;
+					// Note: <, <=, > and >= are all implemented in terms of <=>
+					return this.type == right.type &&
+						this.type != ConstantValueType.Null &&
+						(this.type != ConstantValueType.Enum || this.enumType == right.enumType);
 
 				case BinaryOperator.Or:
 				case BinaryOperator.Xor:
@@ -391,11 +395,21 @@ namespace Osprey
 				case BinaryOperator.Concatenation:
 					return Concat(this, right);
 				case BinaryOperator.Equality:
-					return ConstantValue.CreateBoolean(this == right);
+					return CreateBoolean(this == right);
 				case BinaryOperator.Inequality:
-					return ConstantValue.CreateBoolean(this != right);
+					return CreateBoolean(this != right);
 				case BinaryOperator.ReferenceEquality:
 					return RefEquals(this, right);
+				case BinaryOperator.Comparison:
+					return CreateInt(Compare(this, right));
+				case BinaryOperator.LessThan:
+					return CreateBoolean(Compare(this, right) < 0);
+				case BinaryOperator.LessEqual:
+					return CreateBoolean(Compare(this, right) <= 0);
+				case BinaryOperator.GreaterThan:
+					return CreateBoolean(Compare(this, right) > 0);
+				case BinaryOperator.GreaterEqual:
+					return CreateBoolean(Compare(this, right) >= 0);
 			}
 
 			throw new NotSupportedException();
@@ -691,6 +705,38 @@ namespace Osprey
 			return !(left == right);
 		}
 
+		public static int Compare(ConstantValue left, ConstantValue right)
+		{
+			if (left.type != right.type ||
+				left.type == ConstantValueType.Null ||
+				left.type == ConstantValueType.Enum && left.enumType != right.enumType)
+				throw new NotSupportedException();
+
+			// left.type == right.type here, and if type == Enum,
+			// left.enumType == right.enumType
+
+			switch (left.type)
+			{
+				case ConstantValueType.Boolean:
+					return left.BooleanValue.CompareTo(right.BooleanValue);
+				case ConstantValueType.Int:
+					return left.IntValue.CompareTo(right.IntValue);
+				case ConstantValueType.UInt:
+					return left.UIntValue.CompareTo(right.UIntValue);
+				case ConstantValueType.Real:
+					// .NET orders doubles in the following order:
+					//    NaN < -∞ < -0.0 == +0.0 < +∞
+					// This is fully compatible with Osprey's ordering.
+					return left.RealValue.CompareTo(right.RealValue);
+				case ConstantValueType.String:
+					return left.stringValue.CompareTo(right.StringValue);
+				case ConstantValueType.Enum:
+					return left.num.IntValue.CompareTo(right.num.IntValue);
+				default:
+					throw new InvalidOperationException("Compiler bug!");
+			}
+		}
+
 		public static ConstantValue RefEquals(ConstantValue left, ConstantValue right)
 		{
 			if (left.type != right.type)
@@ -718,6 +764,9 @@ namespace Osprey
 				case ConstantValueType.Enum:
 					result = left.enumType == right.enumType &&
 						left.num.IntValue == right.num.IntValue;
+					break;
+				case ConstantValueType.String:
+					result = left.StringValue == right.StringValue;
 					break;
 				default:
 					result = false; // should never actually happen

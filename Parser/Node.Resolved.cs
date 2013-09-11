@@ -765,11 +765,22 @@ namespace Osprey.Nodes
 		{
 			get
 			{
-				if (UseUnderlyingValue)
-					return Field.Value;
+				var fieldValue = Field.Value;
+				if (fieldValue.Type == ConstantValueType.Enum)
+				{
+					if (UseUnderlyingValue)
+						return ConstantValue.CreateInt(fieldValue.EnumValue.Value);
 
-				var value = Field.Value.IntValue;
-				return ConstantValue.CreateEnumValue(value, Field.Parent);
+					return fieldValue;
+				}
+				else
+				{
+					if (UseUnderlyingValue)
+						return fieldValue;
+
+					var value = fieldValue.IntValue;
+					return ConstantValue.CreateEnumValue(value, Field.Parent);
+				}
 			}
 			internal set
 			{
