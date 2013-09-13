@@ -13,7 +13,7 @@ namespace Osprey
 	public class DuplicateNameException : CompileTimeException
 	{
 		public DuplicateNameException(ParseNode node, string name)
-			: this(node, name, "A member with the name '" + name + "' already exists.", null)
+			: this(node, name, "There is already a member with the name '" + name + "'.", null)
 		{ }
 		public DuplicateNameException(ParseNode node, string name, string message)
 			: this(node, name, message, null)
@@ -37,7 +37,7 @@ namespace Osprey
 	public class UndefinedNameException : CompileTimeException
 	{
 		public UndefinedNameException(ParseNode node, string name)
-			: this(node, name, "The name '" + name + "' is not defined.", null)
+			: this(node, name, "The name '" + name + "' is not defined in this context.", null)
 		{ }
 		public UndefinedNameException(ParseNode node, string name, string message)
 			: this(node, name, message, null)

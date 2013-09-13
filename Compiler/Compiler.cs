@@ -1437,7 +1437,7 @@ namespace Osprey
 			foreach (var overload in group)
 				if (overload.Parameters != null)
 					foreach (var param in overload.Parameters)
-						outputModule.GetStringId(param.Name);
+						outputModule.GetStringId(param.DeclaredName);
 		}
 
 		private void BuildMethodBodies()

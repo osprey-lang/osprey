@@ -1533,13 +1533,10 @@ namespace Osprey.Members
 			for (var i = 0; i < node.Parameters.Count; i++)
 			{
 				var param = node.Parameters[i];
-				if (!param.HasThisPrefix)
-				{
-					method.Body.DeclareVariable(new Variable(param.Name, param));
-					parameters[i] = param;
-				}
-				else
-					parameters[i] = param;
+				method.Body.DeclareVariable(new Variable(param.DeclaredName, param));
+				if (param.HasThisPrefix)
+					method.Body.ReserveName(param.Name, ReserveReason.UsedAsThisParameter);
+				parameters[i] = param;
 			}
 			method.Parameters = parameters;
 		}

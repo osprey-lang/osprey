@@ -1920,7 +1920,7 @@ namespace Osprey.Nodes
 				if (type.ContainsMember(Member))
 				{
 					bool _;
-					return GetTypeMemberAccess(type.GetMember(Member, null, context.GetContainingClass(out _)), context);
+					return GetTypeMemberAccess(type.GetMember(Member, instType: null, fromType: context.GetContainingClass(out _)), context);
 				}
 
 				throw new UndefinedNameException(this, Member,

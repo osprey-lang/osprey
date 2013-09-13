@@ -150,7 +150,7 @@ namespace Osprey
 					lastEndIndex = tok.EndIndex;
 				}
 			}
-			catch (ParseException e)
+			catch (ParseException)
 			{ }
 
 			if (code.Length > lastEndIndex)

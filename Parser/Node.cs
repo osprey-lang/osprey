@@ -694,25 +694,42 @@ namespace Osprey.Nodes
 		{
 			if (!IsStatic)
 			{
-				if (!(Body is ExternBody) && BaseInitializer == null)
+				bool _;
+				var @class = context.GetContainingClass(out _);
+
+				if (!(Body is ExternBody) && BaseInitializer == null &&
+					@class.BaseType != null)
 				{
-					bool _;
-					var @class = context.GetContainingClass(out _);
-					if (@class.BaseType != null)
-					{
-						BaseInitializer = new BaseInitializer(new List<Expression>());
-						Body.Statements.Insert(0, BaseInitializer);
-					}
+					BaseInitializer = new BaseInitializer(new List<Expression>());
+					Body.Statements.Insert(0, BaseInitializer);
 				}
 
 				foreach (var param in Parameters)
+				{
 					param.ResolveNames(context, document);
+					if (param.HasThisPrefix)
+					{
+						if (Body.Initializer == null)
+							Body.Initializer = new List<AssignmentExpression>();
+
+						Body.Initializer.Add(new AssignmentExpression(
+							new InstanceMemberAccess(new ThisAccess(), @class, param.Member)
+							{
+								IsAssignment = true
+							},
+							new LocalVariableAccess(
+								(Variable)Body.DeclSpace.members[param.DeclaredName],
+								LocalAccessKind.NonCapturing
+							)
+						) { IgnoreValue = true });
+					}
+				}
 			}
 
 			Body.ResolveNames(context, document);
 		}
 
-		internal void AddFieldInitializers(List<VariableDeclarator> fields, Class @class)
+		internal void AddFieldInitializers(IEnumerable<VariableDeclarator> fields, Class @class)
 		{
 			if (Body is ExternBody)
 				return; // Do nothing
@@ -771,6 +788,8 @@ namespace Osprey.Nodes
 
 		/// <summary>If <see cref="HasThisPrefix"/> is true, this member contains the member that the parameter assigns to.</summary>
 		internal ClassMember Member;
+
+		public override string DeclaredName { get { return HasThisPrefix ? "<this>" + Name : Name; } }
 
 		public override string ToString(int indent)
 		{
@@ -896,6 +915,9 @@ namespace Osprey.Nodes
 		public string Name;
 		/// <summary>The default value of the parameter, or null if the parameter is required.</summary>
 		public Expression DefaultValue = null;
+
+		/// <summary>Gets the name that the parameter is declared with.</summary>
+		public virtual string DeclaredName { get { return Name; } }
 
 		public override string ToString(int indent)
 		{

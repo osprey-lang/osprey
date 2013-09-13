@@ -187,7 +187,7 @@ namespace Osprey.Members
 			Signature = new Signature(node.Parameters, node.Splat);
 
 			foreach (var param in node.Parameters)
-				body.DeclareVariable(new Variable(param.Name, param));
+				body.DeclareVariable(new Variable(param.DeclaredName, param));
 
 			Parameters = node.Parameters.ToArray();
 
@@ -207,7 +207,7 @@ namespace Osprey.Members
 			Signature = new Signature(func.Parameters, func.Splat);
 
 			foreach (var param in func.Parameters)
-				body.DeclareVariable(new Variable(param.Name, param));
+				body.DeclareVariable(new Variable(param.DeclaredName, param));
 
 			Parameters = func.Parameters.ToArray();
 
@@ -228,7 +228,11 @@ namespace Osprey.Members
 				Signature = new Signature(parameters, splat);
 
 				foreach (var param in parameters)
-					this.body.DeclareVariable(new Variable(param.Name, param));
+				{
+					this.body.DeclareVariable(new Variable(param.DeclaredName, param));
+					if (param is ConstructorParam && ((ConstructorParam)param).HasThisPrefix)
+						this.body.ReserveName(param.Name, ReserveReason.UsedAsThisParameter);
+				}
 
 				Parameters = parameters;
 			}
@@ -420,9 +424,6 @@ namespace Osprey.Members
 			if (Signature.Splat == Splat.None && Signature.OptionalParameterCount > 0)
 				CompileOptionalParams(compiler, mb);
 
-			if (Parameters != null && Parameters.Any(p => p is ConstructorParam))
-				CompileConstructorParams(compiler, mb);
-
 			if (IsGenerator)
 				CompileGenerator(compiler, mb);
 			else
@@ -478,27 +479,6 @@ namespace Osprey.Members
 			}
 
 			builder.Append(endLabel);
-		}
-
-		private void CompileConstructorParams(Compiler compiler, MethodBuilder builder)
-		{
-			for (var i = 0; i < Parameters.Length; i++)
-			{
-				var param = Parameters[i] as ConstructorParam;
-				if (param != null && param.HasThisPrefix)
-				{
-					builder.Append(new LoadLocal(builder.GetParameter(0))); // load this
-					builder.Append(new LoadLocal(builder.GetParameter(i + 1))); // load the argument value
-
-					if (param.Member.Kind == MemberKind.Property)
-					{
-						builder.Append(new StaticCall(((Property)param.Member).SetterId, 1));
-						builder.Append(new SimpleInstruction(Opcode.Pop));
-					}
-					else // Field
-						builder.Append(StoreField.Create(builder.Module, (Field)param.Member));
-				}
-			}
 		}
 
 		private void CompileGenerator(Compiler compiler, MethodBuilder builder)
@@ -644,7 +624,7 @@ namespace Osprey.Members
 
 				for (var i = 0; i < Parameters.Length; i++)
 				{
-					var paramVar = (Variable)this.body.members[Parameters[i].Name];
+					var paramVar = (Variable)this.body.members[Parameters[i].DeclaredName];
 					body.Add(new ExpressionStatement(new AssignmentExpression(
 						new InstanceMemberAccess(new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing),
 							genClass, paramVar.CaptureField) { IsAssignment = true },

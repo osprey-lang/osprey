@@ -212,6 +212,9 @@ namespace Osprey.Members
 		/// <summary>The member is ambiguous between several imported names.</summary>
 		/// <remarks>This is not an error condition until you try to access the ambiguous member.</remarks>
 		Ambiguous,
+
+		/// <summary>The member is a reserved name.</summary>
+		Reserved,
 	}
 
 	/// <summary>
@@ -818,8 +821,26 @@ namespace Osprey.Members
 		/// <summary>Gets the parent of the block. This is always another block.</summary>
 		public BlockSpace Parent { get; internal set; }
 
+		IDeclarationSpace IDeclarationSpace.Parent { get { return Parent ?? (IDeclarationSpace)Method; } }
+
 		/// <summary>Gets the statement that this block is the body of.</summary>
 		public Statement Owner { get; internal set; }
+
+		/// <summary>
+		/// Gets the immediate parent block of this block. This differs from <see cref="Parent"/>
+		/// in that it happily crosses <see cref="LocalMethod"/> boundaries.
+		/// </summary>
+		internal BlockSpace Up
+		{
+			get
+			{
+				if (Parent != null)
+					return Parent;
+				if (Method is LocalMethod)
+					return ((LocalMethod)Method).Function.Parent;
+				return null;
+			}
+		}
 
 		internal Dictionary<string, LocalMember> members = new Dictionary<string, LocalMember>();
 
@@ -846,9 +867,15 @@ namespace Osprey.Members
 
 			if (ContainsMember(variable.Name))
 				throw new DuplicateNameException(variable.Node, variable.Name);
+			ReservedName reserved = GetReservedName(variable.Name);
+			if (reserved != null)
+				throw new DeclarationException(variable.Node, reserved.GetReasonMessage());
 
 			members.Add(variable.Name, variable);
 			variable.Parent = this;
+
+			if (Up != null)
+				Up.ReserveName(variable.Name, ReserveReason.UsedInChildBlock);
 		}
 
 		public void DeclareConstant(LocalConstant constant)
@@ -880,9 +907,41 @@ namespace Osprey.Members
 			Method.AddLocalFunction(function);
 		}
 
+		public void ReserveName(string name, ReserveReason reason)
+		{
+			var member = new ReservedName(name, reason);
+
+			if (reason == ReserveReason.UsedInChildBlock)
+			{
+				// Reserve the name in this block and every parent.
+				var block = this;
+				do
+				{
+					if (!block.members.ContainsKey(name))
+						block.members.Add(name, member);
+					block = block.Up;
+				} while (block != null);
+			}
+			else if (reason == ReserveReason.UsedAsThisParameter)
+			{
+				// Make sure we are at the top
+				if (Method is LocalMethod || Parent != null)
+					throw new InvalidOperationException("Cannot reserve a 'this' parameter in a nested block.");
+
+				if (members.ContainsKey(name))
+					throw new DeclarationException(members[name].Node,
+						member.GetReasonMessage());
+
+				members.Add(name, member);
+			}
+			else
+				members.Add(name, member);
+		}
+
 		public virtual bool ContainsMember(string name)
 		{
-			if (members.ContainsKey(name))
+			if (members.ContainsKey(name) &&
+				members[name].Kind != MemberKind.Reserved)
 				return true;
 			if (Parent != null)
 				return Parent.ContainsMember(name);
@@ -893,8 +952,11 @@ namespace Osprey.Members
 
 		public virtual NamedMember ResolveName(string name, Class fromClass)
 		{
-			if (members.ContainsKey(name))
-				return members[name];
+			LocalMember member;
+			if (members.TryGetValue(name, out member) &&
+				member.Kind != MemberKind.Reserved)
+				return member;
+
 			if (Parent != null)
 				return Parent.ResolveName(name, fromClass);
 
@@ -904,7 +966,25 @@ namespace Osprey.Members
 			return null;
 		}
 
-		IDeclarationSpace IDeclarationSpace.Parent { get { return Parent ?? (IDeclarationSpace)Method; } }
+		public ReservedName GetReservedName(string name)
+		{
+			LocalMember mem;
+			if (members.TryGetValue(name, out mem) &&
+				mem.Kind == MemberKind.Reserved)
+				return (ReservedName)mem;
+
+			var block = this.Up;
+			while (block != null)
+			{
+				if (block.members.TryGetValue(name, out mem) &&
+					mem.Kind == MemberKind.Reserved &&
+					((ReservedName)mem).Reason != ReserveReason.UsedInChildBlock)
+					return (ReservedName)mem;
+				block = block.Up;
+			}
+
+			return null;
+		}
 
 		public Namespace GetContainingNamespace()
 		{
@@ -942,12 +1022,7 @@ namespace Osprey.Members
 				if (block.label == label)
 					return true;
 
-				if (block.Parent != null)
-					block = block.Parent;
-				else if (block.Method is LocalMethod)
-					block = ((LocalMethod)block.Method).Function.Parent;
-				else
-					block = null; // reached the end!
+				block = block.Up;
 			} while (block != null);
 
 			return false; // Not found. :)
@@ -1631,7 +1706,7 @@ namespace Osprey.Members
 
 			if (parameters != null)
 				foreach (var param in parameters)
-					Body.DeclareVariable(new Variable(param.Name, param));
+					Body.DeclareVariable(new Variable(param.DeclaredName, param));
 			Parameters = parameters;
 		}
 
@@ -1699,6 +1774,102 @@ namespace Osprey.Members
 			base.Capture();
 			document.Compiler.AddGlobalVariable(document, this);
 		}
+	}
+
+	public sealed class ReservedName : LocalMember
+	{
+		public ReservedName(string name, ReserveReason reason)
+			: base(name, MemberKind.Reserved, null)
+		{
+			this.reason = reason;
+		}
+
+		private ReserveReason reason;
+		/// <summary>
+		/// Gets the reason why the name is reserved.
+		/// </summary>
+		public ReserveReason Reason { get { return reason; } }
+
+		/// <summary>
+		/// Gets a user-friendly message for the reason why the name is reserved, in the
+		/// general format "The name 'blah' cannot be declared in this context, because ...".
+		/// </summary>
+		/// <returns>
+		/// A string containing a user-friendly error message
+		/// explaining why the name is reserved.
+		/// </returns>
+		public string GetReasonMessage()
+		{
+			return GetReasonMessage(Name, reason);
+		}
+
+		public static string GetReasonMessage(string name, ReserveReason reason)
+		{
+			const string before = "The name '{0}' cannot be declared in this context, because ";
+			string explanation;
+			switch (reason)
+			{
+				case ReserveReason.UsedInChildBlock:
+					explanation = before + "it is used in a nested block";
+					break;
+				case ReserveReason.UsedAsThisParameter:
+					explanation = before + "it is used in the 'this.{0}' parameter";
+					break;
+				default:
+					return string.Format("The name '{0}' cannot be declared in this context.", name);
+			}
+
+			return string.Format(explanation, name);
+		}
+	}
+
+	public enum ReserveReason
+	{
+		Invalid = 0,
+
+		/// <summary>
+		/// The name is used in a child block. It may not be used in a parent
+		/// of that block, although it may be used in sibling and cousins of
+		/// that block. See the example.
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// function f() {
+		///		// x is reserved with UsedInChildBlock in this block
+		///		if one {
+		///			// and in this
+		///			if two {
+		///				var x;
+		///			}
+		///			var x; // hence, this declaration is invalid
+		///			if three {
+		///				var x; // but not this
+		///			}
+		///		} else {
+		///			var x; // nor this
+		///		}
+		///		var x; // and this is invalid again
+		/// }
+		/// </code>
+		/// </example>
+		UsedInChildBlock,
+
+		/// <summary>
+		/// The name is reserved because it is used as the identifier in
+		/// a 'this.name' parameter. The name must unambiguously refer to
+		/// that member in the body of the constructor.
+		/// </summary>
+		/// <example>
+		/// <code>
+		/// class C {
+		///		public value;
+		///		public new(this.value, /*invalid:*/ value) {
+		///			var value; // invalid
+		///		}
+		///	}
+		/// </code>
+		/// </example>
+		UsedAsThisParameter,
 	}
 
 	public enum ConstantState

@@ -21,7 +21,7 @@ namespace Osprey
 			{
 				var paramStart = hasInstance ? 1 : 0;
 				for (var i = 0; i < parameters.Length; i++)
-					this.parameters.Add(new LocalVariable(i + paramStart, parameters[i].Name, false, true));
+					this.parameters.Add(new LocalVariable(i + paramStart, parameters[i].DeclaredName, false, true));
 			}
 		}
 
