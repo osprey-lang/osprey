@@ -3073,6 +3073,8 @@ namespace Osprey.Nodes
 			if (Values.Count == 0)
 			{
 				method.Append(new CreateList(0));
+				if (target != null)
+					method.Append(new StoreLocal(target));
 			}
 			else
 			{
@@ -3584,6 +3586,8 @@ namespace Osprey.Nodes
 			if (Members.Count == 0)
 			{
 				method.Append(new CreateHash(0));
+				if (target != null)
+					method.Append(new StoreLocal(target));
 			}
 			else
 			{
