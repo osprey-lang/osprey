@@ -563,10 +563,16 @@ namespace Osprey.Members
 						break;
 				}
 
-				if (member != null &&
-					(member.Kind == MemberKind.Class ||
-					member.Kind == MemberKind.Enum))
-					result = (Type)member;
+				if (member != null)
+				{
+					if (member.Kind == MemberKind.Class ||
+						member.Kind == MemberKind.Enum)
+						result = (Type)member;
+					else if (member.Kind == MemberKind.Ambiguous)
+						throw new AmbiguousNameException(name, (AmbiguousMember)member,
+							string.Format("The type name '{0}' is ambiguous between the following members: {1}",
+								name.ToString(), ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
+				}
 
 				if (result != null)
 					return name.Type = result; // found! hurrah!
@@ -671,8 +677,14 @@ namespace Osprey.Members
 				if (!((Namespace)member).Members.TryGetValue(name.Parts[i], out member))
 					break; // Also not found!
 
-				if (i == name.Parts.Count - 1 && member is Type)
-					output.Add((Type)member); // Found!
+				if (i == name.Parts.Count - 1)
+				{
+					if (member is Type)
+						output.Add((Type)member); // Found!
+					else if (member.Kind == MemberKind.Ambiguous)
+						output.AddRange(((AmbiguousMember)member).Members
+							.Where(m => m is Type).Cast<Type>());
+				}
 			}
 
 			if (name.Parts.Count == 1 && !name.IsGlobal)
@@ -689,8 +701,9 @@ namespace Osprey.Members
 			if (output.Count == 1)
 				return name.Type = output[0];
 
-			name.Type = new AmbiguousTypeName(name, output.ToArray());
-			throw new AmbiguousTypeNameException(name, (AmbiguousTypeName)name.Type);
+			throw new AmbiguousTypeNameException(name, new AmbiguousTypeName(name, output.ToArray()),
+				string.Format("The type name '{0}' is ambiguous between the following members: {1}",
+					name.ToString(), output.Select(t => t.FullName).JoinString(", ")));
 		}
 
 		public NamedMember ResolveName(string name, Class fromClass, bool hasGlobalPrefix)

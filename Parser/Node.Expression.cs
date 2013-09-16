@@ -123,6 +123,13 @@ namespace Osprey.Nodes
 				method.Append(Branch.IfFalse(falseLabel)); // false == false (yes, really!)
 			// Result (on stack) is guaranteed to have the correct truthiness
 		}
+
+		internal Expression At(Expression other)
+		{
+			this.StartIndex = other.StartIndex;
+			this.EndIndex = other.EndIndex;
+			return this;
+		}
 	}
 
 	public class ConstantExpression : Expression
@@ -1329,27 +1336,35 @@ namespace Osprey.Nodes
 
 			var block = context as BlockSpace;
 
+			Expression result;
 			switch (member.Kind)
 			{
 				case MemberKind.Namespace:
-					return new NamespaceAccess((Namespace)member);
+					result = new NamespaceAccess((Namespace)member);
+					break;
 				case MemberKind.GlobalConstant:
-					return new GlobalConstantAccess((GlobalConstant)member);
+					result = new GlobalConstantAccess((GlobalConstant)member);
+					break;
 				case MemberKind.GlobalVariable:
 					{
 						var variable = (GlobalVariable)member;
 						if (block != null && block.Method != document.Compiler.MainMethod)
 							variable.Capture();
-						return new GlobalVariableAccess(variable);
+						result = new GlobalVariableAccess(variable);
 					}
+					break;
 				case MemberKind.Class:
 				case MemberKind.Enum:
-					return new TypeAccess((Type)member);
+					result = new TypeAccess((Type)member);
+					break;
 				case MemberKind.Field:
 					{
 						var field = ((Field)member);
 						if (field.IsStatic)
-							return new StaticFieldAccess(field);
+						{
+							result = new StaticFieldAccess(field);
+							break;
+						}
 						if (!hasInstance)
 						{
 							if (context.IsInFieldInitializer())
@@ -1360,17 +1375,23 @@ namespace Osprey.Nodes
 						var inner = new ThisAccess();
 						inner.ResolveNames(context, document);
 
-						return new InstanceMemberAccess(inner, field.Parent, field);
+						result = new InstanceMemberAccess(inner, field.Parent, field);
 					}
+					break;
 				case MemberKind.Constant:
-					return new ClassConstantAccess((ClassConstant)member);
+					result = new ClassConstantAccess((ClassConstant)member);
+					break;
 				case MemberKind.EnumField:
-					return new EnumFieldAccess((EnumField)member, true);
+					result = new EnumFieldAccess((EnumField)member, true);
+					break;
 				case MemberKind.MethodGroup:
 					{
 						var method = ((MethodGroup)member);
 						if (method.IsStatic)
-							return new StaticMethodAccess(method);
+						{
+							result = new StaticMethodAccess(method);
+							break;
+						}
 						if (!hasInstance)
 						{
 							if (context.IsInFieldInitializer())
@@ -1381,8 +1402,9 @@ namespace Osprey.Nodes
 						var inner = new ThisAccess();
 						inner.ResolveNames(context, document);
 
-						return new InstanceMemberAccess(inner, (Class)method.Parent, method);
+						result = new InstanceMemberAccess(inner, (Class)method.Parent, method);
 					}
+					break;
 				case MemberKind.Property:
 					{
 						var prop = ((Property)member);
@@ -1430,8 +1452,9 @@ namespace Osprey.Nodes
 						else
 							kind = LocalAccessKind.NonCapturing;
 
-						return new LocalVariableAccess(variable, kind);
+						result = new LocalVariableAccess(variable, kind);
 					}
+					break;
 				case MemberKind.LocalConstant:
 					{
 						var constant = (LocalConstant)member;
@@ -1439,8 +1462,9 @@ namespace Osprey.Nodes
 							throw new CompileTimeException(this,
 								string.Format("The constant '{0}' cannot be accessed before its declaration.", Name));
 						// Note: constants do not need to be captured; they're always inlined.
-						return new LocalConstantAccess(constant);
+						result = new LocalConstantAccess(constant);
 					}
+					break;
 				case MemberKind.LocalFunction:
 					{
 						var function = (LocalFunction)member;
@@ -1473,15 +1497,19 @@ namespace Osprey.Nodes
 						// into an instance or static method of the containing class, if it does not
 						// capture anything other than 'this'.
 
-						return new LocalFunctionAccess(function);
+						result = new LocalFunctionAccess(function);
 					}
+					break;
 				case MemberKind.Ambiguous:
 					throw new AmbiguousNameException(this, (AmbiguousMember)member,
-						"The name '" + Name + "' is ambiguous between the following members: " +
-						((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", "));
+						string.Format("The name '{0}' is ambiguous between the following members: {1}",
+							Name, ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
 				default:
 					throw new InvalidOperationException("SimpleNameExpression resolved to an invalid member kind.");
 			}
+
+			result.At(this);
+			return result;
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -1648,7 +1676,7 @@ namespace Osprey.Nodes
 				document.Compiler.AddGeneratorMethod(func.Method);
 
 			// And then we replace the lambda with a lambda function access! Simple!
-			return new LambdaFunctionAccess(func);
+			return new LambdaFunctionAccess(func).At(this);
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -1742,7 +1770,7 @@ namespace Osprey.Nodes
 
 			funcDecl.ResolveNames(context, document);
 
-			return new LambdaFunctionAccess(func);
+			return new LambdaFunctionAccess(func).At(this);
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -1807,7 +1835,7 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			return new StaticMethodAccess(document.Compiler.GetLambdaOperatorMethod(Operator));
+			return new StaticMethodAccess(document.Compiler.GetLambdaOperatorMethod(Operator)).At(this);
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -1908,7 +1936,7 @@ namespace Osprey.Nodes
 			{
 				var ns = ((NamespaceAccess)Inner).Namespace;
 				if (ns.ContainsMember(Member))
-					return GetNamespaceMemberAccess(ns.GetMember(Member));
+					return GetNamespaceMemberAccess(ns.GetMember(Member)).At(this);
 
 				throw new UndefinedNameException(this, Member,
 					string.Format("The namespace '{0}' does not contain a definition for '{1}'.",
@@ -1920,7 +1948,9 @@ namespace Osprey.Nodes
 				if (type.ContainsMember(Member))
 				{
 					bool _;
-					return GetTypeMemberAccess(type.GetMember(Member, instType: null, fromType: context.GetContainingClass(out _)), context);
+					return GetTypeMemberAccess(type.GetMember(Member,
+						instType: null, fromType: context.GetContainingClass(out _)),
+						context).At(this);
 				}
 
 				throw new UndefinedNameException(this, Member,
@@ -1960,7 +1990,7 @@ namespace Osprey.Nodes
 
 				return new InstanceMemberAccess(Inner,
 					member is ClassMember ? ((ClassMember)member).Parent : ((MethodGroup)member).ParentAsClass,
-					member);
+					member).At(this);
 			}
 			if (Inner.IsTypeKnown(document.Compiler))
 			{
@@ -1985,9 +2015,8 @@ namespace Osprey.Nodes
 						string.Format("The member '{0}.{1}' is static and cannot be accessed through an instance.",
 							knownType.FullName, Member));
 
-				return new InstanceMemberAccess(Inner, knownType as Class, member);
+				return new InstanceMemberAccess(Inner, knownType as Class, member).At(this);
 			}
-			// TODO: Anything else here?
 			return this;
 		}
 
@@ -2089,7 +2118,9 @@ namespace Osprey.Nodes
 				case MemberKind.GlobalConstant:
 					return new GlobalConstantAccess((GlobalConstant)member);
 				case MemberKind.Ambiguous:
-					throw new AmbiguousNameException(this, (AmbiguousMember)member);
+					throw new AmbiguousNameException(this, (AmbiguousMember)member,
+						string.Format("The name '{0}' is ambiguous between the following members: {1}",
+							member.Name, ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
 			}
 
 			throw new ArgumentException("Namespace member is of an invalid kind (must be namespace, type, function or const).");
@@ -2297,24 +2328,26 @@ namespace Osprey.Nodes
 			switch (member.Kind)
 			{
 				case MemberKind.Namespace:
-					return new NamespaceAccess((Namespace)member);
+					return new NamespaceAccess((Namespace)member).At(this);
 				case MemberKind.GlobalConstant:
-					return new GlobalConstantAccess((GlobalConstant)member);
+					return new GlobalConstantAccess((GlobalConstant)member).At(this);
 				case MemberKind.GlobalVariable:
 					{
 						var variable = (GlobalVariable)member;
 						var block = context as BlockSpace;
 						if (block != null && block.Method != document.Compiler.MainMethod)
 							variable.Capture();
-						return new GlobalVariableAccess(variable);
+						return new GlobalVariableAccess(variable).At(this);
 					}
 				case MemberKind.Class:
 				case MemberKind.Enum:
-					return new TypeAccess((Type)member);
+					return new TypeAccess((Type)member).At(this);
 				case MemberKind.MethodGroup:
-					return new StaticMethodAccess((MethodGroup)member);
+					return new StaticMethodAccess((MethodGroup)member).At(this);
 				case MemberKind.Ambiguous:
-					throw new AmbiguousNameException(this, (AmbiguousMember)member);
+					throw new AmbiguousNameException(this, (AmbiguousMember)member,
+						string.Format("The name '{0}' is ambiguous between the following members: {1}",
+							Name, ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
 				default:
 					throw new Exception("Invalid global member kind: must be namespace, type, function, const or var.");
 			}
