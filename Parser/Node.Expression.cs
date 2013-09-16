@@ -2967,7 +2967,7 @@ namespace Osprey.Nodes
 				{
 					var methodGroup = (MethodGroup)access.Member;
 					var overload = methodGroup.FindOverload(Arguments.Count, true);
-					if (!overload.IsVirtualCall)
+					if (!overload.IsVirtualCall || access.IsBaseAccess)
 					{
 						access.Inner.Compile(compiler, method); // Evaluate the instance
 						CompileArguments(compiler, method); // Evaluate each argument
