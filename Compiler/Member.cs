@@ -103,6 +103,63 @@ namespace Osprey.Members
 		{
 			throw new InvalidOperationException();
 		}
+
+		public string GetMemberNamesJoined()
+		{
+			return GetMemberNamesJoined(Members);
+		}
+
+		public static string GetMemberNamesJoined(IEnumerable<NamedMember> members)
+		{
+			var fullNames = members.Select(m => m.FullName).ToArray();
+			var nameToUsageCount = new Dictionary<string, int>();
+
+			foreach (var name in fullNames)
+			{
+				int prev;
+				nameToUsageCount.TryGetValue(name, out prev);
+				nameToUsageCount[name] = prev + 1;
+			}
+
+			var sb = new StringBuilder();
+
+			var i = 0;
+			foreach (var member in members)
+			{
+				var name = fullNames[i];
+
+				if (i > 0)
+					sb.Append(", ");
+				sb.Append(name);
+
+				if (nameToUsageCount[name] > 0)
+				{
+					// If the same fully qualified name has been used more than once,
+					// it must be a global member, so we try to add information about
+					// the module of origin. Note that it is not possible to declare
+					// a name in user code that conflicts with an imported name, so we
+					// don't /actually/ have to check whether the module is null.
+					if (member.Kind == MemberKind.Namespace)
+						sb.Append(" (namespace)");
+					else if (member is Type && ((Type)member).Module != null)
+					{
+						sb.Append(" (imported from '");
+						sb.Append(((Type)member).Module.Name);
+						sb.Append("')");
+					}
+					else if (member is Method && ((Method)member).Module != null)
+					{
+						sb.Append(" (imported from '");
+						sb.Append(((Method)member).Module.Name);
+						sb.Append("')");
+					}
+				}
+
+				i++;
+			}
+
+			return sb.ToString();
+		}
 	}
 
 	/// <summary>
@@ -571,7 +628,7 @@ namespace Osprey.Members
 					else if (member.Kind == MemberKind.Ambiguous)
 						throw new AmbiguousNameException(name, (AmbiguousMember)member,
 							string.Format("The type name '{0}' is ambiguous between the following members: {1}",
-								name.ToString(), ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
+								name.ToString(), ((AmbiguousMember)member).GetMemberNamesJoined()));
 				}
 
 				if (result != null)
@@ -691,8 +748,14 @@ namespace Osprey.Members
 			{
 				var first = name.Parts[0];
 				foreach (var ns in importedNamespaces)
-					if (ns.Members.TryGetValue(first, out member) && member is Type)
-						output.Add((Type)member);
+					if (ns.Members.TryGetValue(first, out member))
+					{
+						if (member is Type)
+							output.Add((Type)member);
+						else if (member.Kind == MemberKind.Ambiguous)
+							output.AddRange(((AmbiguousMember)member).Members
+								.Where(m => m is Type).Cast<Type>());
+					}
 			}
 
 			if (output.Count == 0)
@@ -703,7 +766,7 @@ namespace Osprey.Members
 
 			throw new AmbiguousTypeNameException(name, new AmbiguousTypeName(name, output.ToArray()),
 				string.Format("The type name '{0}' is ambiguous between the following members: {1}",
-					name.ToString(), output.Select(t => t.FullName).JoinString(", ")));
+					name.ToString(), AmbiguousMember.GetMemberNamesJoined(output)));
 		}
 
 		public NamedMember ResolveName(string name, Class fromClass, bool hasGlobalPrefix)

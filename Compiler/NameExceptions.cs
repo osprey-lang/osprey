@@ -103,7 +103,7 @@ namespace Osprey
 				null;
 			return string.Format("The type name '{0}' is ambiguous between the following types: {1}",
 				typeName ?? "(null)",
-				string.Join(", ", name.Types.Select(t => t.FullName)));
+				AmbiguousMember.GetMemberNamesJoined(name.Types));
 		}
 	}
 

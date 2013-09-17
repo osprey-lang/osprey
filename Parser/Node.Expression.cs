@@ -1503,7 +1503,7 @@ namespace Osprey.Nodes
 				case MemberKind.Ambiguous:
 					throw new AmbiguousNameException(this, (AmbiguousMember)member,
 						string.Format("The name '{0}' is ambiguous between the following members: {1}",
-							Name, ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
+							Name, ((AmbiguousMember)member).GetMemberNamesJoined()));
 				default:
 					throw new InvalidOperationException("SimpleNameExpression resolved to an invalid member kind.");
 			}
@@ -2120,7 +2120,7 @@ namespace Osprey.Nodes
 				case MemberKind.Ambiguous:
 					throw new AmbiguousNameException(this, (AmbiguousMember)member,
 						string.Format("The name '{0}' is ambiguous between the following members: {1}",
-							member.Name, ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
+							member.Name, ((AmbiguousMember)member).GetMemberNamesJoined()));
 			}
 
 			throw new ArgumentException("Namespace member is of an invalid kind (must be namespace, type, function or const).");
@@ -2347,7 +2347,7 @@ namespace Osprey.Nodes
 				case MemberKind.Ambiguous:
 					throw new AmbiguousNameException(this, (AmbiguousMember)member,
 						string.Format("The name '{0}' is ambiguous between the following members: {1}",
-							Name, ((AmbiguousMember)member).Members.Select(m => m.FullName).JoinString(", ")));
+							Name, ((AmbiguousMember)member).GetMemberNamesJoined()));
 				default:
 					throw new Exception("Invalid global member kind: must be namespace, type, function, const or var.");
 			}
