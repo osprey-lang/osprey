@@ -132,7 +132,7 @@ namespace Osprey.Members
 					sb.Append(", ");
 				sb.Append(name);
 
-				if (nameToUsageCount[name] > 0)
+				if (nameToUsageCount[name] > 1)
 				{
 					// If the same fully qualified name has been used more than once,
 					// it must be a global member, so we try to add information about
@@ -1807,6 +1807,11 @@ namespace Osprey.Members
 		public override Class GetContainingClass(out bool hasInstance)
 		{
 			return function.GetContainingClass(out hasInstance);
+		}
+
+		public override Namespace GetContainingNamespace()
+		{
+			return function.GetContainingNamespace();
 		}
 
 		internal static string GetExtractedName(Method parentMethod, LocalMethod localMethod)
