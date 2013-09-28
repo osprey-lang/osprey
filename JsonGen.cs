@@ -22,12 +22,19 @@ namespace Osprey.Json
 
 		public override string ToString()
 		{
-			var sb = new StringBuilder();
 #if DEBUG
-			this.ToString(sb, 0);
+			return ToString(true);
 #else
-			this.ToString(sb, -1);
+			return ToString(false);
 #endif
+		}
+
+		public string ToString(bool prettyPrint)
+		{
+			var sb = new StringBuilder();
+
+			this.ToString(sb, prettyPrint ? 0 : -1);
+
 			return sb.ToString();
 		}
 

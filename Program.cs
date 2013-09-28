@@ -390,6 +390,10 @@ namespace Osprey
 							options.ErrorToStdout = true;
 							break;
 
+						case "formatjson":
+							options.PrettyPrintJson = true;
+							break;
+
 						case "const":
 							if (i >= argc - 2 || (args[i + 2] != "true" && args[i + 2] != "false"))
 								throw new ArgumentException("'/const' must be followed by a name and either 'true' or 'false'.");

@@ -16,7 +16,8 @@ namespace Osprey
 	/// </summary>
 	internal static class DocGenerator
 	{
-		public static void Generate(Namespace projectNamespace, Compiler compiler, IEnumerable<Document> documents, string outputPath)
+		public static void Generate(Namespace projectNamespace, Compiler compiler,
+			IEnumerable<Document> documents, string outputPath, bool prettyPrint)
 		{
 			if (projectNamespace == null)
 				throw new ArgumentNullException("projectNamespace");
@@ -26,10 +27,11 @@ namespace Osprey
 				throw new ArgumentNullException("outputPath");
 
 			using (var file = File.Open(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-				Generate(projectNamespace, compiler, documents, file);
+				Generate(projectNamespace, compiler, documents, file, prettyPrint);
 		}
 
-		public static void Generate(Namespace projectNamespace, Compiler compiler, IEnumerable<Document> documents, Stream output)
+		public static void Generate(Namespace projectNamespace, Compiler compiler,
+			IEnumerable<Document> documents, Stream output, bool prettyPrint)
 		{
 			compiler.Notice("[doc] Generating documentation file...");
 
@@ -48,7 +50,7 @@ namespace Osprey
 
 			var result = state.ToJson();
 			using (var writer = new StreamWriter(output))
-				writer.Write(result.ToString());
+				writer.Write(result.ToString(prettyPrint));
 
 			compiler.Notice("[doc] Finished generating documentation file.");
 			// Done!
@@ -92,7 +94,7 @@ namespace Osprey
 			JsonObject result = new JsonObject();
 			if (type.DocString != null)
 			{
-				var doc = ParseDocString(type.DocString, type.Type, document);
+				var doc = ParseDocString(type.DocString, type.Type, document, type.Type);
 				if (doc.IsValidForType)
 					doc.ToJson(result);
 				else
@@ -121,7 +123,8 @@ namespace Osprey
 					var field = @enum.Members[i];
 					if (field.DocString != null)
 					{
-						var doc = ParseDocString(field.DocString, @enum.Type, document);
+						var member = @enum.Type.GetMember(field.Name);
+						var doc = ParseDocString(field.DocString, @enum.Type, document, member);
 						if (doc.IsValidForField)
 						{
 							if (fieldDocs == null)
@@ -130,8 +133,7 @@ namespace Osprey
 						}
 						else
 							document.Compiler.Warning(string.Format(InvalidFieldDoc,
-								@enum.Type.FullName + "." + field.Name,
-								"enum field"));
+								member.FullName, "enum field"));
 					}
 				}
 
@@ -143,7 +145,7 @@ namespace Osprey
 		private static void ProcessClassMembers(ClassDeclaration @class, JsonObject target,
 			Namespace projectNamespace, FileNamespace document)
 		{
-			IDeclarationSpace context = @class.Type;
+			var context = @class.Type;
 
 			{ // fields: instance, static and constant
 				JsonObject fieldDocs = null;
@@ -152,7 +154,8 @@ namespace Osprey
 					if (field.DocString != null && field.Declarators.Count == 1)
 					{
 						var firstDecl = field.Declarators[0];
-						var doc = ParseDocString(field.DocString, context, document);
+						var member = context.GetMember(firstDecl.Name);
+						var doc = ParseDocString(field.DocString, context, document, member);
 
 						if (doc.IsValidForField)
 						{
@@ -162,15 +165,15 @@ namespace Osprey
 						}
 						else
 							document.Compiler.Warning(string.Format(InvalidFieldDoc,
-								@class.Type.FullName + "." + firstDecl.Name,
-								"field"));
+								member.FullName, "field"));
 					}
 
 				foreach (var field in @class.Constants)
 					if (field.DocString != null && field.Declarators.Count == 1)
 					{
 						var firstDecl = field.Declarators[0];
-						var doc = ParseDocString(field.DocString, context, document);
+						var constant = context.GetMember(firstDecl.Name);
+						var doc = ParseDocString(field.DocString, context, document, constant);
 						if (doc.IsValidForField)
 						{
 							if (fieldDocs == null)
@@ -179,8 +182,7 @@ namespace Osprey
 						}
 						else
 							document.Compiler.Warning(string.Format(InvalidFieldDoc,
-								@class.Type.FullName + "." + firstDecl.Name,
-								"class constant"));
+								constant.FullName, "class constant"));
 					}
 
 				if (fieldDocs != null)
@@ -215,19 +217,19 @@ namespace Osprey
 				foreach (var method in @class.Methods)
 					if (method.DocString != null)
 						addMethodDoc(method.DeclSpace,
-							ParseDocString(method.DocString, context, document),
+							ParseDocString(method.DocString, context, document, method.DeclSpace.Group),
 							method.Parameters, document.Compiler);
 
 				foreach (var ctor in @class.Constructors)
 					if (ctor.DocString != null)
 						addMethodDoc(ctor.DeclSpace,
-							ParseDocString(ctor.DocString, context, document),
+							ParseDocString(ctor.DocString, context, document, ctor.DeclSpace.Group),
 							ctor.Parameters, document.Compiler);
 
 				foreach (var op in @class.Operators)
 					if (op.DocString != null)
 						addMethodDoc(op.DeclSpace,
-							ParseDocString(op.DocString, context, document),
+							ParseDocString(op.DocString, context, document, op.DeclSpace.Group),
 							op.DeclSpace.Parameters, document.Compiler);
 
 				if (methodDocs != null)
@@ -249,7 +251,8 @@ namespace Osprey
 						else
 							propDocs[prop.Name] = propDocObj = new JsonObject();
 
-						propDocObj[prop.IsSetter ? "set" : "get"] = ParseDocString(prop.DocString, context, document).ToJson();
+						propDocObj[prop.IsSetter ? "set" : "get"] = ParseDocString(prop.DocString,
+							context, document, prop.DeclSpace.Group).ToJson();
 					}
 					// TODO: indexers
 
@@ -264,7 +267,7 @@ namespace Osprey
 			if (function.DocString == null)
 				return null;
 
-			var doc = ParseDocString(function.DocString, function.DeclSpace, document);
+			var doc = ParseDocString(function.DocString, function.DeclSpace, document, function.DeclSpace);
 			if (!VerifyParameters(function.DeclSpace.Group.FullName,
 				doc, function.Function.Parameters, document.Compiler))
 				return null;
@@ -284,7 +287,7 @@ namespace Osprey
 
 			var firstDecl = constant.Declaration.Declarators[0];
 			var globalConst = constant.Constants[0];
-			var doc = ParseDocString(constant.DocString, globalConst.Parent, document);
+			var doc = ParseDocString(constant.DocString, globalConst.Parent, document, globalConst);
 
 			if (!doc.IsValidForField)
 			{
@@ -295,7 +298,8 @@ namespace Osprey
 			return doc.ToJson();
 		}
 
-		private static MemberDoc ParseDocString(string input, IDeclarationSpace context, FileNamespace document)
+		private static MemberDoc ParseDocString(string input,
+			IDeclarationSpace context, FileNamespace document, NamedMember targetMember)
 		{
 			var isMultiline = input.StartsWith("/**");
 			if (isMultiline)
@@ -337,7 +341,7 @@ namespace Osprey
 					{
 						if (currentKeyword != null)
 							output.AddDocumentation(currentKeyword, currentParam,
-								currentValue.ToString(), context, document);
+								currentValue.ToString(), context, document, targetMember);
 
 						currentKeyword = match.Groups[1].Value;
 						currentParam = match.Groups[2].Success ? match.Groups[2].Value.Trim() : null;
@@ -354,7 +358,7 @@ namespace Osprey
 
 			if (currentKeyword != null)
 				output.AddDocumentation(currentKeyword, currentParam,
-					currentValue.ToString(), context, document);
+					currentValue.ToString(), context, document, targetMember);
 
 			return output;
 		}
@@ -550,7 +554,7 @@ namespace Osprey
 			/// -or-
 			/// <paramref name="document"/> is null.</exception>
 			public void AddDocumentation(string keyword, string param, string value,
-				IDeclarationSpace context, FileNamespace document)
+				IDeclarationSpace context, FileNamespace document, NamedMember targetMember)
 			{
 				if (keyword == null)
 					throw new ArgumentNullException("keyword");
@@ -587,7 +591,7 @@ namespace Osprey
 							if (Throws == null)
 								Throws = new List<ThrowsDoc>();
 
-							var ns = context is Namespace? (Namespace)context : context.GetContainingNamespace();
+							var ns = context is Namespace ? (Namespace)context : context.GetContainingNamespace();
 							var isGlobal = param.StartsWith("global.");
 							if (isGlobal)
 								param = param.Substring(7);
@@ -597,7 +601,13 @@ namespace Osprey
 								var type = ns.ResolveTypeName(new TypeName(param, isGlobal), document);
 								Throws.Add(new ThrowsDoc(type, value));
 							}
-							catch { } // Ignore errors. Naughty, I know.
+							catch (CompileTimeException)
+							{
+								document.Compiler.Warning(
+									string.Format("[doc] Ignoring throws declaration for '{0}' (could not resolve type name '{1}')",
+										targetMember == null ? "(unknown member)" : targetMember.FullName,
+										param));
+							}
 						}
 						break;
 				}

@@ -1419,9 +1419,14 @@ namespace Osprey
 							var constant = (ClassConstant)member;
 							outputModule.GetStringId(constant.Name);
 							constant.Id = outputModule.GetFieldId(constant);
-							// The constant type does not need to be defined at this point, so
-							// don't get an ID for it just yet. We do this only when emitting
-							// the actual bytes for the module.
+
+							// If the constant is of an imported type (e.g. String, Int),
+							// then we must make sure to import it now. If it is of a type
+							// declared in this project, we will either have assigned it
+							// an ID now, or it will be done later.
+							var constType = constant.Value.GetTypeObject(this);
+							if (constType.Module != outputModule)
+								AddTypeToOutput(constType, outputModule);
 							if (constant.Value.Type == ConstantValueType.String)
 								outputModule.GetStringId(constant.Value.StringValue);
 						}
@@ -1593,12 +1598,13 @@ namespace Osprey
 				c.Compile(targetPath);
 				if (c.nativeLibrary != null)
 				{
-					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(targetPath), Path.GetFileName(c.nativeLibrary.FileName)));
+					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(targetPath),
+						Path.GetFileName(c.nativeLibrary.FileName)));
 					if (libTarget != c.nativeLibrary.FileName)
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
 				}
 				if (options.DocFile != null)
-					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile);
+					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile, options.PrettyPrintJson);
 			}
 		}
 
@@ -1609,12 +1615,13 @@ namespace Osprey
 				c.Compile(target);
 				if (c.nativeLibrary != null)
 				{
-					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFiles[0]), Path.GetFileName(c.nativeLibrary.FileName)));
+					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFiles[0]),
+						Path.GetFileName(c.nativeLibrary.FileName)));
 					if (libTarget != c.nativeLibrary.FileName)
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
 				}
 				if (options.DocFile != null)
-					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile);
+					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile, options.PrettyPrintJson);
 			}
 		}
 
@@ -1732,6 +1739,14 @@ namespace Osprey
 			get { return (flags & CompilerFlags.ErrorToStdout) == CompilerFlags.ErrorToStdout; }
 			set { ToggleFlag(CompilerFlags.ErrorToStdout, value); }
 		}
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.PrettyPrintJson"/> flag.
+		/// </summary>
+		public bool PrettyPrintJson
+		{
+			get { return (flags & CompilerFlags.PrettyPrintJson) == CompilerFlags.PrettyPrintJson; }
+			set { ToggleFlag(CompilerFlags.PrettyPrintJson, value); }
+		}
 
 		private CompilerVerbosity verbosity;
 		/// <summary>
@@ -1828,6 +1843,10 @@ namespace Osprey
 		/// Redirects errors to the standard output stream.
 		/// </summary>
 		ErrorToStdout = 32,
+		/// <summary>
+		/// Specifies that documentation JSON files should be pretty-printed.
+		/// </summary>
+		PrettyPrintJson = 64,
 	}
 
 	/// <summary>
