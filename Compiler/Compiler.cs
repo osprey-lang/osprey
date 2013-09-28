@@ -1425,7 +1425,8 @@ namespace Osprey
 							// declared in this project, we will either have assigned it
 							// an ID now, or it will be done later.
 							var constType = constant.Value.GetTypeObject(this);
-							if (constType.Module != outputModule)
+							if (constType.Module != null &&
+								constType.Module != outputModule)
 								AddTypeToOutput(constType, outputModule);
 							if (constant.Value.Type == ConstantValueType.String)
 								outputModule.GetStringId(constant.Value.StringValue);
