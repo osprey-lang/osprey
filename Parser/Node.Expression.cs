@@ -3511,8 +3511,7 @@ namespace Osprey.Nodes
 				method.Append(loopCond);
 
 				method.Append(new LoadLocal(iterLoc)); // Load iterator
-				method.Append(new LoadMember(method.Module.GetStringId("moveNext")));
-				method.Append(new Call(0)); // Call iterLoc.moveNext()
+				method.Append(new CallMember(method.Module.GetStringId("moveNext"), 0)); // Call iterLoc.moveNext()
 
 				method.Append(Branch.IfFalse(loopEnd));
 			}

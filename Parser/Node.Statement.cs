@@ -1242,8 +1242,7 @@ namespace Osprey.Nodes
 			{ // Loop condition
 				method.Append(loopCond); // 'next' target
 				iterState.LoadIterator(compiler, method); // Load iterator
-				method.Append(new LoadMember(method.Module.GetStringId("moveNext"))); // Load iterator.moveNext
-				method.Append(new Call(0)); // Call iterator.moveNext()
+				method.Append(new CallMember(method.Module.GetStringId("moveNext"), 0)); // Call iterator.moveNext()
 				method.Append(Branch.IfFalse(loopEnd)); // If iterator.moveNext() is false, end the loop
 				// Otherwise, evaluate the loop body
 			}
@@ -1370,8 +1369,7 @@ namespace Osprey.Nodes
 			var elseLabel = new Label("for-else");
 
 			iterState.LoadIterator(compiler, method); // Load iterator
-			method.Append(new LoadMember(method.Module.GetStringId("moveNext")));
-			method.Append(new Call(0)); // Call iterator.moveNext()
+			method.Append(new CallMember(method.Module.GetStringId("moveNext"), 0)); // Call iterator.moveNext()
 			method.Append(Branch.IfFalse(elseLabel)); // Branch to else if false
 
 			{ // Main body
@@ -1389,8 +1387,7 @@ namespace Osprey.Nodes
 					method.Append(loopNext);
 
 					iterState.LoadIterator(compiler, method); // Load iterator
-					method.Append(new LoadMember(method.Module.GetStringId("moveNext")));
-					method.Append(new Call(0)); // Call iterLoc.moveNext()
+					method.Append(new CallMember(method.Module.GetStringId("moveNext"), 0)); // Call iterLoc.moveNext()
 					method.Append(Branch.IfTrue(loopBody)); // Run another iteration if iterLoc.moveNext()
 				}
 
