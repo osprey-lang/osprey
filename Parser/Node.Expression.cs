@@ -1436,6 +1436,12 @@ namespace Osprey.Nodes
 							this.EndIndex > variable.Node.StartIndex))
 							throw new CompileTimeException(this,
 								string.Format("The variable '{0}' cannot be accessed before its declaration.", Name));
+						var varNode = variable.Node as VariableDeclarator;
+						if (varNode != null && varNode.Value != null &&
+							this.EndIndex >= varNode.Value.StartIndex &&
+							this.StartIndex < varNode.Value.EndIndex)
+							throw new CompileTimeException(this,
+								string.Format("The variable '{0}' cannot be accessed in its initializer.", Name));
 
 						// If the variable comes from another method, then we must capture it,
 						// but only if the current method is a local method. The actual trans-

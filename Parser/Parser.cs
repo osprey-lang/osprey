@@ -1491,7 +1491,7 @@ namespace Osprey
 				} while (Accept(ref i, TokenType.Comma));
 
 				Expect(ref i, TokenType.ParenClose);
-				Expect(ref i, TokenType.Assign, "Parallel declaration without value.");
+				Expect(ref i, TokenType.Assign, "Parallel declaration without initializer.");
 
 				var value = ParseExpression(ref i);
 
@@ -1515,7 +1515,7 @@ namespace Osprey
 				vars.Add(new VariableDeclarator(name.Value, value)
 				{
 					StartIndex = name.Index,
-					EndIndex = value != null ? value.EndIndex : name.EndIndex
+					EndIndex = name.EndIndex,
 				});
 			} while (Accept(ref i, TokenType.Comma));
 
