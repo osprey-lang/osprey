@@ -1199,7 +1199,7 @@ namespace Osprey.Members
 					state = ConstantState.HasValue;
 				}
 
-				return ((ConstantExpression)varDecl.Value).Value;
+				return ((ConstantExpression)varDecl.Initializer).Value;
 			}
 		}
 

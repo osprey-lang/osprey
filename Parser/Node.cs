@@ -235,7 +235,7 @@ namespace Osprey.Nodes
 			{
 				decl.FoldConstant(true);
 
-				var constValue = ((ConstantExpression)decl.Value).Value;
+				var constValue = ((ConstantExpression)decl.Initializer).Value;
 
 				if (IsPublic && constValue.Type == ConstantValueType.Enum &&
 					constValue.EnumValue.Type.Access != AccessLevel.Public)
@@ -463,7 +463,7 @@ namespace Osprey.Nodes
 			{
 				field.FoldConstant();
 				(field.IsStatic ? staticFieldsWithIniter : instanceFieldsWithIniter).AddRange(field.Declarators
-					.Where(decl => decl.Value != null && !decl.Value.IsNull));
+					.Where(decl => decl.Initializer != null && !decl.Initializer.IsNull));
 			}
 
 			foreach (var prop in Properties)
@@ -602,7 +602,7 @@ namespace Osprey.Nodes
 				decl.FoldConstant(isConst: IsConstant);
 				if (IsConstant)
 				{
-					var constValue = ((ConstantExpression)decl.Value).Value;
+					var constValue = ((ConstantExpression)decl.Initializer).Value;
 					if (Access == AccessLevel.Public &&
 						constValue.Type == ConstantValueType.Enum &&
 						constValue.EnumValue.Type.Access != AccessLevel.Public)
@@ -622,7 +622,7 @@ namespace Osprey.Nodes
 				if (compiler.MethodsWithLocalFunctionsCount != localsBefore)
 				{
 					var _decl = decl;
-					compiler.AddLocalExtractor(() => _decl.Value = _decl.Value.TransformClosureLocals(null, false));
+					compiler.AddLocalExtractor(() => _decl.Initializer = _decl.Initializer.TransformClosureLocals(null, false));
 				}
 			}
 		}
@@ -754,7 +754,7 @@ namespace Osprey.Nodes
 
 					var inner = new InstanceMemberAccess(new ThisAccess(), @class, f);
 					inner.IsAssignment = true;
-					Body.Initializer.Insert(index++, new AssignmentExpression(inner, field.Value)
+					Body.Initializer.Insert(index++, new AssignmentExpression(inner, field.Initializer)
 					{
 						IgnoreValue = true
 					});
@@ -766,7 +766,7 @@ namespace Osprey.Nodes
 				{
 					var inner = new StaticFieldAccess((Field)@class.GetMember(field.Name));
 					inner.IsAssignment = true;
-					Body.Initializer.Insert(index++, new AssignmentExpression(inner, field.Value)
+					Body.Initializer.Insert(index++, new AssignmentExpression(inner, field.Initializer)
 					{
 						IgnoreValue = true
 					});

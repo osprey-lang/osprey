@@ -304,7 +304,7 @@ namespace Osprey.Nodes
 		public override void FoldConstant()
 		{
 			foreach (var decl in Declarators)
-				if (decl.Value != null)
+				if (decl.Initializer != null)
 					decl.FoldConstant(IsConst);
 		}
 
@@ -335,8 +335,8 @@ namespace Osprey.Nodes
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			foreach (var decl in Declarators)
-				if (decl.Value != null)
-					decl.Value = decl.Value.TransformClosureLocals(currentBlock, forGenerator);
+				if (decl.Initializer != null)
+					decl.Initializer = decl.Initializer.TransformClosureLocals(currentBlock, forGenerator);
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -345,11 +345,11 @@ namespace Osprey.Nodes
 				return; // Don't do anything!
 
 			foreach (var decl in Declarators)
-				if (decl.Value != null)
+				if (decl.Initializer != null)
 				{
 					if (IsGlobal && decl.Variable.IsCaptured)
 					{
-						decl.Value.Compile(compiler, method); // Evaluate expression
+						decl.Initializer.Compile(compiler, method); // Evaluate expression
 						method.Append(StoreField.Create(method.Module, decl.Variable.CaptureField)); // Store value in field
 					}
 					else if (decl.Variable.IsCaptured)
@@ -360,14 +360,14 @@ namespace Osprey.Nodes
 							method.Append(new LoadLocal(method.GetParameter(0)));
 						else
 							method.Append(new LoadLocal(block.ClosureLocal)); // Load closure local
-						decl.Value.Compile(compiler, method); // Evaluate expression
+						decl.Initializer.Compile(compiler, method); // Evaluate expression
 						method.Append(StoreField.Create(method.Module, decl.Variable.CaptureField)); // Store value in field
 					}
 					else
 					{
 						var variable = method.GetLocal(decl.Name);
 
-						var value = decl.Value;
+						var value = decl.Initializer;
 						if (value is ILocalResultExpression)
 							((ILocalResultExpression)value).SetTargetVariable(variable);
 
@@ -385,34 +385,34 @@ namespace Osprey.Nodes
 		public VariableDeclarator(string name, Expression value)
 		{
 			Name = name;
-			Value = value;
+			Initializer = value;
 		}
 
 		/// <summary>The name of the variable being declared.</summary>
 		public string Name;
 
-		/// <summary>The value of the assignment. May be null, except in constant declarations.</summary>
-		public Expression Value;
+		/// <summary>The initial value of the variable. May be null, except in constant declarations.</summary>
+		public Expression Initializer;
 
 		internal Variable Variable;
 
 		public override string ToString(int indent)
 		{
-			return Value == null ? Name : Name + " = " + Value.ToString(indent);
+			return Initializer == null ? Name : Name + " = " + Initializer.ToString(indent);
 		}
 
 		public void FoldConstant(bool isConst)
 		{
-			if (Value == null)
+			if (Initializer == null)
 				return;
-			Value = Value.FoldConstant();
-			if (isConst && !(Value is ConstantExpression))
+			Initializer = Initializer.FoldConstant();
+			if (isConst && !(Initializer is ConstantExpression))
 				throw new CompileTimeException(this, "The expression could be reduced to a constant value.");
 		}
 
 		public void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			if (Value != null)
+			if (Initializer != null)
 			{
 				// If you have something like
 				//    var myLambda = @(a, b) { a.method(b); };
@@ -420,11 +420,11 @@ namespace Osprey.Nodes
 				//    <λ>myLambda@{1}
 				// where {1} is replaced with an internal counter.
 				// It is thought that this might aid in debugging.
-				if (Value is LambdaExpression)
-					((LambdaExpression)Value).NameHint = this.Name;
-				else if (Value is LambdaMemberExpression)
-					((LambdaMemberExpression)Value).NameHint = this.Name;
-				Value = Value.ResolveNames(context, document, false, false);
+				if (Initializer is LambdaExpression)
+					((LambdaExpression)Initializer).NameHint = this.Name;
+				else if (Initializer is LambdaMemberExpression)
+					((LambdaMemberExpression)Initializer).NameHint = this.Name;
+				Initializer = Initializer.ResolveNames(context, document, false, false);
 			}
 		}
 	}

@@ -1142,7 +1142,7 @@ namespace Osprey
 			{
 				foreach (var constant in nsDecl.Constants)
 					foreach (var decl in constant.Declaration.Declarators)
-						decl.Value = decl.Value.ResolveNames(context, doc);
+						decl.Initializer = decl.Initializer.ResolveNames(context, doc);
 			}
 
 			foreach (var type in nsDecl.Types)

@@ -1437,9 +1437,9 @@ namespace Osprey.Nodes
 							throw new CompileTimeException(this,
 								string.Format("The variable '{0}' cannot be accessed before its declaration.", Name));
 						var varNode = variable.Node as VariableDeclarator;
-						if (varNode != null && varNode.Value != null &&
-							this.EndIndex >= varNode.Value.StartIndex &&
-							this.StartIndex < varNode.Value.EndIndex)
+						if (varNode != null && varNode.Initializer != null &&
+							this.EndIndex >= varNode.Initializer.StartIndex &&
+							this.StartIndex < varNode.Initializer.EndIndex)
 							throw new CompileTimeException(this,
 								string.Format("The variable '{0}' cannot be accessed in its initializer.", Name));
 
