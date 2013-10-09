@@ -271,7 +271,8 @@ namespace Osprey
 
 			Type output;
 			var baseTypeName = baseType == null ? null : baseType.FullName;
-			if (baseTypeName == StandardNames.EnumName || baseTypeName == StandardNames.EnumSetName && fullName != StandardNames.EnumSetName)
+			if (baseTypeName == StandardNames.EnumName && fullName != StandardNames.EnumSetName ||
+				baseTypeName == StandardNames.EnumSetName)
 				// Ignore the shared type; enums don't need to share types with anything, man.
 				output = ReadEnumDef(reader, target, id, flags, typeName, baseType, baseTypeName == StandardNames.EnumSetName,
 					ref fieldCounter, ref methodCounter);

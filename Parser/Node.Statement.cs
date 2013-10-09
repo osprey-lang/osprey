@@ -160,12 +160,16 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
+			canReturn = canYield = isEndReachable = null; // reset!
+
 			foreach (var stmt in Statements)
 				stmt.FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
+			canReturn = canYield = isEndReachable = null; // reset!
+
 			foreach (var stmt in Statements)
 				stmt.ResolveNames(this.DeclSpace, document);
 		}

@@ -989,15 +989,23 @@ namespace Osprey
 					else
 						type.BaseType = nsDecl.Namespace.ResolveTypeName(baseTypeName, doc);
 
+					if (type.BaseType is Enum)
+						throw new CompileTimeException(baseTypeName,
+							"Cannot inherit from an enum type.");
+					else if (!((Class)type.BaseType).IsInheritable &&
+						!((Class)type.BaseType).IsAbstract)
+						throw new CompileTimeException(baseTypeName,
+							"Only inheritable classes can be inherited from.");
+
 					if (type.BaseType == type)
-						throw new CompileTimeException(((ClassDeclaration)typeDecl).BaseClass,
+						throw new CompileTimeException(baseTypeName,
 							"A class cannot inherit from itself.");
 
 					if (type.BaseType == EnumType && type != EnumSetType)
-						throw new CompileTimeException(((ClassDeclaration)typeDecl).BaseClass,
+						throw new CompileTimeException(baseTypeName,
 							"The type aves.Enum cannot be inherited from explicitly, except by aves.EnumSet. Create an enum instead.");
 					if (type.BaseType == EnumSetType)
-						throw new CompileTimeException(((ClassDeclaration)typeDecl).BaseClass,
+						throw new CompileTimeException(baseTypeName,
 							"The type aves.EnumSet cannot be inherited from explicitly. Create an enum set instead.");
 				}
 				else // EnumDeclaration

@@ -1701,7 +1701,7 @@ namespace Osprey
 				else
 				{
 					i++;
-					return new ReturnStatement();
+					return new ReturnStatement() { StartIndex = start, EndIndex = end };
 				}
 
 			var values = new List<Expression>();

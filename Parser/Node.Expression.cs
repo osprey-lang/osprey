@@ -2021,7 +2021,15 @@ namespace Osprey.Nodes
 						string.Format("The member '{0}.{1}' is static and cannot be accessed through an instance.",
 							knownType.FullName, Member));
 
-				return new InstanceMemberAccess(Inner, knownType as Class, member).At(this);
+				Class declType; // The declaring type of the member
+				if (member is ClassMember)
+					declType = ((ClassMember)member).Parent;
+				else if (member.Kind == MemberKind.MethodGroup)
+					declType = ((MethodGroup)member).ParentAsClass;
+				else
+					throw new InvalidOperationException("Invalid member kind: a type member must be a ClassMember or a MethodGroup.");
+
+				return new InstanceMemberAccess(Inner, declType, member).At(this);
 			}
 			return this;
 		}
@@ -2922,11 +2930,11 @@ namespace Osprey.Nodes
 					var method = (MethodGroup)access.Member;
 					var overload = method.FindOverload(Arguments.Count, true);
 					if (overload == null)
-						throw new CompileTimeException(this,
+						throw new CompileTimeException(Inner,
 							string.Format("The method '{0}.{1}' does not contain an overload that takes {2} arguments.",
 								method.ParentAsClass.FullName, method.Name, Arguments.Count));
 					if (access.Inner is BaseAccess && overload.IsAbstract)
-						throw new CompileTimeException(this,
+						throw new CompileTimeException(Inner,
 							string.Format("The method '{0}.{1}' is abstract and cannot be called through 'base'.",
 								method.ParentAsClass.FullName, method.Name));
 				}
@@ -2936,14 +2944,14 @@ namespace Osprey.Nodes
 				var access = (StaticMethodAccess)Inner;
 				var overload = access.Method.FindOverload(Arguments.Count, true);
 				if (overload == null)
-					throw new CompileTimeException(this, string.Format("The method '{0}' does not take {1} arguments.",
+					throw new CompileTimeException(Inner, string.Format("The method '{0}' does not take {1} arguments.",
 						access.Method.FullName, Arguments.Count));
 			}
 			else if (Inner is LocalFunctionAccess)
 			{
 				var access = (LocalFunctionAccess)Inner;
 				if (!access.Function.Method.Accepts(Arguments.Count))
-					throw new CompileTimeException(this, string.Format("The local function '{0}' does not take {1} arguments.",
+					throw new CompileTimeException(Inner, string.Format("The local function '{0}' does not take {1} arguments.",
 						access.Function.Name, Arguments.Count));
 			}
 			else if (Inner.IsTypeKnown(document.Compiler))
@@ -2959,9 +2967,9 @@ namespace Osprey.Nodes
 				{
 					var type = Inner.GetKnownType(document.Compiler);
 					if (type == null)
-						throw new CompileTimeException(this, "Cannot invoke the null value.");
+						throw new CompileTimeException(Inner, "Cannot invoke the null value.");
 					if (type is Enum)
-						throw new CompileTimeException(this, "Enum values cannot be invoked.");
+						throw new CompileTimeException(Inner, "Enum values cannot be invoked.");
 
 					@class = (Class)type;
 				}
@@ -2970,12 +2978,12 @@ namespace Osprey.Nodes
 					instType: Inner is BaseAccess ? @class.BaseType : @class,
 					fromType: @class);
 				if (invocators == null || invocators.Kind != MemberKind.MethodGroup)
-					throw new CompileTimeException(this, string.Format("The class '{0}' does not define an invocator.",
+					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator.",
 						@class.FullName));
 
 				var invocator = ((MethodGroup)invocators).FindOverload(Arguments.Count, true);
 				if (invocator == null)
-					throw new CompileTimeException(this, string.Format("The class '{0}' does not define an invocator that takes {1} arguments.",
+					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator that takes {1} arguments.",
 						@class.FullName, Arguments.Count));
 
 				Inner = new InstanceMemberAccess(Inner, ((MethodGroup)invocators).ParentAsClass, invocators);

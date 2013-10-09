@@ -788,6 +788,18 @@ namespace Osprey.Nodes
 			}
 		}
 
+		public override bool IsTypeKnown(Compiler compiler)
+		{
+			return true;
+		}
+
+		public override Type GetKnownType(Compiler compiler)
+		{
+			// Enum values contain the members of their containing type's base type.
+			// For enum sets, this means aves.EnumSet; for normal enums, aves.Enum.
+			return Field.Parent.BaseType;
+		}
+
 		public override string ToString(int indent)
 		{
 			return "‹enum " + Field.Parent.FullName + "." + Field.Name + "›";
