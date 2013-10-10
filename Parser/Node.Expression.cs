@@ -377,18 +377,29 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			ReduceOperands();
+			FoldOperands();
 
 			if (Left is ConstantExpression && Right is ConstantExpression)
 			{
 				var constLeft = ((ConstantExpression)Left).Value;
 				var constRight = ((ConstantExpression)Right).Value;
 				if (constLeft.SupportsOperator(Operator, constRight))
-					return new ConstantExpression(constLeft.ExecuteOperator(Operator, constRight))
+					try
 					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+						return new ConstantExpression(constLeft.ExecuteOperator(Operator, constRight)).At(this);
+					}
+					catch (OverflowException e)
+					{
+						throw new CompileTimeException(this,
+							"The expression cannot be evaluated because it results in an arithmetic overflow.",
+							e);
+					}
+					catch (DivideByZeroException e)
+					{
+						throw new CompileTimeException(this,
+							"The expression cannot be evaluated because it results in a division by zero.",
+							e);
+					}
 			}
 			return this; // Could not reduce
 		}
@@ -412,7 +423,7 @@ namespace Osprey.Nodes
 			method.Append(SimpleInstruction.FromOperator(Operator)); // And finally the operator
 		}
 
-		protected void ReduceOperands()
+		protected void FoldOperands()
 		{
 			Left = Left.FoldConstant();
 			Right = Right.FoldConstant();
@@ -439,7 +450,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			ReduceOperands();
+			FoldOperands();
 
 			// null ?? Right => Right
 			// non-null ?? Right => Left
@@ -478,7 +489,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			ReduceOperands();
+			FoldOperands();
 
 			// null ?! Right => null
 			// non-null ?! Right => Right
@@ -544,7 +555,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			ReduceOperands();
+			FoldOperands();
 
 			if (Left is ConstantExpression)
 			{
@@ -618,7 +629,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			ReduceOperands();
+			FoldOperands();
 
 			if (Left is ConstantExpression)
 			{
@@ -722,7 +733,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			ReduceOperands();
+			FoldOperands();
 
 			if (Left is ConstantExpression)
 			{
@@ -1041,11 +1052,16 @@ namespace Osprey.Nodes
 			{
 				var constInner = ((ConstantExpression)Inner).Value;
 				if (constInner.SupportsOperator(Operator))
-					return new ConstantExpression(constInner.ExecuteOperator(Operator))
+					try
 					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+						return new ConstantExpression(constInner.ExecuteOperator(Operator)).At(this);
+					}
+					catch (OverflowException e)
+					{
+						throw new CompileTimeException(this,
+							"The expression cannot be evaluated because it results in an arithmetic overflow.",
+							e);
+					}
 			}
 
 			return this;

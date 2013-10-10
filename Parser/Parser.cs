@@ -317,15 +317,21 @@ namespace Osprey
 						}
 						catch (DivideByZeroException e)
 						{
-							var msg = string.Format("The expression '{0}' cannot be evaluated because it results in a division by zero.",
-								tok.Source.Substring(left.StartIndex, right.EndIndex - left.StartIndex));
-							throw new ParseException(left, tok.Source, msg, e);
+							var errorToken = new Token(tok.Source,
+								tok.Source.Substring(left.StartIndex, right.EndIndex - left.StartIndex),
+								TokenType.Invalid, left.StartIndex);
+							throw new ParseException(errorToken,
+								"The expression cannot be evaluated because it results in a division by zero.",
+								e);
 						}
 						catch (OverflowException e)
 						{
-							var msg = string.Format("The expression '{0}' cannot be evaluated because it results in an arithmetic overflow.",
-								tok.Source.Substring(left.StartIndex, right.EndIndex - left.StartIndex));
-							throw new ParseException(left, tok.Source, msg, e);
+							var errorToken = new Token(tok.Source,
+								tok.Source.Substring(left.StartIndex, right.EndIndex - left.StartIndex),
+								TokenType.Invalid, left.StartIndex);
+							throw new ParseException(errorToken,
+								"The expression cannot be evaluated because it results in an arithmetic overflow.",
+								e);
 						}
 
 						return new ConstantExpression(result)
@@ -402,9 +408,12 @@ namespace Osprey
 						}
 						catch (OverflowException e)
 						{
-							var msg = string.Format("The expression '{0}' cannot be evaluated because it results in an arithmetic overflow.",
-								tok.Source.Substring(start, operand.EndIndex - start));
-							throw new ParseException(operand, tok.Source, msg, e);
+							var errorToken = new Token(tok.Source,
+								tok.Source.Substring(start, operand.EndIndex - start),
+								TokenType.Invalid, start);
+							throw new ParseException(errorToken,
+								"The expression cannot be evaluated because it results in an arithmetic overflow.",
+								e);
 						}
 
 						return new ConstantExpression(result)
