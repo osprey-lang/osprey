@@ -1031,8 +1031,9 @@ namespace Osprey
 				throw new CompileTimeException(typeDecl, "Invalid aves.Object declaration: must be a class.");
 
 			var classDecl = (ClassDeclaration)typeDecl;
-			if (classDecl.IsStatic || classDecl.IsAbstract || classDecl.IsPrimitive || !classDecl.IsInheritable)
-				throw new CompileTimeException(classDecl, "Invalid aves.Object declaration: cannot be marked static, abstract or __primitive, and must be marked inheritable. Otherwise you'll break the type hierarchy!");
+			if (classDecl.IsStatic || classDecl.IsAbstract || classDecl.IsPrimitive ||
+				!classDecl.IsInheritable || classDecl.Access == AccessLevel.Private)
+				throw new CompileTimeException(classDecl, "Invalid aves.Object declaration: cannot be marked static, abstract, __primitive or private, and must be marked inheritable. Otherwise you'll break the type hierarchy!");
 			if (classDecl.BaseClass != null)
 				throw new CompileTimeException(classDecl,
 					"Invalid aves.Object declaration: cannot have any declared base type. This is the root of the type hierarchy!");
@@ -1050,8 +1051,9 @@ namespace Osprey
 				throw new CompileTimeException(typeDecl, "Invalid aves.Enum declaration: must be a class.");
 
 			var classDecl = (ClassDeclaration)typeDecl;
-			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable || !classDecl.IsAbstract)
-				throw new CompileTimeException(classDecl, "Invalid aves.Enum declaration: cannot be marked static, __primitive or inheritable, and must be marked abstract.");
+			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable ||
+				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Private)
+				throw new CompileTimeException(classDecl, "Invalid aves.Enum declaration: cannot be marked static, __primitive, inheritable or private, and must be marked abstract.");
 			if (type.BaseType != ObjectType)
 				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.Enum declaration: must inherit from aves.Object.");
 
@@ -1064,8 +1066,9 @@ namespace Osprey
 				throw new CompileTimeException(typeDecl, "Invalid aves.EnumSet declaration: must be a class.");
 
 			var classDecl = (ClassDeclaration)typeDecl;
-			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable || !classDecl.IsAbstract)
-				throw new CompileTimeException(classDecl, "Invalid aves.EnumSet declaration: cannot be marked static, __primitive or inheritable, and must be marked abstract.");
+			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable ||
+				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Private)
+				throw new CompileTimeException(classDecl, "Invalid aves.EnumSet declaration: cannot be marked static, __primitive, inheritable or private, and must be marked abstract.");
 			if (type.BaseType != EnumType)
 				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.EnumSet declaration: must inherit from aves.Enum.");
 
