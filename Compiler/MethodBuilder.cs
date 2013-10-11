@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System;                                                         
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -12,6 +12,7 @@ namespace Osprey
 		{
 			if (module == null)
 				throw new ArgumentNullException("module");
+
 			this.module = module;
 
 			if (hasInstance)

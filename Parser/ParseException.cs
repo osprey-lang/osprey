@@ -70,6 +70,16 @@ namespace Osprey
 			}
 		}
 
+		public int EndIndex
+		{
+			get
+			{
+				return token != null ? token.EndIndex :
+					node != null ? node.EndIndex :
+					-1;
+			}
+		}
+
 		/// <summary>
 		/// Gets the name of the file in which the parse exception occurred.
 		/// </summary>

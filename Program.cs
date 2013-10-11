@@ -74,10 +74,14 @@ namespace Osprey
 			{
 				if (!silenceErrors)
 				{
-					err.Write("[error] Parse error: ");
+					err.Write("[error {0}] Parse error: ",
+						new MessageLocation(e.FileName, e.GetFileSource(),
+							e.Index, e.EndIndex).ToString(1));
+
 					Console.ForegroundColor = ConsoleColor.Red;
 					err.Write(e.Message);
 					Console.ForegroundColor = ConsoleColor.Gray;
+
 					err.WriteLine();
 					PrintErrorLocation(e, err);
 				}
@@ -86,10 +90,19 @@ namespace Osprey
 			{
 				if (!silenceErrors)
 				{
-					err.Write("[error] Compiler error: ");
+					if (e.Node != null)
+					{
+						var loc = new MessageLocation(e.Document.FileName,
+							e.Document.FileSource, e.Node.StartIndex, e.Node.EndIndex);
+						err.Write("[error {0}] Compiler error: ", loc.ToString(1));
+					}
+					else
+						err.Write("[error] Compiler error: ");
+
 					Console.ForegroundColor = ConsoleColor.Red;
 					err.Write(e.Message);
 					Console.ForegroundColor = ConsoleColor.Gray;
+
 					err.WriteLine();
 					if (e.Node != null)
 						PrintErrorLocation(e, err);
@@ -161,13 +174,10 @@ namespace Osprey
 
 		private static void PrintErrorLocation(ParseException e, TextWriter errorStream)
 		{
-			var index = e.Token != null ?
-				e.Token.Index :
-				e.Node.StartIndex;
 			var length = e.Token != null ?
 				e.Token.Value.Length :
 				e.Node.EndIndex - e.Node.StartIndex;
-			PrintErrorLocation(e.FileName, e.GetFileSource(), index, length, errorStream);
+			PrintErrorLocation(e.FileName, e.GetFileSource(), e.Index, length, errorStream);
 		}
 
 		private static void PrintErrorLocation(CompileTimeException e, TextWriter errorStream)

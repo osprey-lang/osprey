@@ -128,6 +128,7 @@ namespace Osprey.Nodes
 		{
 			this.StartIndex = other.StartIndex;
 			this.EndIndex = other.EndIndex;
+			this.Document = other.Document;
 			return this;
 		}
 	}
@@ -1439,8 +1440,9 @@ namespace Osprey.Nodes
 						var inner = new ThisAccess();
 						inner.ResolveNames(context, document);
 
-						return new InstanceMemberAccess(inner, prop.Parent, prop);
+						result = new InstanceMemberAccess(inner, prop.Parent, prop);
 					}
+					break;
 				case MemberKind.Variable:
 					{
 						// Note: local variables only occur within blocks, so we don't actually
@@ -1908,9 +1910,7 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			Inner = Inner.ResolveNames(context, document, false, false);
-
-			return Inner; // always!
+			return Inner.ResolveNames(context, document, false, false); // always!
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)

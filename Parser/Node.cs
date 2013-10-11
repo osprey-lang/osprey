@@ -19,8 +19,9 @@ namespace Osprey.Nodes
 			return this.ToString(0);
 		}
 
-		public int StartIndex = 0;
-		public int EndIndex = 0;
+		public int StartIndex;
+		public int EndIndex;
+		public Document Document;
 
 		public abstract string ToString(int indent);
 	}
@@ -1054,26 +1055,26 @@ namespace Osprey.Nodes
 
 	/* Ovum's source has the following to say about operator indices:
 	 * 
-	 * TYPED_ENUM(Operator, uint8_t)
+	 * enum class Operator : uint8_t
 	 * {
-	 *     OP_ADD,    // The binary + operator.  ( 0)
-	 *     OP_SUB,    // The binary - operator.  ( 1)
-	 *     OP_OR,     // The | operator.	     ( 2)
-	 *     OP_XOR,    // The ^ operator.	     ( 3)
-	 *     OP_MUL,    // The * operator.	     ( 4)
-	 *     OP_DIV,    // The / operator.	     ( 5)
-	 *     OP_MOD,    // The % operator.	     ( 6)
-	 *     OP_AND,    // The & operator.	     ( 7)
-	 *     OP_POW,    // The ** operator.	     ( 8)
-	 *     OP_SHL,    // The << operator.	     ( 9)
-	 *     OP_SHR,    // The >> operator.	     (10)
-	 *     OP_HASHOP, // The # operator.	     (11)
-	 *     OP_DOLLAR, // The $ operator.	     (12)
-	 *     OP_PLUS,   // The unary + operator.   (13)
-	 *     OP_NEG,    // The unary - operator.   (14)
-	 *     OP_NOT,    // The ~ operator.	     (15)
-	 *     OP_EQ,     // The == operator.	     (16)
-	 *     OP_CMP,    // The <=> operator.	     (17)
+	 *     ADD,    // The binary + operator.  ( 0)
+	 *     SUB,    // The binary - operator.  ( 1)
+	 *     OR,     // The | operator.	     ( 2)
+	 *     XOR,    // The ^ operator.	     ( 3)
+	 *     MUL,    // The * operator.	     ( 4)
+	 *     DIV,    // The / operator.	     ( 5)
+	 *     MOD,    // The % operator.	     ( 6)
+	 *     AND,    // The & operator.	     ( 7)
+	 *     POW,    // The ** operator.	     ( 8)
+	 *     SHL,    // The << operator.	     ( 9)
+	 *     SHR,    // The >> operator.	     (10)
+	 *     HASHOP, // The # operator.	     (11)
+	 *     DOLLAR, // The $ operator.	     (12)
+	 *     PLUS,   // The unary + operator.   (13)
+	 *     NEG,    // The unary - operator.   (14)
+	 *     NOT,    // The ~ operator.	     (15)
+	 *     EQ,     // The == operator.	     (16)
+	 *     CMP,    // The <=> operator.	     (17)
 	 * };
 	 * 
 	 * These are the indices that OperatorOverloadDeclaration.GetIndex()

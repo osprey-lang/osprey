@@ -17,6 +17,7 @@ namespace Osprey
 		}
 
 		private Tokenizer tok;
+		private Document document;
 		private ParseFlags flags;
 		/// <summary>
 		/// If true, the parser uses compiler-specific extensions.
@@ -337,7 +338,8 @@ namespace Osprey
 						return new ConstantExpression(result)
 						{
 							StartIndex = left.StartIndex,
-							EndIndex = right.EndIndex
+							EndIndex = right.EndIndex,
+							Document = document,
 						};
 					}
 				}
@@ -349,6 +351,7 @@ namespace Osprey
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = right.EndIndex,
+						Document = document,
 					};
 					result.Values.AddRange(((ListLiteralExpression)leftInner).Values);
 					result.Values.AddRange(((ListLiteralExpression)rightInner).Values);
@@ -362,11 +365,13 @@ namespace Osprey
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = right.EndIndex,
+						Document = document,
 					};
 					return new UnaryExpression(inner, UnaryOperator.Not)
 					{
 						StartIndex = inner.StartIndex,
 						EndIndex = inner.EndIndex,
+						Document = document,
 					};
 				}
 			}
@@ -374,7 +379,8 @@ namespace Osprey
 			return new BinaryOperatorExpression(left, right, op)
 			{
 				StartIndex = left.StartIndex,
-				EndIndex = right.EndIndex
+				EndIndex = right.EndIndex,
+				Document = document,
 			};
 		}
 
@@ -419,7 +425,8 @@ namespace Osprey
 						return new ConstantExpression(result)
 						{
 							StartIndex = start,
-							EndIndex = operand.EndIndex
+							EndIndex = operand.EndIndex,
+							Document = document,
 						};
 					}
 				}
@@ -428,7 +435,8 @@ namespace Osprey
 			return new UnaryExpression(operand, op)
 			{
 				StartIndex = start,
-				EndIndex = operand.EndIndex
+				EndIndex = operand.EndIndex,
+				Document = document,
 			};
 		}
 
@@ -436,7 +444,7 @@ namespace Osprey
 
 		private Document ParseDocument()
 		{
-			var document = new Document();
+			document = new Document();
 
 			var i = 0;
 
@@ -458,7 +466,7 @@ namespace Osprey
 				}
 				else if (Accept(ref i, TokenType.CurlyOpen))
 				{
-					var ns = new NamespaceDeclaration(name);
+					var ns = new NamespaceDeclaration(name) { Document = document };
 					ParseNamespaceMembers(ref i, ns, null);
 					Expect(ref i, TokenType.CurlyClose);
 
@@ -525,6 +533,7 @@ namespace Osprey
 				{
 					StartIndex = start,
 					EndIndex = end,
+					Document = document,
 				};
 			}
 			else if (Accept(ref i, TokenType.Namespace)) // use namespace foo.bar.baz;
@@ -535,6 +544,7 @@ namespace Osprey
 				{
 					StartIndex = start,
 					EndIndex = end,
+					Document = document,
 				};
 			}
 			else if (Accept(i, TokenType.Identifier)) // use foo.bar.baz;
@@ -545,6 +555,7 @@ namespace Osprey
 				{
 					StartIndex = start,
 					EndIndex = end,
+					Document = document,
 				};
 			}
 			else
@@ -645,7 +656,10 @@ namespace Osprey
 
 					var simpleDecl = (SimpleLocalVariableDeclaration)decl;
 
-					var constDecl = new GlobalConstantDeclaration(modifiers.Access == AccessLevel.Public, simpleDecl);
+					var constDecl = new GlobalConstantDeclaration(modifiers.Access == AccessLevel.Public, simpleDecl)
+						{
+							Document = document
+						};
 					if (simpleDecl.Declarators.Count == 1)
 						constDecl.DocString = startTok.Documentation;
 
@@ -659,7 +673,7 @@ namespace Osprey
 					i++;
 					var name = ParseQualifiedName(ref i);
 
-					var ns = new NamespaceDeclaration(name);
+					var ns = new NamespaceDeclaration(name) { Document = document };
 					if (Accept(i, TokenType.Semicolon))
 						throw new ParseException(tok[i], "The file namespace declaration is only allowed at the top of the script, after any use declarations.");
 					else if (!Accept(i, TokenType.CurlyOpen))
@@ -698,6 +712,7 @@ namespace Osprey
 			{
 				StartIndex = name.Index,
 				EndIndex = name.EndIndex,
+				Document = document,
 				IsAbstract = modifiers.IsAbstract,
 				IsInheritable = modifiers.IsInheritable,
 				IsStatic = modifiers.IsStatic,
@@ -762,6 +777,7 @@ namespace Osprey
 						{
 							StartIndex = newTok.Index,
 							EndIndex = newTok.EndIndex,
+							Document = document,
 							DocString = startTok.Documentation,
 						};
 					}
@@ -774,6 +790,7 @@ namespace Osprey
 							{
 								StartIndex = tok[i].Index,
 								EndIndex = tok[i++].EndIndex,
+								Document = document,
 							};
 						else
 							// Permits 'new base(...);' as first statement
@@ -784,6 +801,7 @@ namespace Osprey
 							BaseInitializer = baseInit,
 							StartIndex = newTok.Index,
 							EndIndex = newTok.EndIndex,
+							Document = document,
 							DocString = startTok.Documentation,
 						});
 					}
@@ -841,6 +859,7 @@ namespace Osprey
 					{
 						StartIndex = start,
 						EndIndex = end,
+						Document = document,
 						DocString = startTok.Documentation,
 					};
 				}
@@ -908,7 +927,7 @@ namespace Osprey
 			{
 				// Add the default constructor, which is public and parameterless
 				target.Constructors.Add(new ConstructorDeclaration(AccessLevel.Public,
-					new List<ConstructorParam>(), Splat.None, new Block()));
+					new List<ConstructorParam>(), Splat.None, new Block()) { Document = document });
 			}
 		}
 
@@ -951,6 +970,7 @@ namespace Osprey
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
+						Document = document,
 					});
 					optionalSeen = true;
 				}
@@ -961,6 +981,7 @@ namespace Osprey
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
+						Document = document,
 					});
 			} while (Accept(i++, TokenType.Comma));
 			i--;
@@ -1004,7 +1025,8 @@ namespace Osprey
 			return new Block(body)
 			{
 				StartIndex = start,
-				EndIndex = tok[i++].EndIndex
+				EndIndex = tok[i++].EndIndex,
+				Document = document,
 			};
 		}
 
@@ -1029,7 +1051,8 @@ namespace Osprey
 				vars.Add(new VariableDeclarator(nameTok.Value, value)
 				{
 					StartIndex = nameTok.Index,
-					EndIndex = nameTok.EndIndex
+					EndIndex = nameTok.EndIndex,
+					Document = document,
 				});
 			} while (Accept(ref i, TokenType.Comma));
 
@@ -1038,6 +1061,7 @@ namespace Osprey
 			return new FieldDeclaration(access, isConst, vars)
 			{
 				IsStatic = isStatic,
+				Document = document,
 			};
 		}
 
@@ -1055,7 +1079,7 @@ namespace Osprey
 
 			Statement body;
 			if (Accept(i, TokenType.Semicolon))
-				body = new EmptyStatement() { StartIndex = tok[i].Index, EndIndex = tok[i++].EndIndex };
+				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 			else if (Accept(i, TokenType.CurlyOpen))
 				body = ParseBlock(ref i);
 			else if (AcceptExtension(i, "__extern"))
@@ -1073,6 +1097,7 @@ namespace Osprey
 				{
 					StartIndex = nameTok.Index,
 					EndIndex = nameTok.EndIndex,
+					Document = document,
 					IsOverride = modifiers.IsOverride,
 					IsAbstract = modifiers.IsAbstract,
 					IsOverridable = modifiers.IsOverridable,
@@ -1087,7 +1112,7 @@ namespace Osprey
 
 			Statement body;
 			if (Accept(i, TokenType.Semicolon))
-				body = new EmptyStatement() { StartIndex = tok[i].Index, EndIndex = tok[i++].EndIndex };
+				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 			else if (!isSetter && Accept(i, TokenType.Assign)) // get x = expr;
 			{
 				i++;
@@ -1107,6 +1132,7 @@ namespace Osprey
 			{
 				StartIndex = nameTok.Index,
 				EndIndex = nameTok.EndIndex,
+				Document = document,
 				IsOverride = modifiers.IsOverride,
 				IsAbstract = modifiers.IsAbstract,
 				IsOverridable = modifiers.IsOverridable,
@@ -1128,7 +1154,7 @@ namespace Osprey
 
 			Statement body;
 			if (Accept(i, TokenType.Semicolon))
-				body = new EmptyStatement() { StartIndex = tok[i].Index, EndIndex = tok[i++].EndIndex };
+				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 			else if (!isSetter && Accept(i, TokenType.Assign)) // get this[x] = expr;
 			{
 				i++;
@@ -1148,6 +1174,7 @@ namespace Osprey
 			{
 				StartIndex = startTok.Index,
 				EndIndex = startTok.EndIndex,
+				Document = document,
 				IsOverride = modifiers.IsOverride,
 				IsAbstract = modifiers.IsAbstract,
 				IsOverridable = modifiers.IsOverridable,
@@ -1200,6 +1227,7 @@ namespace Osprey
 					{
 						StartIndex = start,
 						EndIndex = end,
+						Document = document,
 					};
 			}
 			else if (parameters.Parameters.Count == 2)
@@ -1211,6 +1239,7 @@ namespace Osprey
 					{
 						StartIndex = start,
 						EndIndex = end,
+						Document = document,
 					};
 			}
 			else
@@ -1252,7 +1281,8 @@ namespace Osprey
 			var @enum = new EnumDeclaration(enumName.Value, isSet, modifiers.Access)
 				{
 					StartIndex = enumName.Index,
-					EndIndex = enumName.EndIndex
+					EndIndex = enumName.EndIndex,
+					Document = document,
 				};
 			Expect(ref i, TokenType.CurlyOpen);
 
@@ -1285,6 +1315,7 @@ namespace Osprey
 					{
 						StartIndex = memberName.Index,
 						EndIndex = memberValue != null ? memberValue.EndIndex : memberName.EndIndex,
+						Document = document,
 						DocString = memberName.Documentation,
 					});
 			} while (Accept(ref i, TokenType.Comma) && !Accept(i, TokenType.CurlyClose));
@@ -1308,18 +1339,21 @@ namespace Osprey
 				{
 					StartIndex = expr.StartIndex,
 					EndIndex = expr.EndIndex,
+					Document = expr.Document,
 				};
 
 			var retStmt = new ReturnStatement(new List<Expression>(1))
 			{
 				StartIndex = expr.StartIndex,
 				EndIndex = expr.EndIndex,
+				Document = expr.Document,
 			};
 			retStmt.ReturnValues.Add(expr);
 			var result = new Block(new List<Statement>(1))
 			{
 				StartIndex = expr.StartIndex,
 				EndIndex = expr.EndIndex,
+				Document = expr.Document,
 			};
 			result.Statements.Add(retStmt);
 			return result;
@@ -1345,7 +1379,7 @@ namespace Osprey
 				Expect(i, TokenType.Identifier);
 				idents.Add(tok[i++].Value);
 			}
-			return new TypeName(idents, global) { StartIndex = start, EndIndex = tok[i - 1].EndIndex };
+			return new TypeName(idents, global) { StartIndex = start, EndIndex = tok[i - 1].EndIndex, Document = document };
 		}
 
 		private QualifiedName ParseQualifiedName(ref int i)
@@ -1362,7 +1396,7 @@ namespace Osprey
 				idents.Add(tok[i].Value);
 				i++;
 			}
-			return new QualifiedName(idents) { StartIndex = start, EndIndex = tok[i - 1].EndIndex };
+			return new QualifiedName(idents) { StartIndex = start, EndIndex = tok[i - 1].EndIndex, Document = document };
 		}
 
 		private ParameterInfo ParseParameterList(ref int i, List<Parameter> parameters = null,
@@ -1401,7 +1435,12 @@ namespace Osprey
 					var value = ParseExpression(ref i);
 					// The expression is validated at a later stage of parsing,
 					// since it needs to be a constant expression.
-					parameters.Add(new Parameter(name, value) { StartIndex = startParam, EndIndex = value.EndIndex });
+					parameters.Add(new Parameter(name, value)
+					{
+						StartIndex = startParam,
+						EndIndex = value.EndIndex,
+						Document = document
+					});
 					output.HasOptionalParams = optionalSeen = true;
 				}
 				else if (optionalSeen)
@@ -1410,7 +1449,8 @@ namespace Osprey
 					parameters.Add(new Parameter(name, null)
 					{
 						StartIndex = startParam,
-						EndIndex = tok[i - 1].EndIndex
+						EndIndex = tok[i - 1].EndIndex,
+						Document = document,
 					});
 			} while (Accept(ref i, TokenType.Comma));
 
@@ -1456,7 +1496,7 @@ namespace Osprey
 			if (Accept(i, TokenType.New) && Accept(i + 1, TokenType.Base))
 				return ParseBaseInitializer(ref i);
 			if (Accept(i, TokenType.Semicolon))
-				return new EmptyStatement() { StartIndex = tok[i].Index, EndIndex = tok[i++].EndIndex };
+				return new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 
 			var loopLabelFound = Accept(i, TokenType.Identifier) && Accept(i + 1, TokenType.Colon);
 			string loopLabel = loopLabelFound ? tok[i].Value : null;
@@ -1506,7 +1546,12 @@ namespace Osprey
 
 				Expect(ref i, TokenType.Semicolon);
 
-				return new ParallelLocalVariableDeclaration(names, value) { StartIndex = start, EndIndex = end };
+				return new ParallelLocalVariableDeclaration(names, value)
+					{
+						StartIndex = start,
+						EndIndex = end,
+						Document = document,
+					};
 			}
 
 			var vars = new List<VariableDeclarator>();
@@ -1525,12 +1570,13 @@ namespace Osprey
 				{
 					StartIndex = name.Index,
 					EndIndex = name.EndIndex,
+					Document = document,
 				});
 			} while (Accept(ref i, TokenType.Comma));
 
 			Expect(ref i, TokenType.Semicolon);
 
-			return new SimpleLocalVariableDeclaration(isConst, vars) { StartIndex = start, EndIndex = end };
+			return new SimpleLocalVariableDeclaration(isConst, vars) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private LocalFunctionDeclaration ParseLocalFunctionDeclaration(ref int i)
@@ -1551,6 +1597,7 @@ namespace Osprey
 				{
 					StartIndex = nameTok.Index,
 					EndIndex = end,
+					Document = document,
 				};
 		}
 
@@ -1571,6 +1618,7 @@ namespace Osprey
 				{
 					StartIndex = start,
 					EndIndex = tok[i - 1].EndIndex,
+					Document = document,
 				};
 		}
 
@@ -1589,7 +1637,7 @@ namespace Osprey
 			if (Accept(i, TokenType.Else))
 				@else = ParseElseClause(ref i);
 
-			return new IfStatement(cond, body, @else) { StartIndex = start, EndIndex = end };
+			return new IfStatement(cond, body, @else) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseControlBody(ref int i)
@@ -1600,7 +1648,7 @@ namespace Osprey
 				if (stmt is LocalDeclaration)
 					throw new ParseException(stmt, tok.Source, "Embedded statement cannot be a declaration.");
 				if (!SimplifiedTree)
-					return new EmbeddedStatement(stmt);
+					return new EmbeddedStatement(stmt) { Document = document };
 
 				var statements = new List<Statement>();
 				statements.Add(stmt);
@@ -1608,6 +1656,7 @@ namespace Osprey
 				{
 					StartIndex = stmt.StartIndex,
 					EndIndex = stmt.EndIndex,
+					Document = document,
 				};
 			}
 			if (!Accept(i, TokenType.CurlyOpen))
@@ -1622,7 +1671,7 @@ namespace Osprey
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
 			if (Accept(i, TokenType.CurlyOpen))
-				return new ElseClause(ParseBlock(ref i));
+				return new ElseClause(ParseBlock(ref i)) { Document = document };
 
 			var body = ParseStatement(ref i);
 			if (body is LocalDeclaration)
@@ -1636,10 +1685,11 @@ namespace Osprey
 				{
 					StartIndex = body.StartIndex,
 					EndIndex = body.EndIndex,
+					Document = document,
 				};
 			}
 
-			return new ElseClause(body);
+			return new ElseClause(body) { Document = document };
 		}
 
 		private Statement ParseTryStatement(ref int i)
@@ -1669,6 +1719,7 @@ namespace Osprey
 						{
 							StartIndex = catchStart,
 							EndIndex = catchEnd,
+							Document = document,
 						});
 				}
 				else if (Accept(i, TokenType.CurlyOpen)) // generic catch clause
@@ -1676,7 +1727,7 @@ namespace Osprey
 					if (genericCatchSeen)
 						throw new ParseException(tok[i], "There can only be one generic catch clause per try-catch.");
 
-					catches.Add(new CatchClause(ParseBlock(ref i)) { StartIndex = catchStart, EndIndex = catchEnd });
+					catches.Add(new CatchClause(ParseBlock(ref i)) { StartIndex = catchStart, EndIndex = catchEnd, Document = document });
 					genericCatchSeen = true;
 				}
 				else
@@ -1687,13 +1738,18 @@ namespace Osprey
 			if (Accept(i, TokenType.Finally))
 			{
 				int finStart = tok[i].Index, finEnd = tok[i++].EndIndex;
-				fin = new FinallyClause(ParseBlock(ref i)) { StartIndex = finStart, EndIndex = finEnd };
+				fin = new FinallyClause(ParseBlock(ref i)) { StartIndex = finStart, EndIndex = finEnd, Document = document };
 			}
 
 			if (catches.Count == 0 && fin == null)
 				throw new ParseException(startTok, "A try statement must have at least one catch or finally clause.");
 
-			return new TryStatement(body, catches, fin) { StartIndex = startTok.Index, EndIndex = startTok.EndIndex };
+			return new TryStatement(body, catches, fin)
+				{
+					StartIndex = startTok.Index,
+					EndIndex = startTok.EndIndex,
+					Document = document
+				};
 		}
 
 		private Statement ParseTransferStatement(ref int i)
@@ -1710,7 +1766,7 @@ namespace Osprey
 				else
 				{
 					i++;
-					return new ReturnStatement() { StartIndex = start, EndIndex = end };
+					return new ReturnStatement() { StartIndex = start, EndIndex = end, Document = document };
 				}
 
 			var values = new List<Expression>();
@@ -1727,15 +1783,16 @@ namespace Osprey
 				var list = new ListLiteralExpression(values)
 				{
 					StartIndex = values[0].StartIndex,
-					EndIndex = values[values.Count - 1].EndIndex
+					EndIndex = values[values.Count - 1].EndIndex,
+					Document = document,
 				};
 				values = new List<Expression> { list };
 			}
 
 			if (isYield)
-				return new YieldStatement(values) { StartIndex = start, EndIndex = end };
+				return new YieldStatement(values) { StartIndex = start, EndIndex = end, Document = document };
 			else
-				return new ReturnStatement(values) { StartIndex = start, EndIndex = end };
+				return new ReturnStatement(values) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseLoopFlowStatement(ref int i)
@@ -1755,9 +1812,15 @@ namespace Osprey
 
 			Expect(ref i, TokenType.Semicolon);
 
+			Statement result;
 			if (isBreak)
-				return new BreakStatement(label) { StartIndex = start, EndIndex = end };
-			return new NextStatement(label) { StartIndex = start, EndIndex = end };
+				result = new BreakStatement(label);
+			else
+				result = new NextStatement(label);
+			result.StartIndex = start;
+			result.EndIndex = end;
+			result.Document = document;
+			return result;
 		}
 
 		private Statement ParseThrowStatement(ref int i)
@@ -1766,13 +1829,13 @@ namespace Osprey
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
 			if (Accept(ref i, TokenType.Semicolon))
-				return new ThrowStatement(null) { StartIndex = start, EndIndex = end };
+				return new ThrowStatement(null) { StartIndex = start, EndIndex = end, Document = document };
 
 			var value = ParseExpression(ref i);
 
 			Expect(ref i, TokenType.Semicolon);
 
-			return new ThrowStatement(value) { StartIndex = start, EndIndex = end };
+			return new ThrowStatement(value) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseForStatement(ref int i, string label = null)
@@ -1799,6 +1862,7 @@ namespace Osprey
 				{
 					StartIndex = start,
 					EndIndex = end,
+					Document = document,
 				};
 		}
 
@@ -1813,7 +1877,7 @@ namespace Osprey
 
 			var body = ParseControlBody(ref i);
 
-			return new WhileStatement(label, cond, body) { StartIndex = start, EndIndex = end };
+			return new WhileStatement(label, cond, body) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseDoWhileStatement(ref int i, string label = null)
@@ -1832,7 +1896,7 @@ namespace Osprey
 
 			Expect(ref i, TokenType.Semicolon);
 
-			return new DoWhileStatement(label, body, cond) { StartIndex = start, EndIndex = end };
+			return new DoWhileStatement(label, body, cond) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseBaseInitializer(ref int i)
@@ -1849,7 +1913,7 @@ namespace Osprey
 			Expect(ref i, TokenType.ParenClose);
 			Expect(ref i, TokenType.Semicolon);
 
-			return new BaseInitializer(args) { StartIndex = start, EndIndex = end };
+			return new BaseInitializer(args) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseExpressionStatement(ref int i)
@@ -1861,7 +1925,7 @@ namespace Osprey
 			{
 				Expect(ref i, TokenType.Semicolon);
 				((AssignmentExpression)expr).IgnoreValue = true;
-				return new ExpressionStatement(expr) { StartIndex = start, EndIndex = expr.EndIndex };
+				return new ExpressionStatement(expr) { StartIndex = start, EndIndex = expr.EndIndex, Document = document };
 			}
 
 			if (Accept(i, TokenType.CompoundAssign))
@@ -1877,7 +1941,7 @@ namespace Osprey
 
 				Expect(ref i, TokenType.Semicolon);
 
-				return new CompoundAssignment(expr, value, op) { StartIndex = start, EndIndex = value.EndIndex };
+				return new CompoundAssignment(expr, value, op) { StartIndex = start, EndIndex = value.EndIndex, Document = document };
 			}
 
 			if (Accept(i, TokenType.Comma)) // parallel assignment
@@ -1895,7 +1959,7 @@ namespace Osprey
 				throw new ParseException(expr, tok.Source,
 					"Only invocation, function application, assignment and object creation can be used as a statement.");
 
-			return new ExpressionStatement(expr) { StartIndex = start, EndIndex = end };
+			return new ExpressionStatement(expr) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private static BinaryOperator GetCompoundAssignmentOp(TokenType type)
@@ -1957,7 +2021,7 @@ namespace Osprey
 					string.Format("Wrong number of values in parallel assignment (expected {0}, got {1})",
 					targets.Count, values.Count));
 
-			return new ParallelAssignment(targets, values) { StartIndex = startIndex, EndIndex = end };
+			return new ParallelAssignment(targets, values) { StartIndex = startIndex, EndIndex = end, Document = document };
 		}
 
 		private Block ParseBlockOrExtern(ref int i)
@@ -2018,6 +2082,7 @@ namespace Osprey
 			{
 				StartIndex = start.Index,
 				EndIndex = start.EndIndex,
+				Document = document,
 			};
 		}
 
@@ -2037,7 +2102,8 @@ namespace Osprey
 				return new AssignmentExpression(left, value)
 					{
 						StartIndex = left.StartIndex,
-						EndIndex = value.EndIndex
+						EndIndex = value.EndIndex,
+						Document = document,
 					};
 			}
 			return left;
@@ -2056,6 +2122,7 @@ namespace Osprey
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = falsePart.EndIndex,
+						Document = document,
 					};
 			}
 			return left;
@@ -2072,6 +2139,7 @@ namespace Osprey
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = right.EndIndex,
+						Document = document,
 					};
 			}
 			return left;
@@ -2088,6 +2156,7 @@ namespace Osprey
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = right.EndIndex,
+						Document = document,
 					};
 			}
 			return left;
@@ -2103,6 +2172,7 @@ namespace Osprey
 				{
 					StartIndex = left.StartIndex, // The start index never changes
 					EndIndex = right.EndIndex,
+					Document = document,
 				};
 			}
 			return left;
@@ -2118,6 +2188,7 @@ namespace Osprey
 				{
 					StartIndex = left.StartIndex,
 					EndIndex = right.EndIndex,
+					Document = document,
 				};
 			}
 			return left;
@@ -2133,6 +2204,7 @@ namespace Osprey
 				{
 					StartIndex = left.StartIndex,
 					EndIndex = right.EndIndex,
+					Document = document,
 				};
 			}
 			return left;
@@ -2155,6 +2227,7 @@ namespace Osprey
 							{
 								StartIndex = left.StartIndex,
 								EndIndex = tok[i++].EndIndex,
+								Document = document,
 							};
 					}
 
@@ -2165,6 +2238,7 @@ namespace Osprey
 							{
 								StartIndex = left.StartIndex,
 								EndIndex = type.EndIndex,
+								Document = document,
 							};
 					}
 					catch (ParseException e)
@@ -2181,13 +2255,14 @@ namespace Osprey
 				}
 				else // [not] refeq
 				{
-					bool negated = Accept(i, TokenType.Not);
-					i += negated ? 2 : 1;
+					bool negated = Accept(ref i, TokenType.Not); // skips 'not' if present
+					i++; // skip 'refeq'
 					var right = ParseRelationalExpr(ref i);
 					left = new ReferenceTestExpression(left, negated, right)
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = right.EndIndex,
+						Document = document,
 					};
 				}
 			}
@@ -2345,12 +2420,14 @@ namespace Osprey
 						{
 							StartIndex = left.StartIndex,
 							EndIndex = tok[i++].EndIndex,
+							Document = document,
 						};
 					else if (Accept(i, TokenType.Identifier))
 						left = new MemberAccess(left, tok[i].Value)
 						{
 							StartIndex = left.StartIndex,
 							EndIndex = tok[i++].EndIndex,
+							Document = document,
 						};
 					else
 						throw new ParseException(tok[i], "Expected identifier or 'iter'.");
@@ -2362,6 +2439,7 @@ namespace Osprey
 					var access = new SafeAccess(left) { StartIndex = left.StartIndex };
 					ParseSafeAccessChain(ref i, access.Chain);
 					access.EndIndex = tok[i - 1].EndIndex;
+					access.Document = document;
 					left = access;
 				}
 				else if (type == TokenType.ParenOpen)
@@ -2375,6 +2453,7 @@ namespace Osprey
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = tok[i++].EndIndex,
+						Document = document,
 					};
 				}
 				else // tok[i].Type == TokenType.SquareOpen
@@ -2391,6 +2470,7 @@ namespace Osprey
 					{
 						StartIndex = left.StartIndex,
 						EndIndex = tok[i++].EndIndex,
+						Document = document,
 					};
 				}
 			}
@@ -2406,10 +2486,11 @@ namespace Osprey
 			while (Accept(i, TokenType.Dot, TokenType.ParenOpen, TokenType.SquareOpen,
 				TokenType.SafeAccess, TokenType.ParenOpenSafe, TokenType.SquareOpenSafe))
 			{
+				var start = tok[i].Index;
 				var type = tok[i++].Type;
+				SafeNode safeNode;
 				if (type == TokenType.Dot || type == TokenType.SafeAccess)
 				{
-					SafeNode safeNode;
 					if (Accept(i, TokenType.Iter))
 						safeNode = new SafeIteratorLookup(type == TokenType.SafeAccess);
 					else
@@ -2417,25 +2498,24 @@ namespace Osprey
 						Expect(i, TokenType.Identifier);
 						safeNode = new SafeMemberAccess(tok[i].Value, type == TokenType.SafeAccess);
 					}
-
-					safeNode.StartIndex = tok[i].Index;
-					safeNode.EndIndex = tok[i].EndIndex;
-
 					i++; // Skip 'iter'/identifier
-					target.Add(safeNode);
 				}
 				else if (type == TokenType.ParenOpen || type == TokenType.ParenOpenSafe)
 				{
 					var args = ParseArgumentList(ref i);
 					Expect(ref i, TokenType.ParenClose);
-					target.Add(new SafeInvocation(args, type == TokenType.ParenOpenSafe));
+					safeNode = new SafeInvocation(args, type == TokenType.ParenOpenSafe);
 				}
 				else // type == TokenType.SquareOpen || type == TokenType.SquareOpenSafe
 				{
 					var args = ParseArgumentList(ref i, false, TokenType.SquareClose);
 					Expect(ref i, TokenType.SquareClose);
-					target.Add(new SafeIndexerAccess(args, type == TokenType.SquareOpenSafe));
+					safeNode = new SafeIndexerAccess(args, type == TokenType.SquareOpenSafe);
 				}
+				safeNode.StartIndex = start;
+				safeNode.EndIndex = tok[i - 1].EndIndex;
+				safeNode.Document = document;
+				target.Add(safeNode);
 			}
 		}
 
@@ -2458,14 +2538,11 @@ namespace Osprey
 				var inner = ParseExpression(ref i);
 				Expect(ref i, TokenType.ParenClose);
 
-				// Not anymore!
-				//if (SimplifiedTree)
-				//	return inner;
-
 				return new ParenthesizedExpression(inner)
 					{
 						StartIndex = start,
 						EndIndex = tok[i - 1].EndIndex,
+						Document = document,
 					};
 			}
 			if (Accept(i, TokenType.Literal))
@@ -2484,8 +2561,9 @@ namespace Osprey
 					default:
 						throw new ParseException(t, "Invalid/unknown literal type");
 				}
-				result.StartIndex = t.Index;
+				result.StartIndex = start;
 				result.EndIndex = t.EndIndex;
+				result.Document = document;
 				return result;
 			}
 			if (Accept(i, TokenType.Identifier))
@@ -2495,23 +2573,27 @@ namespace Osprey
 					if (tok[i].Value == "__named_const")
 						return ParseNamedConstExpr(ref i);
 					if (tok[i].Value == "__get_argc")
-						return new GetArgumentCount() { StartIndex = start, EndIndex = tok[i++].EndIndex };
+						return new GetArgumentCount() { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
 				}
 
-				return new SimpleNameExpression(tok[i].Value) { StartIndex = start, EndIndex = tok[i++].EndIndex };
+				return new SimpleNameExpression(tok[i].Value)
+				{
+					StartIndex = start,
+					EndIndex = tok[i++].EndIndex,
+					Document = document,
+				};
 			}
 
 			if (Accept(i, TokenType.This))
-				return new ThisAccess() { StartIndex = start, EndIndex = tok[i++].EndIndex };
-
+				return new ThisAccess() { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
 			if (Accept(i, TokenType.Base))
-				return new BaseAccess() { StartIndex = start, EndIndex = tok[i++].EndIndex };
+				return new BaseAccess() { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
 
 			if (Accept(ref i, TokenType.Global))
 			{
 				Expect(ref i, TokenType.Dot);
 				Expect(i, TokenType.Identifier);
-				return new GlobalAccess(tok[i].Value) { StartIndex = start, EndIndex = tok[i++].EndIndex };
+				return new GlobalAccess(tok[i].Value) { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
 			}
 			if (Accept(i, TokenType.New))
 				return ParseObjectCreationExpr(ref i);
@@ -2541,6 +2623,7 @@ namespace Osprey
 				var expr = isTypeof ? (Expression)new TypeofExpression(inner) : (Expression)new IteratorLookup(inner);
 				expr.StartIndex = start;
 				expr.EndIndex = tok[i++].EndIndex;
+				expr.Document = document;
 
 				return expr;
 			}
@@ -2572,7 +2655,8 @@ namespace Osprey
 			return new NamedConstant(scope, name)
 			{
 				StartIndex = startIndex,
-				EndIndex = tok[i++].EndIndex
+				EndIndex = tok[i++].EndIndex,
+				Document = document,
 			};
 		}
 
@@ -2594,6 +2678,7 @@ namespace Osprey
 				{
 					StartIndex = start,
 					EndIndex = tok[i++].EndIndex,
+					Document = document,
 				};
 		}
 
@@ -2625,7 +2710,7 @@ namespace Osprey
 			var items = new List<Expression>();
 
 			if (Accept(i, TokenType.SquareClose)) // empty list
-				return new ListLiteralExpression(items) { StartIndex = start, EndIndex = tok[i++].EndIndex };
+				return new ListLiteralExpression(items) { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
 
 			var isGenerator = false;
 			if (Accept(ref i, TokenType.Yield))
@@ -2653,6 +2738,7 @@ namespace Osprey
 					{
 						StartIndex = start,
 						EndIndex = tok[i++].EndIndex,
+						Document = document,
 					};
 			}
 
@@ -2697,6 +2783,7 @@ namespace Osprey
 					{
 						StartIndex = start,
 						EndIndex = tok[i++].EndIndex,
+						Document = document,
 					};
 			}
 			else if (isGenerator)
@@ -2710,6 +2797,7 @@ namespace Osprey
 				{
 					StartIndex = start,
 					EndIndex = tok[i++].EndIndex,
+					Document = document,
 				};
 		}
 
@@ -2721,7 +2809,7 @@ namespace Osprey
 			List<HashMember> members = new List<HashMember>();
 
 			if (Accept(i, TokenType.CurlyClose)) // empty hash
-				return new HashLiteralExpression(members) { StartIndex = start, EndIndex = tok[i++].EndIndex };
+				return new HashLiteralExpression(members) { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
 
 			// {,} is not a valid hash: trailing commas are only allowed if there's at least one member
 			do
@@ -2735,19 +2823,16 @@ namespace Osprey
 						key = new SimpleNameExpression(tok[i].Value);
 
 					key.StartIndex = tok[i].Index;
-					key.EndIndex = tok[i++].EndIndex;
 				}
 				else if (Accept(i, TokenType.String))
 					key = new StringLiteral((StringToken)tok[i])
 					{
 						StartIndex = tok[i].Index,
-						EndIndex = tok[i++].EndIndex,
 					};
 				else if (Accept(i, TokenType.Integer))
 					key = new IntegerLiteral(tok[i])
 					{
 						StartIndex = tok[i].Index,
-						EndIndex = tok[i++].EndIndex,
 					};
 				else if (Accept(i, TokenType.ParenOpen)) // parenthesised expression as key
 				{
@@ -2756,10 +2841,13 @@ namespace Osprey
 
 					Expect(i, TokenType.ParenClose);
 
-					key.EndIndex = tok[i++].EndIndex;
+					key.StartIndex = startParen;
 				}
 				else
 					throw new ParseException(tok[i], "The hash key must be an identifier, string, integer or parenthesized expression.");
+
+				key.EndIndex = tok[i++].EndIndex;
+				key.Document = document;
 
 				Expect(ref i, TokenType.Colon);
 
@@ -2774,17 +2862,14 @@ namespace Osprey
 			return new HashLiteralExpression(members)
 				{
 					StartIndex = start,
-					EndIndex = tok[i++].EndIndex
+					EndIndex = tok[i++].EndIndex,
+					Document = document,
 				};
 		}
 
 		private Expression ParseLambaExpr(ref int i)
 		{
-			Expect(i, TokenType.At);
-			var start = tok[i++].Index;
-
-			var parameters = new List<Parameter>();
-			var splat = Splat.None;
+			var start = Expect(ref i, TokenType.At).Index;
 
 			if (Accept(i, TokenType.LambdaOperator))
 			{
@@ -2793,6 +2878,7 @@ namespace Osprey
 					{
 						StartIndex = start,
 						EndIndex = tok[i++].EndIndex,
+						Document = document,
 					};
 			}
 			else if (Accept(i, TokenType.Dot, TokenType.SafeAccess))
@@ -2800,11 +2886,19 @@ namespace Osprey
 				var lambda = new LambdaMemberExpression() { StartIndex = start };
 				ParseSafeAccessChain(ref i, lambda.SafeAccessChain);
 				lambda.EndIndex = tok[i - 1].EndIndex;
+				lambda.Document = document;
 				return lambda;
 			}
-			else if (Accept(i, TokenType.Identifier)) // single parameter
+			var parameters = new List<Parameter>();
+			var splat = Splat.None;
+			if (Accept(i, TokenType.Identifier)) // single parameter
 			{
-				parameters.Add(new Parameter(tok[i].Value, null) { StartIndex = start, EndIndex = tok[i++].EndIndex });
+				parameters.Add(new Parameter(tok[i].Value, null)
+				{
+					StartIndex = start,
+					EndIndex = tok[i++].EndIndex,
+					Document = document,
+				});
 			}
 			else if (Accept(i, TokenType.ParenOpen))
 			{
@@ -2827,7 +2921,12 @@ namespace Osprey
 			else
 				throw new ParseException(tok[i], "Unexpected token " + tok[i] + ". Expected lambda expression body.");
 
-			return new LambdaExpression(parameters, splat, body) { StartIndex = start, EndIndex = tok[i - 1].EndIndex };
+			return new LambdaExpression(parameters, splat, body)
+				{
+					StartIndex = start,
+					EndIndex = tok[i - 1].EndIndex,
+					Document = document,
+				};
 		}
 
 		private LambdaOperator TokenTypeToLambdaOperator(TokenType type)

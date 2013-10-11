@@ -43,6 +43,13 @@ namespace Osprey.Nodes
 
 	public sealed class EmptyStatement : Statement
 	{
+		public EmptyStatement() { }
+		public EmptyStatement(int startIndex, int endIndex)
+		{
+			StartIndex = startIndex;
+			EndIndex = endIndex;
+		}
+
 		public override string ToString(int indent)
 		{
 			return new string('\t', indent) + ";";
@@ -264,7 +271,14 @@ namespace Osprey.Nodes
 				if (!stmt.IsEndReachable)
 				{
 					if (i < iMax)
-						compiler.Warning("Unreachable code detected.");
+					{
+						var next = Statements[i + 1];
+						compiler.Warning("Unreachable code detected.",
+							CompilerVerbosity.NotVerbose,
+							new MessageLocation(next.Document.FileName,
+								next.Document.FileSource,
+								next.StartIndex, next.EndIndex));
+					}
 					break;
 				}
 			}

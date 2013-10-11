@@ -1500,7 +1500,7 @@ namespace Osprey
 		}
 
 		/// <summary>
-		/// Outputs a notice-level compiler message.
+		/// Outputs a notice-type compiler message.
 		/// </summary>
 		/// <param name="message">The message to print.</param>
 		public void Notice(string message)
@@ -1508,16 +1508,30 @@ namespace Osprey
 			Notice(message, CompilerVerbosity.NotVerbose);
 		}
 		/// <summary>
-		/// Outputs a notice-level compiler message.
+		/// Outputs a notice-type compiler message.
 		/// </summary>
 		/// <param name="message">The message to print.</param>
-		/// <param name="verbose">Whether the message counts as verbose; if true, the message is not printed unless the <see cref="CompilerFlags.Verbose"/> flag is specified.</param>
+		/// <param name="level">The verbosity level of the message.</param>
 		public void Notice(string message, CompilerVerbosity level)
 		{
 			if (SilenceNotices || level > verbosity)
 				return;
 
 			Console.Write("[info] ");
+			Console.WriteLine(message);
+		}
+		/// <summary>
+		/// Outputs a notice-type compiler message, prefixed with a source file location.
+		/// </summary>
+		/// <param name="message">The message to print.</param>
+		/// <param name="level">The verbosity level of the message.</param>
+		/// <param name="location">The source file location of the source of the message.</param>
+		public void Notice(string message, CompilerVerbosity level, MessageLocation location)
+		{
+			if (SilenceNotices || level > verbosity)
+				return;
+
+			Console.Write("[info {0}] ", location.ToString(1));
 			Console.WriteLine(message);
 		}
 
@@ -1547,7 +1561,7 @@ namespace Osprey
 		}
 
 		/// <summary>
-		/// Outputs a warning-level compiler message.
+		/// Outputs a warning-type compiler message.
 		/// </summary>
 		/// <param name="message">The message to print.</param>
 		public void Warning(string message)
@@ -1555,16 +1569,30 @@ namespace Osprey
 			Warning(message, CompilerVerbosity.NotVerbose);
 		}
 		/// <summary>
-		/// Outputs a warning-level compiler message.
+		/// Outputs a warning-type compiler message.
 		/// </summary>
 		/// <param name="message">The message to print.</param>
-		/// <param name="verbose">Whether the message counts as verbose; if true, the message is not printed unless the <see cref="CompilerFlags.Verbose"/> flag is specified.</param>
+		/// <param name="level">The verbosity level of the message.</param>
 		public void Warning(string message, CompilerVerbosity level)
 		{
 			if (SilenceWarnings || level > verbosity)
 				return;
 
 			Console.Write("[warn] ");
+			Console.WriteLine(message);
+		}
+		/// <summary>
+		/// Outputs a warning-type compiler message.
+		/// </summary>
+		/// <param name="message">The message to print.</param>
+		/// <param name="level">The verbosity level of the message.</param>
+		/// <param name="location">The source file location of the source of the message.</param>
+		public void Warning(string message, CompilerVerbosity level, MessageLocation location)
+		{
+			if (SilenceWarnings || level > verbosity)
+				return;
+
+			Console.Write("[warn {0}] ", location.ToString(1));
 			Console.WriteLine(message);
 		}
 
@@ -1893,5 +1921,65 @@ namespace Osprey
 		/// The project is a module, which only exports members and has no main method.
 		/// </summary>
 		Module = 1,
+	}
+
+	public struct MessageLocation
+	{
+		public MessageLocation(string fileName, string sourceText, int startIndex, int endIndex)
+		{
+			this.fileName = fileName;
+			this.sourceText = sourceText;
+			this.startIndex = startIndex;
+			this.endIndex = endIndex;
+		}
+
+		private string fileName;
+		/// <summary>
+		/// Gets the name of the file which the message location is inside of.
+		/// </summary>
+		public string FileName { get { return fileName; } }
+
+		private string sourceText;
+		/// <summary>
+		/// Gets the text contents of the file that the message location is inside of.
+		/// </summary>
+		public string SourceText { get { return sourceText; } }
+
+		private int startIndex, endIndex;
+		/// <summary>
+		/// Gets the character index within the source text at which
+		/// the message begins.
+		/// </summary>
+		public int StartIndex { get { return startIndex; } }
+		/// <summary>
+		/// Gets the last character index (exclusive) of the message
+		/// within the source text.
+		/// </summary>
+		public int EndIndex { get { return endIndex; } }
+
+		/// <summary>
+		/// Gets the line and column number, both 1-based, of the message
+		/// within the source text.
+		/// </summary>
+		/// <param name="tabSize">The size of the tab character.</param>
+		/// <param name="column">The column number of the message location.</param>
+		/// <returns>The line number at which the message location begins.</returns>
+		public int GetLineNumber(int tabSize, out int column)
+		{
+			return Token.GetLineNumber(sourceText, startIndex, tabSize, out column);
+		}
+
+		public override string ToString()
+		{
+			return ToString(1);
+		}
+
+		public string ToString(int tabSize)
+		{
+			int column;
+			var line = GetLineNumber(tabSize, out column);
+
+			return string.Format("\"{0}\":{1}:{2}", fileName, line, column);
+		}
 	}
 }
