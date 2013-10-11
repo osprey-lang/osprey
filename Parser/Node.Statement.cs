@@ -192,7 +192,24 @@ namespace Osprey.Nodes
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			if (forGenerator && CanYield)
+			if (!forGenerator)
+			{
+				foreach (var member in DeclSpace.members.Values)
+				{
+					var variable = member as Variable;
+					if (variable != null && variable.IsCaptured &&
+						variable.VariableKind == VariableKind.IterationVariable)
+						Initializer.Add(new AssignmentExpression(
+							new InstanceMemberAccess(
+								new LocalVariableAccess(DeclSpace.ClosureVariable, LocalAccessKind.ClosureLocal),
+								DeclSpace.ClosureClass,
+								variable.CaptureField
+							) { IsAssignment = true },
+							new LocalVariableAccess(variable, LocalAccessKind.NonCapturing)
+						) { IgnoreValue = true });
+				}
+			}
+			else if (CanYield)
 			{
 				// We need to put all the locals declared here into a field.
 				var genClass = DeclSpace.Method.GeneratorClass;
@@ -1425,7 +1442,7 @@ namespace Osprey.Nodes
 			iterState.Done();
 		}
 
-		private class RangeState
+		private struct RangeState
 		{
 			public Variable Counter;
 			public LocalVariable CounterLoc;
@@ -1547,7 +1564,7 @@ namespace Osprey.Nodes
 			}
 		}
 
-		private class IterState
+		private struct IterState
 		{
 			public Variable[] Variables;
 			public Compiler.UnpackAssigner[] VariableAssigners;
