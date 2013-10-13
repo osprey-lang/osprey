@@ -3507,7 +3507,7 @@ namespace Osprey.Nodes
 				method.Append(Branch.IfFalse(loopEnd)); // End loop if not counter <= high
 			}
 			{ // Body
-				if (index == parent.Expressions.Count - 1)
+				if (index == parent.Iterators.Count - 1)
 					CompileBody(compiler, method, parent, listLoc);
 				else
 					parent.Iterators[index + 1].Compile(compiler, method, index + 1, parent, listLoc);
@@ -3556,7 +3556,7 @@ namespace Osprey.Nodes
 			}
 			{ // Body
 
-				if (index == parent.Expressions.Count - 1)
+				if (index == parent.Iterators.Count - 1)
 					CompileBody(compiler, method, parent, listLoc);
 				else
 					parent.Iterators[index + 1].Compile(compiler, method, index + 1, parent, listLoc);
