@@ -3502,7 +3502,7 @@ namespace Osprey.Nodes
 					range.High.Compile(compiler, method);
 				else
 					method.Append(new LoadLocal(highLoc));
-				method.Append(new SimpleInstruction(Opcode.Gte)); // counter <= high
+				method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= high
 
 				method.Append(Branch.IfFalse(loopEnd)); // End loop if not counter <= high
 			}

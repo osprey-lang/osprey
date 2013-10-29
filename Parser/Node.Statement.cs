@@ -892,9 +892,26 @@ namespace Osprey.Nodes
 			else
 			{
 				var elseLabel = new Label("else");
-				Condition.CompileBoolean(compiler, elseLabel, false, method); // Evaluate the condition
+				var bodyBlock = (Block)Body;
+				var firstStmt = bodyBlock.Statements.Count == 0 ? null : bodyBlock.Statements[0];
+				if (firstStmt is BreakStatement ? !((BreakStatement)firstStmt).IsLeave :
+					firstStmt is NextStatement && !((NextStatement)firstStmt).IsLeave)
+				{
+					// Let's find the correct loop, yay!
+					var isBreak = firstStmt is BreakStatement;
+					IterationStatement.LoopState loopState;
+					IterationStatement.FindLoopState(method,
+						isBreak ? ((BreakStatement)firstStmt).Label : ((NextStatement)firstStmt).Label,
+						out loopState);
 
-				Body.Compile(compiler, method); // Evaluate the if body
+					Condition.CompileBoolean(compiler, isBreak ? loopState.BreakLabel : loopState.NextLabel, true, method);
+				}
+				else
+				{
+					Condition.CompileBoolean(compiler, elseLabel, false, method); // Evaluate the condition
+
+					Body.Compile(compiler, method); // Evaluate the if body
+				}
 
 				if (Else != null)
 				{
@@ -2369,7 +2386,7 @@ namespace Osprey.Nodes
 		public string Label;
 
 		private BlockSpace parent;
-		private bool isLeave = false;
+		internal bool IsLeave = false;
 
 		public override bool IsEndReachable { get { return false; } }
 
@@ -2384,7 +2401,7 @@ namespace Osprey.Nodes
 			if (context is BlockSpace)
 			{
 				parent = (BlockSpace)context;
-				var loop = parent.FindLoop(this, Label, out isLeave);
+				var loop = parent.FindLoop(this, Label, out IsLeave);
 
 				if (loop is DoWhileStatement && ((DoWhileStatement)loop).Condition == null)
 					throw new CompileTimeException(this, "A 'next' statement may not refer to a 'do {...};' statement. Use 'break' instead.");
@@ -2397,7 +2414,7 @@ namespace Osprey.Nodes
 		{
 			IterationStatement.LoopState loop;
 			IterationStatement.FindLoopState(method, Label, out loop);
-			if (isLeave)
+			if (IsLeave)
 				method.Append(Branch.Leave(loop.NextLabel));
 			else
 				method.Append(Branch.Always(loop.NextLabel));
@@ -2415,7 +2432,7 @@ namespace Osprey.Nodes
 		public string Label;
 
 		private BlockSpace parent;
-		private bool isLeave = false;
+		internal bool IsLeave = false;
 
 		public override bool IsEndReachable { get { return false; } }
 
@@ -2429,7 +2446,7 @@ namespace Osprey.Nodes
 			if (context is BlockSpace)
 			{
 				parent = (BlockSpace)context;
-				var loop = parent.FindLoop(this, Label, out isLeave);
+				var loop = parent.FindLoop(this, Label, out IsLeave);
 				loop.BreakCount++;
 			}
 		}
@@ -2438,7 +2455,7 @@ namespace Osprey.Nodes
 		{
 			IterationStatement.LoopState loop;
 			IterationStatement.FindLoopState(method, Label, out loop);
-			if (isLeave)
+			if (IsLeave)
 				method.Append(Branch.Leave(loop.BreakLabel));
 			else
 				method.Append(Branch.Always(loop.BreakLabel));
