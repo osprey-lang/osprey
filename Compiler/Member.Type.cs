@@ -703,11 +703,14 @@ namespace Osprey.Members
 			foreach (var overload in group)
 				OverrideIfPossible(overload);
 
-			members[name] = group;
-			Class _;
-			var baseMember = GetBaseMember(name, this.BaseType as Class, out _);
-			if (baseMember != null && baseMember.Kind == MemberKind.MethodGroup)
-				group.BaseGroup = (MethodGroup)baseMember;
+			if ((group[0].Flags & MemberFlags.Constructor) == MemberFlags.None)
+			{
+				members[name] = group;
+				Class _;
+				var baseMember = GetBaseMember(name, this.BaseType as Class, out _);
+				if (baseMember != null && baseMember.Kind == MemberKind.MethodGroup)
+					group.BaseGroup = (MethodGroup)baseMember;
+			}
 		}
 
 		internal void ImportIndexer(Indexer indexer)
@@ -831,6 +834,8 @@ namespace Osprey.Members
 			//   b) there IS such a method group, but it has an overridable overload
 			//      with the same signature as the method we're adding, OR the method
 			//      can be added as an overload without ambiguity.
+			//      (It is not, however, possible to overload protected method groups
+			//      declared in a base class[1].)
 			//      An overload is overridable if it has the 'overridable' modifier,
 			//      or if it's abstract. In addition, if the method we're declaring
 			//      CAN override a base method, then it MUST be marked 'override'.
@@ -860,6 +865,22 @@ namespace Osprey.Members
 			//     }
 			// If we stopped searching as soon as we found a suitable base method, then
 			// the first C.foo would be considered valid, as it would overload B.foo.
+			//
+			// [1] Example:
+			//     class A {
+			//         protected overridable f() { }
+			//     }
+			//     class B is A {
+			//         // The method group f originated in A, and this attempts
+			//         // to overload it:
+			//         protected f(x) { } // error
+			//         // We can still override protected methods, though:
+			//         overridable override f() { } // valid
+			//     }
+			//     class C is A {
+			//         protected f(κ, λ) { } // same as before; can't overload f outside A
+			//         override f() { } // still valid; overrides B.f
+			//     }
 
 			if ((method.Flags & MemberFlags.Constructor) == MemberFlags.Constructor ||
 				(method.Flags & MemberFlags.Operator) == MemberFlags.Operator)
@@ -931,7 +952,18 @@ namespace Osprey.Members
 						// So we just break. Plain and simple.
 						break;
 					}
-					if (!baseGroup.CanDeclare(method.Signature))
+					// We cannot add overloads to protected method groups outside
+					// the originating class, that is, the class that introduced
+					// the method group.
+					if (baseGroup.Access == AccessLevel.Protected)
+					{
+						// ... but we don't throw that error until we actually reach the base group.
+						if (baseGroup.BaseGroup == null)
+							throw new DeclarationException(errorNode,
+								string.Format("Cannot add overload to protected method group '{0}.{1}' outside of the class '{0}'.",
+									baseGroup.ParentAsClass.FullName, name));
+					}
+					else if (!baseGroup.CanDeclare(method.Signature))
 						throw new OverloadException(errorNode, method);
 
 					baseStartType = baseStartType.BaseType as Class;
@@ -1069,7 +1101,7 @@ namespace Osprey.Members
 
 		internal string GetLambdaName(string nameHint)
 		{
-			return string.Format("<λc>{0}${1}", nameHint ?? "<anon>", lambdaNameCounter++);
+			return string.Format("<λc>{0}${1}", nameHint ?? "__", lambdaNameCounter++);
 		}
 
 		private enum ClassState

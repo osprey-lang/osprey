@@ -658,7 +658,7 @@ namespace Osprey.Members
 
 		internal string GetLambdaName(string nameHint)
 		{
-			return string.Format("<λns>{0}${1}", nameHint ?? "<anon>", lambdaNameCounter++);
+			return string.Format("<λns>{0}${1}", nameHint ?? "__", lambdaNameCounter++);
 		}
 
 		IDeclarationSpace IDeclarationSpace.Parent { get { return parent; } }
@@ -1231,7 +1231,7 @@ namespace Osprey.Members
 			while (method is LocalMethod)
 				method = ((LocalMethod)method).Function.Parent.Method;
 
-			return string.Format("<λ>{0}${1}", nameHint ?? "<anon>", method.LambdaNameCounter++);
+			return string.Format("<λ>{0}${1}", nameHint ?? "__", method.LambdaNameCounter++);
 		}
 		/// <summary>
 		/// Gets a lambda parameter name that is guaranteed not to clash with
