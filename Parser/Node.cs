@@ -809,10 +809,16 @@ namespace Osprey.Nodes
 				if (@class == null)
 					throw new InvalidOperationException("ConstructorParam found outside class.");
 
-				var member = @class.GetMember(this.Name, instType: @class, fromType: @class);
+				NamedMember inaccessibleMember;
+				var member = @class.GetMember(this.Name, instType: @class, fromType: @class,
+					inaccessibleMember: out inaccessibleMember);
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(this, string.Format("The member '{0}' is not accessible in this context.",
+						inaccessibleMember.FullName));
 				if (member == null)
-					throw new CompileTimeException(this, string.Format("The type '{0}' does not contain a definition for '{1}'.",
-						@class.FullName, this.Name));
+					throw new UndefinedNameException(this, this.Name,
+						string.Format("The type '{0}' does not contain a definition for '{1}'.",
+							@class.FullName, this.Name));
 
 				if (member.Kind != MemberKind.Field &&
 					(member.Kind != MemberKind.Property || ((Property)member).PropertyKind == PropertyKind.ReadOnly))
@@ -820,11 +826,15 @@ namespace Osprey.Nodes
 						@class.FullName, this.Name));
 
 				// At this point, we know it's a field or a property, and those are both derived from ClassMember.
-				if (((ClassMember)member).IsStatic)
-					throw new CompileTimeException(this, string.Format("The member '{0}.{1}' is static and cannot be referred to in a 'this' parameter.",
+				var classMem = (ClassMember)member;
+				if (classMem.IsStatic)
+					throw new CompileTimeException(this, string.Format("The member '{0}.{1}' is static and cannot be used in a 'this' parameter.",
 						@class.FullName, this.Name));
+				if (classMem.Parent != @class)
+					throw new CompileTimeException(this, string.Format("The member '{0}.{1}' cannot be used in a 'this' parameter, because it is not declared in the class '{2}'.",
+						classMem.Parent.FullName, this.Name, @class.FullName));
 
-				this.Member = (ClassMember)member;
+				this.Member = classMem;
 			}
 		}
 	}

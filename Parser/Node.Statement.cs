@@ -2801,7 +2801,7 @@ namespace Osprey.Nodes
 			if (@class.BaseType == null)
 				throw new CompileTimeException(this, "Base initializers may not be used inside aves.Object.");
 
-			var baseCtor = @class.BaseType.FindConstructor(this, Arguments.Count, @class);
+			var baseCtor = @class.BaseType.FindConstructor(this, Arguments.Count, instClass: @class, fromClass: @class);
 			if (baseCtor == null)
 				throw new CompileTimeException(this, string.Format("Could not find a constructor for '{0}' that takes {1} arguments.",
 					@class.BaseType.FullName, Arguments.Count));

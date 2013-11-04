@@ -603,7 +603,7 @@ namespace Osprey.Members
 
 		private void TransformToIteratorGenerator(GeneratorClass genClass, bool hasThisField)
 		{
-			var ctor = genClass.FindConstructor(null, 0, Group.ParentAsClass);
+			var ctor = genClass.FindConstructor(null, 0, genClass, Group.ParentAsClass);
 			Block block;
 			if (hasThisField || Parameters.Length > 0)
 			{

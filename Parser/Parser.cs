@@ -1301,7 +1301,12 @@ namespace Osprey
 				{
 					if (counter < 0)
 						throw new ParseException(tok[i], "Too many auto-enumerated values in enum; the counter has overflowed.");
-					memberValue = new ConstantExpression(ConstantValue.CreateInt(counter));
+					memberValue = new ConstantExpression(ConstantValue.CreateInt(counter))
+						{
+							StartIndex = memberName.Index,
+							EndIndex = memberName.EndIndex,
+							Document = document,
+						};
 
 					// Both of these may overflow into the sign bit, but that's
 					// not a problem until you try to use the value.
@@ -3077,9 +3082,16 @@ namespace Osprey
 						"A static method, property or indexer cannot be marked as abstract, overridable or override.");
 				if (IsAbstract && IsOverridable)
 					throw new ParseException(errorToken, "A method, property or indexer cannot be marked as both abstract and overridable.");
+
 				if (Access == AccessLevel.Private && (IsAbstract || IsOverridable || IsOverride))
 					throw new ParseException(errorToken,
 						"A private method, property or indexer cannot be marked abstract, overridable or override.");
+				// No declared accessibility => default to private, unless override, in which case inherit the accessibility.
+				// We can't check what's being overridden here, but if there is no override specifier, we can still throw.
+				// (Code at a later stage makes sure that there is a member to override, and inherits the accessibility correctly.)
+				if (Access == AccessLevel.None && !IsOverride && (IsAbstract || IsOverridable))
+					throw new ParseException(errorToken,
+						"A method, property or indexer marked abstract or overridable cannot be private.");
 			}
 			public void ValidateForIndexer(Token errorToken)
 			{

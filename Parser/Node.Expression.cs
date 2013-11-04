@@ -1986,8 +1986,14 @@ namespace Osprey.Nodes
 				var thisType = @class;
 				if (Inner is BaseAccess)
 					@class = (Class)@class.BaseType;
-				var member = @class.GetMember(Member, instType: thisType, fromType: thisType);
 
+				NamedMember inaccessibleMember;
+				var member = @class.GetMember(Member, instType: thisType, fromType: thisType,
+					inaccessibleMember: out inaccessibleMember);
+
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(this, string.Format("The member '{0}' is not accessible in this context.",
+						inaccessibleMember.FullName));
 				if (member == null)
 					throw new UndefinedNameException(this, Member,
 						string.Format("The type '{0}' does not contain a definition for '{1}'.",
@@ -2024,8 +2030,13 @@ namespace Osprey.Nodes
 				bool hasInstance;
 				var @class = context.GetContainingClass(out hasInstance);
 
-				var member = knownType.GetMember(Member, instType: @class, fromType: @class);
+				NamedMember inaccessibleMember;
+				var member = knownType.GetMember(Member, instType: knownType, fromType: @class,
+					inaccessibleMember: out inaccessibleMember);
 
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(this, string.Format("The member '{0}' is not accessible in this context.",
+						inaccessibleMember.FullName));
 				if (member == null)
 					throw new UndefinedNameException(this, Member,
 						string.Format("The type '{0}' does not contain a definition for '{1}'.",
@@ -2613,7 +2624,8 @@ namespace Osprey.Nodes
 		{
 			var type = context.GetContainingNamespace().ResolveTypeName(Type, document);
 			bool _;
-			Constructor = type.FindConstructor(Type, Arguments.Count, context.GetContainingClass(out _));
+			Constructor = type.FindConstructor(Type, Arguments.Count,
+				instClass: type as Class, fromClass: context.GetContainingClass(out _));
 
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
@@ -2990,9 +3002,14 @@ namespace Osprey.Nodes
 					@class = (Class)type;
 				}
 
+				NamedMember inaccessibleMember;
 				var invocators = @class.GetMember(".call",
 					instType: Inner is BaseAccess ? @class.BaseType : @class,
-					fromType: @class);
+					fromType: @class,
+					inaccessibleMember: out inaccessibleMember);
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(Inner, string.Format("The member '{0}' is not accessible in this context.",
+						inaccessibleMember.FullName));
 				if (invocators == null || invocators.Kind != MemberKind.MethodGroup)
 					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator.",
 						@class.FullName));

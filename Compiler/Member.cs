@@ -204,7 +204,7 @@ namespace Osprey.Members
 			return null;
 		}
 
-		public override Method FindConstructor(ParseNode node, int argCount, Class fromClass)
+		public override Method FindConstructor(ParseNode node, int argCount, Class instClass, Class fromClass)
 		{
 			throw new NotSupportedException();
 		}
@@ -1403,7 +1403,7 @@ namespace Osprey.Members
 		private Method AddClosureConstructor(ClosureClass closure)
 		{
 			// Find the base constructor
-			var baseCtor = closure.BaseType.FindConstructor(null, 0, closure);
+			var baseCtor = closure.BaseType.FindConstructor(null, 0, closure, closure);
 
 			// Add a statement to this constructor body that calls the base constructor
 			var ctorBody = new List<Statement>

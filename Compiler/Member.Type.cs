@@ -78,6 +78,14 @@ namespace Osprey.Members
 
 		public NamedMember GetMember(string name, Type instType, Type fromType)
 		{
+			NamedMember _;
+			return GetMember(name, instType, fromType, out _);
+		}
+
+		public NamedMember GetMember(string name, Type instType, Type fromType, out NamedMember inaccessibleMember)
+		{
+			inaccessibleMember = null;
+
 			var type = this;
 			while (type != null)
 			{
@@ -90,12 +98,27 @@ namespace Osprey.Members
 					else if (mem is EnumField)
 						declType = ((EnumField)mem).Parent;
 					else if (mem is MethodGroup)
-						declType = ((MethodGroup)mem).ParentAsClass;
+					{
+						if (mem.Access == AccessLevel.Protected)
+						{
+							var method = (MethodGroup)mem;
+							while (method.BaseGroup != null)
+								method = method.BaseGroup;
+							declType = method.ParentAsClass;
+						}
+						else
+							declType = ((MethodGroup)mem).ParentAsClass;
+					}
 					else
 						throw new Exception("Type contains an invalid member type.");
 
 					if (IsAccessible(mem.Access, instType: instType, declType: declType, fromType: fromType))
+					{
+						inaccessibleMember = null;
 						return mem;
+					}
+					else
+						inaccessibleMember = mem;
 				}
 
 				// Try the base type, if there is one
@@ -114,7 +137,7 @@ namespace Osprey.Members
 			return Parent;
 		}
 
-		public abstract Method FindConstructor(ParseNode errorNode, int argCount, Class fromClass);
+		public abstract Method FindConstructor(ParseNode errorNode, int argCount, Class instClass, Class fromClass);
 
 		Class IDeclarationSpace.GetContainingClass(out bool hasInstance)
 		{
@@ -223,7 +246,7 @@ namespace Osprey.Members
 			return result;
 		}
 
-		public override Method FindConstructor(ParseNode errorNode, int argCount, Class fromClass)
+		public override Method FindConstructor(ParseNode errorNode, int argCount, Class instClass, Class fromClass)
 		{
 			throw new CompileTimeException(errorNode, "Enums do not have any constructors.");
 		}
@@ -349,7 +372,7 @@ namespace Osprey.Members
 		private int lambdaNameCounter = 0;
 
 		/// <summary>
-		/// List of inherited abstract methods which have not been overridden in this class.
+		/// Set of inherited abstract methods which have not been overridden in this class.
 		/// </summary>
 		/// <remarks>
 		/// This is only initialized to an instance if the base class is abstract and this
@@ -502,12 +525,13 @@ namespace Osprey.Members
 						{
 							if (overriddenMethods.Contains(method))
 								// This method has already been overridden in a derived class, so we ignore it.
-								// But since we'll never run into this metohd again, might as well remove it.
+								// But since we'll never run into this method again, might as well remove it.
 								overriddenMethods.Remove(method);
 							else if (method.IsAbstract)
 								inheritedAbstractMethods.Add(method);
 
-							if (method.IsOverride && method.OverriddenBaseMethod.IsAbstract)
+							if (method.IsOverride &&
+								method.OverriddenBaseMethod.IsAbstract)
 								overriddenMethods.Add(method.OverriddenBaseMethod);
 						}
 
@@ -540,11 +564,14 @@ namespace Osprey.Members
 			if (field == null)
 				throw new ArgumentNullException("name");
 
+			if (this.IsStatic && !field.IsStatic)
+				throw new DeclarationException(field.Node, "Static classes can only declare static members.");
+
 			var name = field.Name;
 			Class baseMemberClass;
 			var baseMember = GetBaseMember(name, this.BaseType as Class, out baseMemberClass);
 			if (baseMember != null)
-				throw new DeclarationException(field.Node, string.Format("Cannot override inherited member '{0}.{1}'.",
+				throw new DeclarationException(field.Node, string.Format("Cannot hide inherited member '{0}.{1}'.",
 					baseMemberClass.FullName, name));
 
 			if (members.ContainsKey(field.Name))
@@ -577,11 +604,23 @@ namespace Osprey.Members
 			if (property == null)
 				throw new ArgumentNullException("property");
 
-			EnsureDeclarable(property.Node, property);
+			if (this.IsStatic && !property.IsStatic)
+				throw new DeclarationException(property.GetAccessorNode(),
+					"Static classes can only contain static members.");
+			if (!this.IsAbstract && property.IsAbstract)
+				throw new DeclarationException(property.GetAccessorNode(),
+					"Only abstract classes may declare abstract members.");
+
+			EnsureDeclarable(property.GetAccessorNode(), property);
 
 			if (members.ContainsKey(property.Name))
-				throw new DuplicateNameException(property.Node, property.Name, "There is already a member with the specified name in this class.");
+				throw new DuplicateNameException(property.GetAccessorNode(), property.Name,
+					"There is already a member with the specified name in this class.");
 
+			// These steps also update the accessibility of the accessors,
+			// if they are overrides without a declared accessibility. We
+			// must therefore declare the accessors before making sure they
+			// have the same declared accessibility.
 			if (property.Getter != null)
 				DeclareMethod(property.Getter.Method);
 			if (property.Setter != null)
@@ -598,6 +637,9 @@ namespace Osprey.Members
 		{
 			if (accessor == null)
 				throw new ArgumentNullException("accessor");
+
+			if (!this.IsAbstract && accessor.Method.IsAbstract)
+				throw new DeclarationException(accessor.Node, "Only abstract classes may declare abstract members.");
 
 			if (indexer == null)
 			{
@@ -617,7 +659,9 @@ namespace Osprey.Members
 				throw new ArgumentNullException("method");
 
 			if (this.IsStatic && !method.IsStatic)
-				throw new DeclarationException(method.Node, "Static classes can only contain static members.");
+				throw new DeclarationException(method.Node, "Static classes can only declare static members.");
+			if (!this.IsAbstract && method.IsAbstract)
+				throw new DeclarationException(method.Node, "Only abstract classes may declare abstract members.");
 
 			string name = method.Name;
 
@@ -775,9 +819,9 @@ namespace Osprey.Members
 			return result;
 		}
 
-		public override Method FindConstructor(ParseNode errorNode, int argCount, Class fromClass)
+		public override Method FindConstructor(ParseNode errorNode, int argCount, Class instClass, Class fromClass)
 		{
-			if (!IsAccessible(constructors.Access, instType: fromClass, declType: this, fromType: fromClass))
+			if (!IsAccessible(constructors.Access, instType: instClass, declType: this, fromType: fromClass))
 				throw new CompileTimeException(errorNode,
 					string.Format("The constructor of '{0}' is not accessible from this location.",
 						this.FullName));
@@ -1094,6 +1138,34 @@ namespace Osprey.Members
 			}
 		}
 
+		internal string GetUnimplementedAbstractMethodNames()
+		{
+			if (inheritedAbstractMethods == null ||
+				inheritedAbstractMethods.Count == 0)
+				return "";
+
+			var sb = new StringBuilder();
+
+			var needSep = false;
+			foreach (var m in inheritedAbstractMethods)
+			{
+				if (needSep)
+					sb.Append(", ");
+				else
+					needSep = true;
+				sb.Append(m.Group.FullName);
+				sb.Append('(');
+				if (m.Signature.Splat == Splat.Beginning)
+					sb.Append("...");
+				sb.Append(string.Join(", ", m.Parameters.Select(p => p.Name)));
+				if (m.Signature.Splat == Splat.End)
+					sb.Append("...");
+				sb.Append(')');
+			}
+
+			return sb.ToString();
+		}
+
 		internal string GetLambdaParam()
 		{
 			return "<λc>arg$";
@@ -1354,6 +1426,11 @@ namespace Osprey.Members
 
 			if (getter.IsStatic != setter.IsStatic)
 				throw new DeclarationException(getter.Node, "If either property accessor is marked static, then both must be.");
+		}
+
+		internal ParseNode GetAccessorNode()
+		{
+			return getter != null ? getter.Node : setter.Node;
 		}
 	}
 
@@ -1857,7 +1934,7 @@ namespace Osprey.Members
 		private void AddConstructor()
 		{
 			// Find the base constructor
-			var baseCtor = BaseType.FindConstructor(null, 0, this);
+			var baseCtor = BaseType.FindConstructor(null, 0, this, this);
 
 			// Add a statement to this constructor body that calls the base constructor
 			var ctorBody = new List<Statement>

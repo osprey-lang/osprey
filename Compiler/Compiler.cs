@@ -1097,7 +1097,15 @@ namespace Osprey
 		{
 			foreach (var type in nsDecl.Types)
 				if (type is ClassDeclaration)
-					((Class)type.Type).Init(this);
+				{
+					var @class = (Class)type.Type;
+					@class.Init(this);
+					if (@class.HasUnimplementedAbstractMethods)
+						throw new DeclarationException(type,
+							string.Format("The class '{0}' does not implement the following inherited abstract methods: {1}",
+								@class.FullName,
+								@class.GetUnimplementedAbstractMethodNames()));
+				}
 
 			foreach (var subNs in nsDecl.Namespaces)
 				InitializeClassMembers(subNs);
