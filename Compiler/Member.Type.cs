@@ -94,20 +94,31 @@ namespace Osprey.Members
 				{
 					Type declType;
 					if (mem is ClassMember)
-						declType = ((ClassMember)mem).Parent;
-					else if (mem is EnumField)
-						declType = ((EnumField)mem).Parent;
-					else if (mem is MethodGroup)
 					{
-						if (mem.Access == AccessLevel.Protected)
+						if (mem.Access == AccessLevel.Protected &&
+							mem.Kind == MemberKind.Property)
 						{
-							var method = (MethodGroup)mem;
+							var prop = (Property)mem;
+							var method = (prop.Getter != null ? prop.Getter.Method :
+								prop.Setter.Method).Group;
 							while (method.BaseGroup != null)
 								method = method.BaseGroup;
 							declType = method.ParentAsClass;
 						}
 						else
-							declType = ((MethodGroup)mem).ParentAsClass;
+							declType = ((ClassMember)mem).Parent;
+					}
+					else if (mem is EnumField)
+						declType = ((EnumField)mem).Parent;
+					else if (mem is MethodGroup)
+					{
+						var method = (MethodGroup)mem;
+						if (mem.Access == AccessLevel.Protected)
+						{
+							while (method.BaseGroup != null)
+								method = method.BaseGroup;
+						}
+						declType = method.ParentAsClass;
 					}
 					else
 						throw new Exception("Type contains an invalid member type.");
