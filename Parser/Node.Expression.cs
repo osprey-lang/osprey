@@ -414,7 +414,7 @@ namespace Osprey.Nodes
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			TransformOperands(currentBlock, forGenerator);
-			return base.TransformClosureLocals(currentBlock, forGenerator);
+			return this;
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -2436,6 +2436,14 @@ namespace Osprey.Nodes
 			return this;
 		}
 
+		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			Inner = Inner.TransformClosureLocals(currentBlock, forGenerator);
+			for (var i = 0; i < Arguments.Count; i++)
+				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
+			return this;
+		}
+
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
 			if (IsAssignment)
@@ -2630,6 +2638,13 @@ namespace Osprey.Nodes
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 
+			return this;
+		}
+
+		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			for (var i = 0; i < Arguments.Count; i++)
+				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
 			return this;
 		}
 
@@ -3107,6 +3122,10 @@ namespace Osprey.Nodes
 		{
 			return compiler.ListType;
 		}
+
+		public abstract override Expression ResolveNames(IDeclarationSpace context, FileNamespace document);
+
+		public abstract override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator);
 	}
 
 	public sealed class ListLiteralExpression : ListExpression, ILocalResultExpression

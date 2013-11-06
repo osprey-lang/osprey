@@ -588,6 +588,9 @@ namespace Osprey.Members
 			if (members.ContainsKey(field.Name))
 				throw new DuplicateNameException(field.Node, field.Name);
 
+			if (field.Access == AccessLevel.None)
+				field.Access = AccessLevel.Private;
+
 			members.Add(field.Name, field);
 			field.Parent = this;
 		}
@@ -605,6 +608,9 @@ namespace Osprey.Members
 
 			if (members.ContainsKey(constant.Name))
 				throw new DuplicateNameException(constant.Node, constant.Name);
+
+			if (constant.Access == AccessLevel.None)
+				constant.Access = AccessLevel.Private;
 
 			members.Add(constant.Name, constant);
 			constant.Parent = this;
@@ -640,6 +646,10 @@ namespace Osprey.Members
 			if (property.Getter != null && property.Setter != null &&
 				property.Getter.Method.Access != property.Setter.Method.Access)
 				throw new DeclarationException(property.Getter.Node, "Both accessors must have the same declared accessibility.");
+
+			property.Access = property.Getter != null ?
+				property.Getter.Method.Access :
+				property.Setter.Method.Access;
 
 			members.Add(property.Name, property);
 		}
@@ -677,6 +687,8 @@ namespace Osprey.Members
 			string name = method.Name;
 
 			EnsureDeclarable(method.Node, method);
+			if (method.Access == AccessLevel.None)
+				method.Access = AccessLevel.Private;
 
 			MethodGroup group;
 			if (members.ContainsKey(name))
