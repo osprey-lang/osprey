@@ -563,12 +563,12 @@ namespace Osprey.Members
 			string namePrefix;
 			if (group.Parent.Kind == MemberKind.Namespace)
 			{
-				namePrefix = "global";
+				namePrefix = "";
 				ns = group.ParentAsNamespace;
 			}
 			else // class
 			{
-				namePrefix = group.ParentAsClass.Name;
+				namePrefix = group.ParentAsClass.Name + "/";
 				ns = group.ParentAsClass.Parent;
 			}
 
@@ -650,7 +650,8 @@ namespace Osprey.Members
 		private static string GetGeneratorClassName(string prefix, Method method)
 		{
 			var groupIndex = method.Group.IndexOfOverload(method);
-			return string.Format("Iterator<{0}/{1}@{2}>__{3}", prefix, method.Name.Replace('.', '#'), groupIndex, method.ClosureCounter++);
+			return string.Format("I:{0}{1}@{2}__{3}", prefix, method.Name.Replace('.', '#'),
+				groupIndex, method.ClosureCounter++);
 		}
 	}
 

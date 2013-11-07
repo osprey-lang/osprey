@@ -653,7 +653,7 @@ namespace Osprey.Members
 
 		internal string GetLambdaParam()
 		{
-			return "<λns>arg$";
+			return "λns:arg$";
 		}
 
 		internal string GetLambdaName(string nameHint)
@@ -1231,7 +1231,7 @@ namespace Osprey.Members
 			while (method is LocalMethod)
 				method = ((LocalMethod)method).Function.Parent.Method;
 
-			return string.Format("<λ>{0}${1}", nameHint ?? "__", method.LambdaNameCounter++);
+			return string.Format("λ:{0}${1}", nameHint ?? "__", method.LambdaNameCounter++);
 		}
 		/// <summary>
 		/// Gets a lambda parameter name that is guaranteed not to clash with
@@ -1244,7 +1244,7 @@ namespace Osprey.Members
 			while (method is LocalMethod)
 				method = ((LocalMethod)method).Function.Parent.Method;
 
-			return string.Format("<λ>arg${0}", method.LambdaParamCounter++);
+			return string.Format("λ:arg${0}", method.LambdaParamCounter++);
 		}
 
 		internal ClosureClass GenerateClosureClass(Compiler compiler)
@@ -1269,12 +1269,12 @@ namespace Osprey.Members
 			string namePrefix;
 			if (group.Parent.Kind == MemberKind.Namespace)
 			{
-				namePrefix = "global";
+				namePrefix = "";
 				ns = group.ParentAsNamespace;
 			}
 			else // class
 			{
-				namePrefix = group.ParentAsClass.Name;
+				namePrefix = group.ParentAsClass.Name + "/";
 				ns = group.ParentAsClass.Parent;
 			}
 
@@ -1426,7 +1426,7 @@ namespace Osprey.Members
 		{
 			var groupIndex = method.Group.IndexOfOverload(method);
 			blockNumber = method.ClosureCounter++;
-			return string.Format("Closure<{0}/{1}@{2}>__{3}", prefix, method.Name.Replace('.', '#'), groupIndex, blockNumber);
+			return string.Format("C:{0}{1}@{2}__{3}", prefix, method.Name.Replace('.', '#'), groupIndex, blockNumber);
 		}
 
 		public static BlockSpace FromStatement(Statement stmt, BlockSpace parent)
@@ -1824,9 +1824,9 @@ namespace Osprey.Members
 			var groupIndex = parentMethod.Group != null ? parentMethod.Group.IndexOfOverload(parentMethod) : 0;
 			var result = string.Format("{0}@{1}{2}{3}",
 				parentMethod.Name, groupIndex,
-				localMethod.Name[0] == '<' ? "" : "<ƒ>",
+				localMethod.Name.StartsWith("λ:") ? "" : "ƒ:",
 				localMethod.Name);
-			if (localMethod.Name[0] != '<')
+			if (!localMethod.Name.StartsWith("λ:"))
 				result += "$" + parentMethod.LambdaNameCounter++;
 			return result;
 		}

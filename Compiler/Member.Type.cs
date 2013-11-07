@@ -1191,12 +1191,12 @@ namespace Osprey.Members
 
 		internal string GetLambdaParam()
 		{
-			return "<λc>arg$";
+			return "λc:arg$";
 		}
 
 		internal string GetLambdaName(string nameHint)
 		{
-			return string.Format("<λc>{0}${1}", nameHint ?? "__", lambdaNameCounter++);
+			return string.Format("λc:{0}${1}", nameHint ?? "__", lambdaNameCounter++);
 		}
 
 		private enum ClassState
@@ -1541,8 +1541,8 @@ namespace Osprey.Members
 			return string.Format(isSetter ? SetterNameFormat : GetterNameFormat, propName);
 		}
 
-		internal const string GetterNameFormat = "get<{0}>";
-		internal const string SetterNameFormat = "set<{0}>";
+		internal const string GetterNameFormat = "get:{0}";
+		internal const string SetterNameFormat = "set:{0}";
 	}
 
 	public class Indexer : ClassMember
@@ -1864,20 +1864,20 @@ namespace Osprey.Members
 
 		internal static string GetFieldName(Variable variable)
 		{
-			return string.Format("<var>{0}", variable.Name);
+			return string.Format("var:{0}", variable.Name);
 		}
 
 		internal static string GetFieldName(BlockSpace block)
 		{
-			return string.Format("<scope>block_{0}", block.BlockNumber);
+			return string.Format("<>block_{0}", block.BlockNumber);
 		}
 
 		private static string GetMethodName(LocalFunction function)
 		{
-			if (function.Name[0] == '<') // captured lambda
+			if (function.Name.StartsWith("λ:")) // captured lambda
 				return function.Name;
 			else
-				return string.Format("<ƒ>{0}", function.Name);
+				return string.Format("ƒ:{0}", function.Name);
 		}
 
 		internal const string ThisFieldName = "<>this";
@@ -2044,7 +2044,7 @@ namespace Osprey.Members
 
 		private static string GetAnonFieldName(int counter)
 		{
-			return string.Format("<anon>__{0}", counter);
+			return string.Format("anon:{0}", counter);
 		}
 
 		private const string StateFieldName = "<>state";

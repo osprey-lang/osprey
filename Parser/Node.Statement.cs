@@ -452,7 +452,7 @@ namespace Osprey.Nodes
 				// If you have something like
 				//    var myLambda = @(a, b) { a.method(b); };
 				// then the lambda expression will be compiled to a method named
-				//    <λ>myLambda@{1}
+				//    λ:myLambda${1}
 				// where {1} is replaced with an internal counter.
 				// It is thought that this might aid in debugging.
 				if (Initializer is LambdaExpression)

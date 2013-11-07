@@ -790,7 +790,7 @@ namespace Osprey.Nodes
 		/// <summary>If <see cref="HasThisPrefix"/> is true, this member contains the member that the parameter assigns to.</summary>
 		internal ClassMember Member;
 
-		public override string DeclaredName { get { return HasThisPrefix ? "<this>" + Name : Name; } }
+		public override string DeclaredName { get { return HasThisPrefix ? "this:" + Name : Name; } }
 
 		public override string ToString(int indent)
 		{
