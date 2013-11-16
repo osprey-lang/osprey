@@ -939,18 +939,17 @@ namespace Osprey
 			if (Accept(i, TokenType.ParenClose))
 				return output;
 
-			if (Accept(i, TokenType.Splat))
+			if (Accept(ref i, TokenType.Splat))
 				splat = Splat.Beginning;
 
 			var optionalSeen = false;
 			do
 			{
-				var thisPrefix = Accept(i, TokenType.This);
+				var thisPrefix = Accept(ref i, TokenType.This);
 
 				Token nameTok;
 				if (thisPrefix) // this.<name> parameter
 				{
-					i++;
 					Expect(ref i, TokenType.Dot);
 					nameTok = Expect(ref i, TokenType.Identifier);
 				}
@@ -983,8 +982,7 @@ namespace Osprey
 						EndIndex = nameTok.EndIndex,
 						Document = document,
 					});
-			} while (Accept(i++, TokenType.Comma));
-			i--;
+			} while (Accept(ref i, TokenType.Comma));
 
 			if (Accept(i, TokenType.Splat))
 			{
@@ -992,6 +990,7 @@ namespace Osprey
 					throw new ParseException(tok[i], "Splats cannot be combined with optional parameters.");
 				else if (splat != Splat.None)
 					throw new ParseException(tok[i], "There can only be one splat per parameter list, and it must be at the very beginning or the very end of the list.");
+				i++;
 				splat = Splat.End;
 			}
 
