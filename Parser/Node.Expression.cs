@@ -419,9 +419,30 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			Left.Compile(compiler, method);  // Evaluate the left operand
-			Right.Compile(compiler, method); // And then the right
-			method.Append(SimpleInstruction.FromOperator(Operator)); // And finally the operator
+			if (Operator == BinaryOperator.FunctionApplication)
+				CompileFunctionApplication(compiler, method);
+			else
+			{
+				Left.Compile(compiler, method);  // Evaluate the left operand
+				Right.Compile(compiler, method); // And then the right
+				method.Append(SimpleInstruction.FromOperator(Operator)); // And finally the operator
+			}
+		}
+
+		private void CompileFunctionApplication(Compiler compiler, MethodBuilder method)
+		{
+			if (Left is StaticMethodAccess)
+			{
+				var access = (StaticMethodAccess)Left;
+				Right.Compile(compiler, method); // Load the arguments list
+				method.Append(new StaticApply(method.Module.GetMethodId(access.Method))); // Apply!
+			}
+			else
+			{
+				Left.Compile(compiler, method);  // Evaluate the left operand
+				Right.Compile(compiler, method); // And then the right
+				method.Append(SimpleInstruction.FromOperator(BinaryOperator.FunctionApplication));
+			}
 		}
 
 		protected void FoldOperands()

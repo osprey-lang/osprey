@@ -446,10 +446,7 @@ namespace Osprey.Members
 		/// <exception cref="ArgumentNullException"><paramref name="type"/> is null.</exception>
 		public void DeclareType(Type type)
 		{
-			if (type == null)
-				throw new ArgumentNullException("type");
-
-			members.Add(type.Name, type);
+			DeclareType(type, false);
 		}
 		internal void DeclareType(Type type, bool imported)
 		{

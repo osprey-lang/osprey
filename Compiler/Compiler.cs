@@ -680,8 +680,11 @@ namespace Osprey
 				var newNewFiles = new HashSet<string>();
 				foreach (var file in newFiles)
 				{
-					var fileText = File.ReadAllText(file);
 					Document doc;
+					if (sourceFiles.TryGetValue(file, out doc) && doc != null)
+						continue;
+
+					var fileText = File.ReadAllText(file);
 					try
 					{
 						doc = Parser.Parse(fileText, ParserOptions);
