@@ -701,8 +701,11 @@ namespace Osprey.Members
 			if (variable == null)
 				throw new ArgumentNullException("variable");
 
-			if (projectNamespace.ContainsMember(variable.Name))
-				throw new DuplicateNameException(variable.Node, variable.Name);
+			var name = variable.Name;
+
+			if (projectNamespace.ContainsMember(name) ||
+				Members.ContainsKey(name))
+				throw new DuplicateNameException(variable.Node, name);
 
 			Members.Add(variable.Name, variable);
 		}

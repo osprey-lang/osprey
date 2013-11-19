@@ -3500,8 +3500,9 @@ namespace Osprey.Nodes
 				var variable = new Variable(VariableNames[i],
 					new VariableDeclarator(VariableNames[i], null)
 					{
-						StartIndex = Expression.EndIndex,
+						StartIndex = Expression.StartIndex,
 						EndIndex = Expression.EndIndex,
+						Document = Document,
 					}, VariableKind.IterationVariable);
 				parent.DeclareVariable(variable);
 				Variables[i] = variable;

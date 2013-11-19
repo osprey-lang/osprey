@@ -60,7 +60,7 @@ namespace Osprey
 				Console.Error.WriteLine("[error] Could not parse command-line arguments: {0}", e.Message);
 				return;
 			}
-
+			
 #if DEBUG
 			Compiler.Compile(options, outFile, constants, sourceFiles.ToArray());
 			Console.ReadKey(intercept: true);

@@ -513,6 +513,7 @@ namespace Osprey.Nodes
 					{
 						StartIndex = Value.StartIndex,
 						EndIndex = Value.EndIndex,
+						Document = Document,
 					});
 				}
 				parent.DeclareVariable(Variables[i]);
@@ -1143,8 +1144,9 @@ namespace Osprey.Nodes
 				Variables[i] = new Variable(VariableNames[i],
 					new VariableDeclarator(VariableNames[i], null)
 					{
-						StartIndex = Body.StartIndex,
-						EndIndex = Body.StartIndex,
+						StartIndex = this.StartIndex,
+						EndIndex = this.EndIndex,
+						Document = Document,
 					}, VariableKind.IterationVariable);
 				body.DeclareVariable(Variables[i]);
 			}
@@ -2136,8 +2138,9 @@ namespace Osprey.Nodes
 				BodyBlock.DeclareVariable(new Variable(Variable,
 					new VariableDeclarator(Variable, null)
 					{
-						StartIndex = Body.StartIndex,
-						EndIndex = Body.StartIndex,
+						StartIndex = this.StartIndex,
+						EndIndex = this.EndIndex,
+						Document = Document,
 					}, VariableKind.CatchVariable));
 		}
 

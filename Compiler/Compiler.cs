@@ -584,8 +584,6 @@ namespace Osprey
 			// a member with the same name (there is no way to distinguish between them). Only
 			// private members are allowed to be "hidden" in derived classes, because they are
 			// invisible there anyway.
-			if (mainMethod != null)
-				mainMethod.InitBody(this);
 			InitializeClassMembers();
 
 			// Step 5: Resolve all names, in every expression in every source file. During this step,
@@ -833,8 +831,9 @@ namespace Osprey
 							var globalVar = new GlobalVariable(name,
 								new VariableDeclarator(name, null)
 								{
-									StartIndex = stmt.EndIndex,
+									StartIndex = stmt.StartIndex,
 									EndIndex = stmt.EndIndex,
+									Document = stmt.Document,
 								}, doc);
 							declaration.Variables[i] = globalVar;
 							doc.Namespace.DeclareGlobalVariable(globalVar);
@@ -1090,6 +1089,20 @@ namespace Osprey
 				catch (CompileTimeException e)
 				{
 					e.Document = doc;
+					throw;
+				}
+
+			if (mainMethod != null)
+				try
+				{
+					mainMethod.InitBody(this);
+				}
+				catch (CompileTimeException e)
+				{
+					// The main method may consist of statments from
+					// more than one document, so we must rely on the
+					// information in the node.
+					e.Document = e.Node.Document;
 					throw;
 				}
 
