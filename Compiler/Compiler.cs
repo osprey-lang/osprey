@@ -363,6 +363,29 @@ namespace Osprey
 
 							return lambdaOpClass.DeclareMethod(andMethod);
 						}
+					case LambdaOperator.Inequality:
+						{
+							var neqMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+								new Parameter("a", null), new Parameter("b", null));
+							neqMethod.IsStatic = true;
+							neqMethod.IsImplDetail = true;
+
+							var falseLabel = new Label();
+
+							neqMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							neqMethod.Append(new LoadLocal(new LocalVariable(1, null, false, true)));
+							neqMethod.Append(new SimpleInstruction(Opcode.Eq));
+
+							neqMethod.Append(Branch.IfFalse(falseLabel));
+							neqMethod.Append(LoadConstant.False()); // If true, return false
+							neqMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							neqMethod.Append(falseLabel);
+							neqMethod.Append(LoadConstant.True()); // If false, return true!
+							neqMethod.Append(new SimpleInstruction(Opcode.Ret));
+
+							return lambdaOpClass.DeclareMethod(neqMethod);
+						}
 					case LambdaOperator.Not:
 						{
 							var notMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None, new Parameter("a", null));

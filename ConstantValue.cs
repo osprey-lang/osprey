@@ -226,6 +226,17 @@ namespace Osprey
 			throw new NotSupportedException();
 		}
 
+		private ulong ToUInt()
+		{
+			if (type == ConstantValueType.UInt)
+				return num.UIntValue;
+			if (type == ConstantValueType.Int)
+				return checked((ulong)num.IntValue);
+			if (type == ConstantValueType.Real)
+				return checked((ulong)num.RealValue);
+			throw new NotSupportedException();
+		}
+
 		public Type GetTypeObject(Compiler compiler)
 		{
 			switch (type)
@@ -537,17 +548,51 @@ namespace Osprey
 		{
 			if (left.IsNumeric && right.IsNumeric)
 			{
-				var result = Math.Pow(left.ToReal(), right.ToReal());
-
 				if (left.type == ConstantValueType.Real || right.type == ConstantValueType.Real)
-					return CreateReal(result);
-				else if (left.type == ConstantValueType.Int)
-					return CreateInt(checked((long)result));
-				else // UInt
-					return CreateUInt(checked((ulong)result));
+					return CreateReal(Math.Pow(left.ToReal(), right.ToReal()));
+				if (left.type == ConstantValueType.Int)
+					return CreateInt(Power(left.num.IntValue, right.ToInt()));
+				if (left.type == ConstantValueType.UInt)
+					return CreateUInt(Power(left.num.UIntValue, right.ToUInt()));
 			}
 
 			throw new NotSupportedException();
+		}
+		private static long Power(long a, long b)
+		{
+			long result = 1;
+
+			checked
+			{
+				while (b > 0)
+				{
+					if ((b & 1) != 0)
+						result *= a;
+					b >>= 1;
+					if (b > 0)
+						a *= a;
+				}
+			}
+
+			return result;
+		}
+		private static ulong Power(ulong a, ulong b)
+		{
+			ulong result = 1;
+
+			checked
+			{
+				while (b > 0)
+				{
+					if ((b & 1) != 0)
+						result *= a;
+					b >>= 1;
+					if (b > 0)
+						a *= a;
+				}
+			}
+
+			return result;
 		}
 
 		// Note: the bitwise operators are not operators because then that
