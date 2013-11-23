@@ -1916,9 +1916,12 @@ namespace Osprey.Nodes
 		{
 			get
 			{
+				// The end of the try statement is reachable if both of the following are true:
+				//   1. The end of the try clause is reachable or the end of any
+				//      catch clause is reachable.
+				//   2. There is no finally clause, or the end of it is reachable.
 				if (!isEndReachable.HasValue)
 					isEndReachable = (Body.IsEndReachable ||
-						Catches.Count == 0 ||
 						Catches.Any(c => c.IsEndReachable))
 						&&
 						(Finally == null || Finally.IsEndReachable);
