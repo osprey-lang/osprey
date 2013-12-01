@@ -2714,12 +2714,13 @@ namespace Osprey
 			var items = new List<Expression>();
 
 			if (Accept(i, TokenType.SquareClose)) // empty list
-				return new ListLiteralExpression(items) { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
-
-			var isGenerator = false;
-			if (Accept(ref i, TokenType.Yield))
-				isGenerator = true;
-
+				return new ListLiteralExpression(items)
+					{
+						StartIndex = start,
+						EndIndex = tok[i++].EndIndex,
+						Document = document,
+					};
+			
 			// [,] is an illegal list in Osprey: trailing commas are allowed only if
 			// there is at least one item.
 			// At least one expression is needed now, even in a list comprehension;
@@ -2753,45 +2754,49 @@ namespace Osprey
 				items.Add(ParseExpression(ref i));
 			}
 
-			if (Accept(i, TokenType.For)) // List comprehension or list generator
+			if (Accept(i, TokenType.For)) // List comprehension
 			{
-				var iters = new List<ListCompIterator>();
-				while (Accept(i, TokenType.For))
+				var parts = new List<ListCompPart>();
+				while (Accept(i, TokenType.For) || tok[i].Value == "where")
 				{
-					i++;
-					if (!Accept(i, TokenType.Identifier))
-						throw new ParseException(tok[i], "For clause without variables in list comprehension.");
-
-					List<string> vars = new List<string>();
-					vars.Add(tok[i].Value);
-					i++;
-
-					while (Accept(i, TokenType.Comma))
+					if (Accept(ref i, TokenType.For))
 					{
-						i++;
-						Expect(i, TokenType.Identifier);
+						if (!Accept(i, TokenType.Identifier))
+							throw new ParseException(tok[i], "For clause without variables in list comprehension.");
+
+						List<string> vars = new List<string>();
 						vars.Add(tok[i].Value);
 						i++;
+
+						while (Accept(ref i, TokenType.Comma))
+						{
+							Expect(i, TokenType.Identifier);
+							vars.Add(tok[i].Value);
+							i++;
+						}
+
+						Expect(ref i, TokenType.In);
+
+						parts.Add(new ListCompIterator(vars, ParseExpression(ref i)));
 					}
-
-					Expect(ref i, TokenType.In);
-
-					iters.Add(new ListCompIterator(vars, ParseExpression(ref i)));
+					else // where
+					{
+						i++;
+						parts.Add(new ListCompCondition(ParseExpression(ref i)));
+					}
 				}
 
 				if (Accept(i, TokenType.Comma))
 					throw new ParseException(tok[i], "Trailing commas are not allowed in list comprehensions.");
 				Expect(i, TokenType.SquareClose);
 
-				return new ListComprehension(isGenerator, items, iters)
+				return new ListComprehension(items, parts)
 					{
 						StartIndex = start,
 						EndIndex = tok[i++].EndIndex,
 						Document = document,
 					};
 			}
-			else if (isGenerator)
-				throw new ParseException(tok[i], "Generator comprehension without for...in clause.");
 
 			Accept(ref i, TokenType.Comma); // trailing comma; if it were followed by anything but ], it would have been caught above
 

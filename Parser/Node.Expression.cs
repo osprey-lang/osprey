@@ -697,6 +697,8 @@ namespace Osprey.Nodes
 		{
 			Left.Compile(compiler, method);
 
+			var elseLabel = new Label();
+			var trueLabel = new Label();
 			if (!negated)
 			{
 				// a xor b is true if bool(a) != bool(b)
@@ -716,9 +718,10 @@ namespace Osprey.Nodes
 				// a and b in, because xor doesn't short circuit. For simplicity,
 				// since 'right' is on the top of the stack, we do the above
 				// with a = right and b = left.
-				var elseLabel = new Label();
 				Right.CompileBoolean(compiler, elseLabel, false, method); // if (right)
 				method.Append(Branch.IfTrue(falseLabel)); // if (left) goto falseLabel;
+				method.Append(Branch.Always(trueLabel)); // jump past else
+
 				method.Append(elseLabel); // else
 				method.Append(Branch.IfFalse(falseLabel)); // if (!left) goto falseLabel;
 				// fall through for true
@@ -737,13 +740,15 @@ namespace Osprey.Nodes
 						goto falseLabel;
 					}
 				*/
-				var elseLabel = new Label();
 				Right.CompileBoolean(compiler, elseLabel, false, method); // if (right)
 				method.Append(Branch.IfFalse(falseLabel)); // if (!b) goto falseLabel;
-				method.Append(elseLabel);
+				method.Append(Branch.Always(trueLabel)); // jump past else
+
+				method.Append(elseLabel); // else
 				method.Append(Branch.IfTrue(falseLabel)); // if (b) goto falseLabel;
 				// fall through for true
 			}
+			method.Append(trueLabel);
 		}
 	}
 
@@ -1469,18 +1474,11 @@ namespace Osprey.Nodes
 						// Note: local variables only occur within blocks, so we don't actually
 						// need to test whether 'block' is null.
 
+						// Also note: if the variable was declared in a VariableDeclarator with
+						// an initializer, the EndIndex includes the initializer.
+
 						var variable = (Variable)member;
-						if (this.EndIndex < variable.Node.EndIndex &&
-							(variable.VariableKind != VariableKind.IterationVariable ||
-							this.EndIndex > variable.Node.StartIndex))
-							throw new CompileTimeException(this,
-								string.Format("The variable '{0}' cannot be accessed before its declaration.", Name));
-						var varNode = variable.Node as VariableDeclarator;
-						if (varNode != null && varNode.Initializer != null &&
-							this.EndIndex >= varNode.Initializer.StartIndex &&
-							this.StartIndex < varNode.Initializer.EndIndex)
-							throw new CompileTimeException(this,
-								string.Format("The variable '{0}' cannot be accessed in its initializer.", Name));
+						variable.EnsureAccessibleFrom(this);
 
 						// If the variable comes from another method, then we must capture it,
 						// but only if the current method is a local method. The actual trans-
@@ -3373,30 +3371,26 @@ namespace Osprey.Nodes
 
 	public sealed class ListComprehension : ListExpression, ILocalResultExpression
 	{
-		public ListComprehension(bool isGenerator, List<Expression> expr, List<ListCompIterator> iterators)
+		public ListComprehension(List<Expression> expr, List<ListCompPart> parts)
 		{
-			IsGenerator = isGenerator;
 			Expressions = expr;
-			Iterators = iterators;
+			Parts = parts;
 		}
-
-		/// <summary>Indicates whether the comprehension is a generator ("yield ...").</summary>
-		public bool IsGenerator;
 
 		/// <summary>The expressions used to generate values for the comprehension.</summary>
 		public List<Expression> Expressions;
 
-		/// <summary>The iterators ("for ... in" bits) associated with the comprehension.</summary>
-		public List<ListCompIterator> Iterators;
-
+		/// <summary>The iterators ("for ... in") and conditions ("where ...") associated with the comprehension.</summary>
+		public List<ListCompPart> Parts;
+		
 		internal BlockSpace ImplicitBlock;
 
 		private LocalVariable target;
 
 		public override string ToString(int indent)
 		{
-			return (IsGenerator ? "[yield " : "[") + Expressions.JoinString(", ", indent) + " " +
-				Iterators.JoinString(" ", indent) + "]";
+			return "[" + Expressions.JoinString(", ", indent) + " " +
+				Parts.JoinString(" ", indent) + "]";
 		}
 
 		public override Expression FoldConstant()
@@ -3404,8 +3398,8 @@ namespace Osprey.Nodes
 			for (var i = 0; i < Expressions.Count; i++)
 				Expressions[i] = Expressions[i].FoldConstant();
 
-			for (var i = 0; i < Iterators.Count; i++)
-				Iterators[i].FoldConstant();
+			for (var i = 0; i < Parts.Count; i++)
+				Parts[i].FoldConstant();
 
 			return this;
 		}
@@ -3415,15 +3409,17 @@ namespace Osprey.Nodes
 			if (ImplicitBlock == null)
 			{
 				ImplicitBlock = new BlockSpace(new Block(), context as BlockSpace);
-				foreach (var iter in Iterators)
-					iter.DeclareNames(ImplicitBlock);
+				var additionalAccessStart = Expressions[0].StartIndex;
+				var additionalAccessEnd = Expressions[Expressions.Count - 1].EndIndex;
+				foreach (var iter in Parts)
+					iter.DeclareNames(ImplicitBlock, additionalAccessStart, additionalAccessEnd);
 			}
 
 			for (var i = 0; i < Expressions.Count; i++)
 				Expressions[i] = Expressions[i].ResolveNames(ImplicitBlock, document, false, false);
 
-			for (var i = 0; i < Iterators.Count; i++)
-				Iterators[i].ResolveNames(ImplicitBlock, document);
+			for (var i = 0; i < Parts.Count; i++)
+				Parts[i].ResolveNames(ImplicitBlock, document);
 
 			return this;
 		}
@@ -3433,8 +3429,8 @@ namespace Osprey.Nodes
 			for (var i = 0; i < Expressions.Count; i++)
 				Expressions[i] = Expressions[i].TransformClosureLocals(ImplicitBlock, forGenerator);
 
-			for (var i = 0; i < Iterators.Count; i++)
-				Iterators[i].TransformClosureLocals(ImplicitBlock, forGenerator);
+			for (var i = 0; i < Parts.Count; i++)
+				Parts[i].TransformClosureLocals(ImplicitBlock, forGenerator);
 
 			return this;
 		}
@@ -3446,12 +3442,28 @@ namespace Osprey.Nodes
 			method.Append(new CreateList(0));
 			method.Append(new StoreLocal(listLoc));
 
-			Iterators[0].Compile(compiler, method, 0, this, listLoc);
+			Parts[0].Compile(compiler, method, 0, this, listLoc);
 
 			if (listLoc.IsAnonymous)
 			{
 				method.Append(new LoadLocal(listLoc)); // Load the result of the expression
 				listLoc.Done();
+			}
+		}
+
+		internal void CompileBody(Compiler compiler, MethodBuilder method, LocalVariable listLoc)
+		{
+			var listAdd = (MethodGroup)compiler.ListType.GetMember("add");
+
+			ImplicitBlock.Node.Compile(compiler, method); // Closure initializers, if any
+			
+			// Add each expression to the list
+			foreach (var expr in Expressions)
+			{
+				method.Append(new LoadLocal(listLoc));
+				expr.Compile(compiler, method);
+				method.Append(new StaticCall(method.Module.GetMethodId(listAdd), 1));
+				method.Append(new SimpleInstruction(Opcode.Pop));
 			}
 		}
 
@@ -3461,7 +3473,24 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class ListCompIterator : ParseNode
+	public abstract class ListCompPart : ParseNode
+	{
+		public abstract void FoldConstant();
+		public abstract void ResolveNames(IDeclarationSpace context, FileNamespace document);
+		public abstract void DeclareNames(BlockSpace parent, int additionalAccessStart, int additionalAccessEnd);
+		public abstract void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator);
+		public abstract void Compile(Compiler compiler, MethodBuilder method, int index, ListComprehension parent, LocalVariable listLoc);
+
+		protected void CompileNext(Compiler compiler, MethodBuilder method, int index, ListComprehension parent, LocalVariable listLoc)
+		{
+			if (index == parent.Parts.Count - 1)
+				parent.CompileBody(compiler, method, listLoc);
+			else
+				parent.Parts[index + 1].Compile(compiler, method, index + 1, parent, listLoc);
+		}
+	}
+
+	public sealed class ListCompIterator : ListCompPart
 	{
 		public ListCompIterator(List<string> variables, Expression expr)
 		{
@@ -3482,17 +3511,17 @@ namespace Osprey.Nodes
 			return "for " + VariableNames.JoinString(", ") + " in " + Expression.ToString(indent);
 		}
 
-		public void FoldConstant()
+		public override void FoldConstant()
 		{
 			Expression = Expression.FoldConstant();
 		}
 
-		public void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
 			Expression = Expression.ResolveNames(context, document, false, false);
 		}
 
-		public void DeclareNames(BlockSpace parent)
+		public override void DeclareNames(BlockSpace parent, int additionalAccessStart, int additionalAccessEnd)
 		{
 			Variables = new Variable[VariableNames.Count];
 			for (var i = 0; i < VariableNames.Count; i++)
@@ -3504,17 +3533,18 @@ namespace Osprey.Nodes
 						EndIndex = Expression.EndIndex,
 						Document = Document,
 					}, VariableKind.IterationVariable);
+				variable.SetAdditionalAccessRange(additionalAccessStart, additionalAccessEnd);
 				parent.DeclareVariable(variable);
 				Variables[i] = variable;
 			}
 		}
 
-		public void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			Expression = Expression.TransformClosureLocals(currentBlock, forGenerator);
 		}
 
-		public void Compile(Compiler compiler, MethodBuilder method, int index, ListComprehension parent, LocalVariable listLoc)
+		public override void Compile(Compiler compiler, MethodBuilder method, int index, ListComprehension parent, LocalVariable listLoc)
 		{
 			if (Expression is RangeExpression)
 				CompileRange(compiler, method, index, parent, listLoc);
@@ -3565,10 +3595,7 @@ namespace Osprey.Nodes
 				method.Append(Branch.IfFalse(loopEnd)); // End loop if not counter <= high
 			}
 			{ // Body
-				if (index == parent.Iterators.Count - 1)
-					CompileBody(compiler, method, parent, listLoc);
-				else
-					parent.Iterators[index + 1].Compile(compiler, method, index + 1, parent, listLoc);
+				CompileNext(compiler, method, index, parent, listLoc);
 			}
 			{ // Increment
 				method.Append(new LoadLocal(counter)); // Load counter
@@ -3613,11 +3640,7 @@ namespace Osprey.Nodes
 					compiler.Unpack(method, VariableNames);
 			}
 			{ // Body
-
-				if (index == parent.Iterators.Count - 1)
-					CompileBody(compiler, method, parent, listLoc);
-				else
-					parent.Iterators[index + 1].Compile(compiler, method, index + 1, parent, listLoc);
+				CompileNext(compiler, method, index, parent, listLoc);
 
 				method.Append(Branch.Always(loopCond));
 			}
@@ -3626,21 +3649,50 @@ namespace Osprey.Nodes
 
 			iterLoc.Done();
 		}
+	}
 
-		private void CompileBody(Compiler compiler, MethodBuilder method, ListComprehension parent, LocalVariable listLoc)
+	public sealed class ListCompCondition : ListCompPart
+	{
+		public ListCompCondition(Expression condition)
 		{
-			var listAdd = (MethodGroup)compiler.ListType.GetMember("add");
+			Condition = condition;
+		}
 
-			parent.ImplicitBlock.Node.Compile(compiler, method); // Closure initializers, if any
+		/// <summary>The condition of the "where" construct.</summary>
+		public Expression Condition;
 
-			// Add each expression to the list
-			foreach (var expr in parent.Expressions)
-			{
-				method.Append(new LoadLocal(listLoc));
-				expr.Compile(compiler, method);
-				method.Append(new StaticCall(method.Module.GetMethodId(listAdd), 1));
-				method.Append(new SimpleInstruction(Opcode.Pop));
-			}
+		public override void FoldConstant()
+		{
+			Condition = Condition.FoldConstant();
+		}
+
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		{
+			Condition = Condition.ResolveNames(context, document, false, false);
+		}
+
+		public override void DeclareNames(BlockSpace parent, int additionalAccessStart, int additionalAccessEnd) { }
+
+		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			Condition = Condition.TransformClosureLocals(currentBlock, forGenerator);
+		}
+
+		public override void Compile(Compiler compiler, MethodBuilder method, int index, ListComprehension parent, LocalVariable listLoc)
+		{
+			var falseLabel = new Label("where-false");
+			Condition.CompileBoolean(compiler, falseLabel, false, method); // Evaluate the condition
+
+			// Compile the body
+			CompileNext(compiler, method, index, parent, listLoc);
+
+			// Jump here if the condition is false, yay
+			method.Append(falseLabel);
+		}
+
+		public override string ToString(int indent)
+		{
+			return "where " + Condition.ToString(indent + 1);
 		}
 	}
 

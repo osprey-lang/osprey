@@ -1493,6 +1493,7 @@ namespace Osprey.Members
 					IsOverride = node.IsOverride,
 					IsImplDetail = true,
 				};
+			node.DeclSpace = method;
 		}
 		public PropertyAccessor(ClassMemberMethod method, bool isSetter)
 			: base(method.Name, isSetter ? MemberKind.PropertySetter : MemberKind.IndexerGetter, null, method.Access)
@@ -1613,6 +1614,7 @@ namespace Osprey.Members
 					IsStatic = false,
 					IsImplDetail = true,
 				};
+			node.DeclSpace = method;
 		}
 
 		public Indexer Parent { get; internal set; }

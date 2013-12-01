@@ -280,7 +280,7 @@ namespace Osprey
 							orMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
 							orMethod.Append(Branch.IfTrue(trueLabel));
 
-							orMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
+							orMethod.Append(new LoadLocal(new LocalVariable(1, null, false, true)));
 							orMethod.Append(Branch.IfTrue(trueLabel));
 
 							orMethod.Append(LoadConstant.False());

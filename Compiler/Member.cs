@@ -1527,6 +1527,8 @@ namespace Osprey.Members
 		/// </summary>
 		internal Field CaptureField;
 
+		internal int AdditionalAccessStart = -1, AdditionalAccessEnd = -1;
+
 		public VariableDeclarator VarNode
 		{
 			get { return (VariableDeclarator)Node; }
@@ -1545,6 +1547,27 @@ namespace Osprey.Members
 				throw new InvalidOperationException("The local variable does not belong to a block and cannot be captured.");
 
 			isCaptured = true;
+		}
+
+		internal void SetAdditionalAccessRange(int start, int end)
+		{
+			AdditionalAccessStart = start;
+			AdditionalAccessEnd = end;
+		}
+
+		public void EnsureAccessibleFrom(ParseNode node)
+		{
+			if (node.EndIndex < this.Node.StartIndex && (AdditionalAccessStart == -1 ||
+				node.EndIndex < this.AdditionalAccessStart || node.StartIndex > AdditionalAccessEnd))
+				throw new CompileTimeException(node,
+					string.Format("The variable '{0}' cannot be accessed before its declaration.", Name));
+
+			var varNode = Node as VariableDeclarator;
+			if (varNode != null && varNode.Initializer != null &&
+				node.EndIndex >= varNode.Initializer.StartIndex &&
+				node.StartIndex < varNode.Initializer.EndIndex)
+				throw new CompileTimeException(node,
+					string.Format("The variable '{0}' cannot be accessed in its initializer.", Name));
 		}
 	}
 

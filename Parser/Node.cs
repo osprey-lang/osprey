@@ -979,7 +979,7 @@ namespace Osprey.Nodes
 
 		public bool IsStatic, IsAbstract, IsOverride, IsOverridable;
 
-		internal Method DeclSpace { get { return ((Block)Body).DeclSpace.Method; } }
+		internal Method DeclSpace;
 
 		public override string ToString(int indent)
 		{

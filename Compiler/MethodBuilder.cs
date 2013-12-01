@@ -340,9 +340,12 @@ namespace Osprey
 				{
 					// Branching to an unconditional branch makes the MethodBuilder forward directly
 					// to the target of the unconditional branch.
+					// Exception: if the original instruction is a leave, we do not forward. Ever.
 
+					var origBranch = original as Branch;
 					var branchInstr = instr as Branch;
-					if (branchInstr != null && branchInstr.Condition == BranchCondition.Unconditional &&
+					if ((origBranch == null || origBranch.Condition != BranchCondition.Leave) &&
+						branchInstr != null && branchInstr.Condition == BranchCondition.Unconditional &&
 						!visited.Contains(instr))
 					{
 						label = branchInstr.Target;
