@@ -14,6 +14,6 @@ Informative messages always begin with `[info]`; if they consist of multiple lin
 
 Compile-time errors emit messages that begin with `[error]`. These _may_ consist of multiple lines; everything after the line beginning with `[error]` is considered part of the error information. No additional lines are printed after an error.
 
-Following the word `info`, `warn` or `error`, within the bracket, may be a file name, line number and column/character, in the format `"file":line:char`, where `line` and `char` are both 1-based. The file name is always in double quotes. This indicates the source file location that caused the message to be emitted, for example: `[warn "C:\my\awesome\project\main.osp":230:9] Unreachable code detected.`
+Following the word `info`, `warn` or `error`, within the bracket, may be a file name, line number and column/character, in the format `"file":line:char+length`, where `line` and `char` are both 1-based, and `length` is the number of characters in the offending token/parse node. The file name is always in double quotes. This indicates the source file location that caused the message to be emitted, for example: `[warn "C:\my\awesome\project\main.osp":230:9+6] Unreachable code detected.`
 
 If you redirect errors to STDOUT with `/errtostdout`, then the compiler may change the text and background colors in the console window to highlight the error location in the offending source file.

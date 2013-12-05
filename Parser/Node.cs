@@ -701,7 +701,12 @@ namespace Osprey.Nodes
 				if (!(Body is ExternBody) && BaseInitializer == null &&
 					@class.BaseType != null)
 				{
-					BaseInitializer = new BaseInitializer(new List<Expression>());
+					BaseInitializer = new BaseInitializer(new List<Expression>())
+						{
+							StartIndex = this.StartIndex,
+							EndIndex = this.EndIndex,
+							Document = this.Document,
+						};
 					Body.Statements.Insert(0, BaseInitializer);
 				}
 

@@ -1042,7 +1042,7 @@ namespace Osprey
 					ValidateEnumSetType(typeDecl, type);
 
 				if (verbosity > CompilerVerbosity.NotVerbose && !SilenceNotices)
-					Notice(CompilerVerbosity.Verbose, "Initialized base type of '{0}' to '{1}'.",
+					Notice(CompilerVerbosity.ExtraVerbose, "Initialized base type of '{0}' to '{1}'.",
 						type.FullName, type.BaseType.FullName);
 			}
 
@@ -2026,7 +2026,13 @@ namespace Osprey
 			int column;
 			var line = GetLineNumber(tabSize, out column);
 
-			return string.Format("\"{0}\":{1}:{2}", fileName, line, column);
+			var length = endIndex - startIndex;
+
+			return string.Format("\"{0}\":{1}:{2}+{3}",
+				fileName,
+				line.ToString(CI.InvariantCulture),
+				column.ToString(CI.InvariantCulture),
+				length.ToString(CI.InvariantCulture));
 		}
 	}
 }

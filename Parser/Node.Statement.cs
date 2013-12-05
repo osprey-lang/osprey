@@ -230,6 +230,20 @@ namespace Osprey.Nodes
 					}
 				}
 
+				// If the initializer assigns 'this' to anything, we now need to transform it to use
+				// this.'<>this' instead. hasLocalVarAccess is used if DeclSpace.ClosureVariable is
+				// not null, only as a way of avoiding a potentially unnecessary loop.
+				bool hasLocalVarAccess = false;
+				if (Initializer != null)
+					for (var i = 0; i < Initializer.Count; i++)
+					{
+						var expr = Initializer[i];
+						if (expr.Value is ThisAccess)
+							expr.Value = new InstanceMemberAccess(expr.Value, genClass, genClass.ThisField);
+						else if (!hasLocalVarAccess)
+							hasLocalVarAccess = expr.Value is LocalVariableAccess;
+					}
+
 				if (DeclSpace.ClosureVariable != null)
 				{
 					var field = genClass.DeclareAnonField(DeclSpace);
@@ -249,16 +263,25 @@ namespace Osprey.Nodes
 					// However, we still need to make sure that any captured parameters are
 					// actually copied from the correct location (which will be a field in
 					// the iterator class now, rather than an actual parameter).
-					for (var i = 0; i < Initializer.Count; i++)
-					{
-						var expr = Initializer[i];
-						if (expr.Value is LocalVariableAccess)
+					// To elaborate, if you have the following function:
+					//    function i(x) {
+					//        yield @= x;
+					//    }
+					// the parameter x is copied like this:
+					//    i(x): x -> I.'var:x'
+					//    I.moveNext(): I.'var:x' -> C.'var:x'
+					// where I is the iterator class and C is the closure class.
+					if (hasLocalVarAccess)
+						for (var i = 0; i < Initializer.Count - 1; i++)
 						{
-							var variable = ((LocalVariableAccess)expr.Value).Variable;
-							if (variable.IsParameter || variable.VariableKind == VariableKind.IterationVariable)
-								expr.Value = new InstanceMemberAccess(new ThisAccess(), genClass, variable.CaptureField);
+							var expr = Initializer[i];
+							if (expr.Value is LocalVariableAccess)
+							{
+								var variable = ((LocalVariableAccess)expr.Value).Variable;
+								if (variable.IsParameter || variable.VariableKind == VariableKind.IterationVariable)
+									expr.Value = new InstanceMemberAccess(new ThisAccess(), genClass, variable.CaptureField);
+							}
 						}
-					}
 				}
 			}
 
@@ -2222,9 +2245,16 @@ namespace Osprey.Nodes
 				if (ReturnValues.Count > 0 && block.Method is ClassMemberMethod)
 				{
 					var member = ((ClassMemberMethod)block.Method).Owner;
-					if (member.Kind == MemberKind.Constructor ||
-						member.Kind == MemberKind.PropertySetter)
-						throw new CompileTimeException(this, "Constructors and property setters cannot return any values.");
+					string error = null;
+
+					if (member.Kind == MemberKind.Constructor)
+						error = "Static and instance constructors cannot return any values.";
+					else if (member.Kind == MemberKind.PropertySetter ||
+						member.Kind == MemberKind.IndexerSetter)
+						error = "Property and indexer setters cannot return any values.";
+
+					if (error != null)
+						throw new CompileTimeException(this, error);
 				}
 				else if (block.Method == document.Compiler.MainMethod)
 					throw new CompileTimeException(this, "Cannot return from the top level of a script.");

@@ -17,13 +17,15 @@ namespace Osprey
 			try { Console.InputEncoding = Encoding.UTF8; } catch { }
 
 			CompilerOptions options;
-			bool silenceErrors;
+			bool silenceErrors, suppressSource;
 			string outFile;
 			Dictionary<string, bool> constants;
 			List<string> sourceFiles;
 			try
 			{
-				var sourceFileIndex = ParseArguments(args, out options, out silenceErrors, out outFile, out constants);
+				var sourceFileIndex = ParseArguments(args,
+					out options, out silenceErrors, out suppressSource,
+					out outFile, out constants);
 
 				sourceFiles = new List<string>();
 				if (sourceFileIndex != -1)
@@ -83,7 +85,8 @@ namespace Osprey
 					Console.ForegroundColor = ConsoleColor.Gray;
 
 					err.WriteLine();
-					PrintErrorLocation(e, err);
+					if (!suppressSource)
+						PrintErrorLocation(e, err);
 				}
 			}
 			catch (CompileTimeException e)
@@ -104,7 +107,7 @@ namespace Osprey
 					Console.ForegroundColor = ConsoleColor.Gray;
 
 					err.WriteLine();
-					if (e.Node != null)
+					if (!suppressSource && e.Node != null)
 						PrintErrorLocation(e, err);
 				}
 			}
@@ -276,12 +279,14 @@ namespace Osprey
 		/// <param name="outFile">The output file, or null if none was specified.</param>
 		/// <returns>The index of the first source file within <paramref name="args"/>.</returns>
 		private static int ParseArguments(string[] args, out CompilerOptions options,
-			out bool silenceErrors, out string outFile, out Dictionary<string, bool> constants)
+			out bool silenceErrors, out bool suppressSource, out string outFile,
+			out Dictionary<string, bool> constants)
 		{
 			options = new CompilerOptions();
 			options.UseExtensions = true; // Use extensions by default
 
 			silenceErrors = false;
+			suppressSource = false;
 
 			var seenSwitches = new HashSet<string>();
 			outFile = null;
@@ -398,6 +403,10 @@ namespace Osprey
 
 						case "errtostdout":
 							options.ErrorToStdout = true;
+							break;
+
+						case "hidesource":
+							suppressSource = true;
 							break;
 
 						case "formatjson":
