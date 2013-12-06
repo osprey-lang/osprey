@@ -1104,6 +1104,7 @@ namespace Osprey.Nodes
 			{
 				return Else == null ||
 					BreakCount > 0 ||
+					NextCount > 0 || // A 'next' makes the end of the body reachable
 					Body.IsEndReachable ||
 					Else.IsEndReachable;
 			}
@@ -1399,9 +1400,10 @@ namespace Osprey.Nodes
 
 					method.Append(Branch.IfTrue(loopBody)); // Run another iteration if counter <= high
 				}
-				method.Append(Branch.Always(loopEnd)); // Jump past the else
-
 				method.PopState(expected: loopState); // Exit the loop
+
+				if (this.IsEndReachable)
+					method.Append(Branch.Always(loopEnd)); // Jump past the else
 
 				rangeState.Done();
 			}
@@ -1470,7 +1472,8 @@ namespace Osprey.Nodes
 
 				method.PopState(expected: loopState);
 
-				method.Append(Branch.Always(loopEnd)); // Jump past else
+				if (this.IsEndReachable)
+					method.Append(Branch.Always(loopEnd)); // Jump past else
 			}
 
 			{ // Else

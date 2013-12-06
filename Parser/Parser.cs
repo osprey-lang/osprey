@@ -1677,6 +1677,8 @@ namespace Osprey
 			if (Accept(i, TokenType.CurlyOpen))
 				return new ElseClause(ParseBlock(ref i)) { Document = document };
 
+			Accept(ref i, TokenType.Colon); // Optional ':'
+
 			var body = ParseStatement(ref i);
 			if (body is LocalDeclaration)
 				throw new ParseException(body, tok.Source, "Embedded statement cannot be a declaration.");
@@ -3070,17 +3072,23 @@ namespace Osprey
 					throw new ParseException(errorToken, "A class cannot be marked both abstract and inheritable.");
 				if (Access == AccessLevel.Protected)
 					throw new ParseException(errorToken, "A class cannot be marked as protected.");
+
+				if (Access == AccessLevel.None)
+					Access = AccessLevel.Public;
 			}
 			public void ValidateForEnum(Token errorToken)
 			{
 				if (IsOverride || IsStatic || IsOverridable || IsInheritable || IsAbstract || Access == AccessLevel.Protected)
 					throw new ParseException(errorToken,
 						"An enum cannot be marked as override, static, overridable, inheritable, abstract or protected.");
+
+				if (Access == AccessLevel.None)
+					Access = AccessLevel.Public;
 			}
 			public void ValidateForMethodOrProperty(Token errorToken)
 			{
 				if (IsInheritable)
-					throw new ParseException(errorToken, "A method cannot be marked as inheritable.");
+					throw new ParseException(errorToken, "A method, property or indexer cannot be marked as inheritable.");
 				if (IsStatic && (IsAbstract || IsOverridable || IsOverride))
 					throw new ParseException(errorToken,
 						"A static method, property or indexer cannot be marked as abstract, overridable or override.");
@@ -3111,13 +3119,20 @@ namespace Osprey
 			public void ValidateForConstructor(Token errorToken)
 			{
 				if (IsStatic)
+				{
 					if (IsOverridable || IsInheritable || IsAbstract || IsOverride ||
 						Access != AccessLevel.None)
 						throw new ParseException(errorToken,
 							"A static constructor cannot have any modifiers except 'static'.");
-				else if (IsAbstract || IsInheritable || IsOverridable || IsOverride)
-					throw new ParseException(errorToken,
-						"An instance constructor cannot be marked as abstract, inheritable, overridable or override.");
+				}
+				else
+				{
+					if (IsAbstract || IsInheritable || IsOverridable || IsOverride)
+						throw new ParseException(errorToken,
+							"An instance constructor cannot be marked as abstract, inheritable, overridable or override.");
+					if (Access == AccessLevel.None)
+						Access = AccessLevel.Private;
+				}
 			}
 			public void ValidateForGlobal(Token errorToken)
 			{
