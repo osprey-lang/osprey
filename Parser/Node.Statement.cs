@@ -30,9 +30,18 @@ namespace Osprey.Nodes
 		/// </remarks>
 		public virtual bool IsEndReachable { get { return true; } }
 		
+		/// <summary>
+		/// Performs constant folding on the statement.
+		/// </summary>
 		public virtual void FoldConstant() { }
 
-		public virtual void ResolveNames(IDeclarationSpace context, FileNamespace document) { }
+		/// <summary>
+		/// Performs name resolution on the statement.
+		/// </summary>
+		/// <param name="context">The context in which to resolve names.</param>
+		/// <param name="document">The file namespace in which to resolve global variables.</param>
+		/// <param name="reachable">Indicates whether the statement is reachable.</param>
+		public virtual void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable) { }
 
 		public virtual void DeclareNames(BlockSpace parent) { }
 
@@ -173,12 +182,16 @@ namespace Osprey.Nodes
 				stmt.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			canReturn = canYield = isEndReachable = null; // reset!
 
 			foreach (var stmt in Statements)
-				stmt.ResolveNames(this.DeclSpace, document);
+			{
+				stmt.ResolveNames(this.DeclSpace, document, reachable);
+				if (reachable && !stmt.IsEndReachable)
+					reachable = false;
+			}
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -366,7 +379,7 @@ namespace Osprey.Nodes
 					decl.FoldConstant(IsConst);
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			foreach (var decl in Declarators)
 				decl.ResolveNames(context, document);
@@ -517,7 +530,7 @@ namespace Osprey.Nodes
 			Value = Value.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			Value = Value.ResolveNames(context, document);
 		}
@@ -646,11 +659,11 @@ namespace Osprey.Nodes
 			Body.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			foreach (var param in Parameters)
 				param.ResolveNames(context, document);
-			Body.ResolveNames(context, document);
+			Body.ResolveNames(context, document, reachable);
 
 			if (DeclSpace != null && DeclSpace.Method.IsGenerator)
 				document.Compiler.AddGeneratorMethod(DeclSpace.Method);
@@ -705,7 +718,7 @@ namespace Osprey.Nodes
 			Expression = Expression.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			Expression = Expression.ResolveNames(context, document);
 		}
@@ -750,9 +763,9 @@ namespace Osprey.Nodes
 			Body.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			Body.ResolveNames(context, document);
+			Body.ResolveNames(context, document, reachable);
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -878,12 +891,12 @@ namespace Osprey.Nodes
 				Else.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			Condition = Condition.ResolveNames(context, document);
-			base.ResolveNames(context, document);
+			base.ResolveNames(context, document, reachable);
 			if (Else != null)
-				Else.ResolveNames(context, document);
+				Else.ResolveNames(context, document, reachable);
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -1142,12 +1155,12 @@ namespace Osprey.Nodes
 				Else.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			List = List.ResolveNames(context, document);
-			base.ResolveNames(context, document); // Body
+			base.ResolveNames(context, document, reachable); // Body
 			if (Else != null)
-				Else.ResolveNames(context, document);
+				Else.ResolveNames(context, document, reachable);
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -1768,10 +1781,10 @@ namespace Osprey.Nodes
 			base.FoldConstant(); // Body
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			Condition = Condition.ResolveNames(context, document);
-			base.ResolveNames(context, document); // Body
+			base.ResolveNames(context, document, reachable); // Body
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -1855,9 +1868,9 @@ namespace Osprey.Nodes
 				Condition = Condition.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			base.ResolveNames(context, document); // Body
+			base.ResolveNames(context, document, reachable); // Body
 			if (Condition != null)
 				Condition = Condition.ResolveNames(context, document);
 		}
@@ -1976,13 +1989,13 @@ namespace Osprey.Nodes
 				Finally.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			base.ResolveNames(context, document); // Body
+			base.ResolveNames(context, document, reachable); // Body
 			foreach (var @catch in Catches)
-				@catch.ResolveNames(context, document);
+				@catch.ResolveNames(context, document, reachable);
 			if (Finally != null)
-				Finally.ResolveNames(context, document);
+				Finally.ResolveNames(context, document, reachable);
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -2151,12 +2164,12 @@ namespace Osprey.Nodes
 			return sb.ToString();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			context.GetContainingNamespace().ResolveTypeName(Type, document);
 			if (!Type.Type.InheritsFrom(document.Compiler.ErrorType))
 				throw new CompileTimeException(Type, "The type in a catch clause must inherit from aves.Error.");
-			base.ResolveNames(context, document); // Body
+			base.ResolveNames(context, document, reachable); // Body
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -2240,7 +2253,7 @@ namespace Osprey.Nodes
 				ReturnValues[i] = ReturnValues[i].FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			var block = context as BlockSpace;
 			if (block != null)
@@ -2351,7 +2364,7 @@ namespace Osprey.Nodes
 				ReturnValues[i] = ReturnValues[i].FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			var block = context as BlockSpace;
 			if (block == null)
@@ -2362,8 +2375,10 @@ namespace Osprey.Nodes
 				var member = ((ClassMemberMethod)block.Method).Owner;
 				if (member.Kind == MemberKind.Constructor ||
 					member.Kind == MemberKind.PropertySetter ||
+					member.Kind == MemberKind.IndexerSetter ||
 					member.Kind == MemberKind.Operator)
-					throw new CompileTimeException(this, "Constructors, property setters and operators cannot be generator methods.");
+					throw new CompileTimeException(this,
+						"Constructors, property setters, indexer setters and operators cannot be generator methods.");
 			}
 			else if (block.Method == document.Compiler.MainMethod)
 				throw new CompileTimeException(this, "Cannot yield from the top level of a script.");
@@ -2434,7 +2449,7 @@ namespace Osprey.Nodes
 			return new string('\t', indent) + (Label == null ? "next;" : "next " + Label + ";");
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			// Verify that there is a loop to refer to.
 			if (context is BlockSpace)
@@ -2445,7 +2460,8 @@ namespace Osprey.Nodes
 				if (loop is DoWhileStatement && ((DoWhileStatement)loop).Condition == null)
 					throw new CompileTimeException(this, "A 'next' statement may not refer to a 'do {...};' statement. Use 'break' instead.");
 
-				loop.NextCount++;
+				if (reachable)
+					loop.NextCount++;
 			}
 		}
 
@@ -2480,13 +2496,15 @@ namespace Osprey.Nodes
 			return new string('\t', indent) + (Label == null ? "break;" : "break " + Label + ";");
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			if (context is BlockSpace)
 			{
 				parent = (BlockSpace)context;
 				var loop = parent.FindLoop(this, Label, out IsLeave);
-				loop.BreakCount++;
+
+				if (reachable)
+					loop.BreakCount++;
 			}
 		}
 
@@ -2524,7 +2542,7 @@ namespace Osprey.Nodes
 				Value = Value.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			var block = (BlockSpace)context;
 
@@ -2599,7 +2617,7 @@ namespace Osprey.Nodes
 			Value = Value.FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			Target = Target.ResolveNames(context, document);
 			AssignmentExpression.EnsureAssignable(Target);
@@ -2646,7 +2664,7 @@ namespace Osprey.Nodes
 				Values[i] = Values[i].FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			for (var i = 0; i < Targets.Count; i++)
 			{
@@ -2833,7 +2851,7 @@ namespace Osprey.Nodes
 				Arguments[i] = Arguments[i].FoldConstant();
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			bool _;
 			Class @class = context.GetContainingClass(out _);

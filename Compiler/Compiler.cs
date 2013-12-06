@@ -1176,8 +1176,13 @@ namespace Osprey
 
 					// Statements must be resolved relative to the document's FileNamespace, because
 					// of global variables. We cannot loop through the main method body separately.
+					var reachable = true;
 					foreach (var stmt in doc.Statements)
-						stmt.ResolveNames(mainMethodBody.DeclSpace, doc.Namespace);
+					{
+						stmt.ResolveNames(mainMethodBody.DeclSpace, doc.Namespace, reachable);
+						if (reachable && !stmt.IsEndReachable)
+							reachable = false;
+					}
 				}
 			}
 			catch (CompileTimeException e)
@@ -1210,7 +1215,7 @@ namespace Osprey
 			{
 				foreach (var function in nsDecl.Functions)
 				{
-					function.Function.ResolveNames(context, doc);
+					function.Function.ResolveNames(context, doc, true);
 					if (function.DeclSpace.HasLocalFunctions)
 						AddMethodWithLocalFunctions(function.DeclSpace);
 					if (function.DeclSpace.IsGenerator)

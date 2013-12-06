@@ -1713,7 +1713,7 @@ namespace Osprey.Nodes
 				document.Compiler.AddMethodWithLocalFunctions(func.Method);
 
 			funcDecl.Body.DeclareNames(context as BlockSpace);
-			funcDecl.ResolveNames(context, document);
+			funcDecl.ResolveNames(context, document, true);
 
 			if (func.Method.IsGenerator)
 				document.Compiler.AddGeneratorMethod(func.Method);
@@ -1811,7 +1811,7 @@ namespace Osprey.Nodes
 			else
 				document.Compiler.AddMethodWithLocalFunctions(func.Method);
 
-			funcDecl.ResolveNames(context, document);
+			funcDecl.ResolveNames(context, document, true);
 
 			return new LambdaFunctionAccess(func).At(this);
 		}

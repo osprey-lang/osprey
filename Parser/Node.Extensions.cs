@@ -59,7 +59,7 @@ namespace Osprey.Nodes
 				throw new CompileTimeException(MaxStack, "The __extern 'stack' parameter must be a constant expression of type Int.");
 		}
 
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			Locals = Locals.ResolveNames(context, document, false, false);
 			MaxStack = MaxStack.ResolveNames(context, document, false, false);

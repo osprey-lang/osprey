@@ -732,7 +732,7 @@ namespace Osprey.Nodes
 				}
 			}
 
-			Body.ResolveNames(context, document);
+			Body.ResolveNames(context, document, true);
 		}
 
 		internal void AddFieldInitializers(IEnumerable<VariableDeclarator> fields, Class @class)
@@ -916,7 +916,7 @@ namespace Osprey.Nodes
 			foreach (var param in Parameters)
 				param.ResolveNames(context, document);
 
-			Body.ResolveNames(context, document);
+			Body.ResolveNames(context, document, true);
 		}
 	}
 
@@ -1031,7 +1031,7 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, Compiler compiler)
 		{
-			Body.ResolveNames(context, document);
+			Body.ResolveNames(context, document, true);
 		}
 	}
 
@@ -1125,7 +1125,7 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, Compiler compiler)
 		{
-			Body.ResolveNames(context, document);
+			Body.ResolveNames(context, document, true);
 		}
 	}
 
@@ -1287,7 +1287,7 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, Compiler compiler)
 		{
-			Body.ResolveNames(context, document);
+			Body.ResolveNames(context, document, true);
 		}
 	}
 }
