@@ -1994,6 +1994,36 @@ namespace Osprey.Nodes
 			base.ResolveNames(context, document, reachable); // Body
 			foreach (var @catch in Catches)
 				@catch.ResolveNames(context, document, reachable);
+
+			// It is illegal for a catch clause to specify a type
+			// derived from the type of any preceding catch clause,
+			// or the same type as a preceding catch clause.
+			// For example, this is invalid:
+			//    try { }
+			//    catch Error { }
+			//    catch ArgumentError { } // Nope: ArgumentError derives from Error
+			// but this is fine:
+			//    try { }
+			//    catch ArgumentError { }
+			//    catch Error { }
+			// This is because catch clauses are examined in lexical
+			// order. Without this restriction, the ArgumentError catch
+			// clause in the first example would be unreachable.
+			if (Catches.Count > 1)
+			{
+				int max = Catches[Catches.Count - 1] is SpecificCatchClause ?
+					Catches.Count : // The last catch clause has a type, process it
+					Catches.Count - 1; // The last catch clause is generic, ignore it
+				for (var i = 1; i < max; i++)
+				{
+					var catchType = ((SpecificCatchClause)Catches[i]).Type.Type;
+					for (var k = 0; k < i; k++)
+						if (catchType.InheritsFrom(((SpecificCatchClause)Catches[k]).Type.Type))
+							throw new CompileTimeException(Catches[i],
+								"The type in a catch clause cannot be derived from the type in a preceding catch clause.");
+				}
+			}
+
 			if (Finally != null)
 				Finally.ResolveNames(context, document, reachable);
 		}
