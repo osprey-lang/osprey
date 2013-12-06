@@ -2933,7 +2933,7 @@ namespace Osprey.Nodes
 	public sealed class StringLiteral : Literal
 	{
 		public StringLiteral(StringToken token)
-			: base(token.Value, ConstantValue.CreateString(token.RealValue))
+			: base(token.Value, ConstantValue.CreateString(token.LiteralValue))
 		{ }
 
 		public string StringValue { get { return Value.StringValue; } }

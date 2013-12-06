@@ -735,7 +735,7 @@ namespace Osprey
 				Expect(ref i, TokenType.ParenOpen);
 
 				var initerToken = Expect(ref i, TokenType.String);
-				output.Initializer = ((StringToken)initerToken).RealValue;
+				output.Initializer = ((StringToken)initerToken).LiteralValue;
 
 				Expect(ref i, TokenType.ParenClose);
 				Expect(ref i, TokenType.Semicolon);
@@ -3011,14 +3011,14 @@ namespace Osprey
 				if (p.Accept(i, TokenType.Identifier, TokenType.Keyword))
 					name = p.tok[i].Value;
 				else if (p.Accept(i, TokenType.String))
-					name = ((StringToken)p.tok[i]).RealValue;
+					name = ((StringToken)p.tok[i]).LiteralValue;
 				else
 					throw new ParseException(p.tok[i], "Expected a field name, which must be an identifier or a string.");
 
 				i++;
 				p.Expect(ref i, TokenType.Assign);
 
-				var value = ((StringToken)p.Expect(ref i, TokenType.String)).RealValue;
+				var value = ((StringToken)p.Expect(ref i, TokenType.String)).LiteralValue;
 
 				p.Expect(ref i, TokenType.Semicolon);
 

@@ -148,17 +148,17 @@ namespace Osprey
 	/// </summary>
 	public class StringToken : Token
 	{
-		public StringToken(string source, string value, string realValue, int index)
+		public StringToken(string source, string value, string literalValue, int index)
 			: base(source, value, TokenType.String, index)
 		{
-			this.realValue = realValue;
+			this.literalValue = literalValue;
 		}
 
-		private string realValue;
+		private string literalValue;
 		/// <summary>
-		/// Gets the "real" value of the literal; that is, the string value represented by the literal.
+		/// Gets the string value represented by the literal.
 		/// </summary>
-		public string RealValue { get { return realValue; } }
+		public string LiteralValue { get { return literalValue; } }
 	}
 
 	/// <summary>
