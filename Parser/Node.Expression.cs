@@ -408,7 +408,14 @@ namespace Osprey.Nodes
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
 			ResolveOperands(context, document);
-			return base.ResolveNames(context, document);
+
+			if (Operator == BinaryOperator.FunctionApplication)
+				if (Right.IsTypeKnown(document.Compiler) &&
+					!Right.GetKnownType(document.Compiler).InheritsFrom(document.Compiler.ListType))
+					throw new CompileTimeException(Right,
+						"The the right-hand operand in a function application must be of type aves.List.");
+
+			return this;
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -453,8 +460,8 @@ namespace Osprey.Nodes
 
 		protected void ResolveOperands(IDeclarationSpace context, FileNamespace document)
 		{
-			Left = Left.ResolveNames(context, document);
-			Right = Right.ResolveNames(context, document);
+			Left = Left.ResolveNames(context, document, false, false);
+			Right = Right.ResolveNames(context, document, false, false);
 		}
 
 		protected void TransformOperands(BlockSpace currentBlock, bool forGenerator)
@@ -474,7 +481,7 @@ namespace Osprey.Nodes
 		{
 			FoldOperands();
 
-			// null ?? Right => Right
+			// null     ?? Right => Right
 			// non-null ?? Right => Left
 
 			if (Left.IsNull)
@@ -513,19 +520,15 @@ namespace Osprey.Nodes
 		{
 			FoldOperands();
 
-			// null ?! Right => null
+			// null     ?! Right => null
 			// non-null ?! Right => Right
 			if (Left.IsNull)
-				return new ConstantExpression(ConstantValue.Null)
-				{
-					StartIndex = this.StartIndex,
-					EndIndex = this.EndIndex,
-				};
+				return new ConstantExpression(ConstantValue.Null).At(this);
 			else if (Left is ConstantExpression)
 				// At this point, Left is a constant non-null expression.
 				// If it were a constant null expression, we would have returned above.
 				return Right;
-			return base.FoldConstant();
+			return this;
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -585,18 +588,10 @@ namespace Osprey.Nodes
 				if (Right is ConstantExpression)
 				{
 					var constRight = ((ConstantExpression)Right).Value;
-					return new ConstantExpression(constLeft.ExecuteOperator(BinaryOperator.Or, constRight))
-					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+					return new ConstantExpression(constLeft.ExecuteOperator(BinaryOperator.Or, constRight)).At(this);
 				}
 				if (constLeft.IsTrue)
-					return new ConstantExpression(ConstantValue.True)
-					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+					return new ConstantExpression(ConstantValue.True).At(this);
 			}
 
 			return this;
@@ -659,11 +654,7 @@ namespace Osprey.Nodes
 				if (Right is ConstantExpression)
 				{
 					var constRight = ((ConstantExpression)Right).Value;
-					return new ConstantExpression(constLeft.ExecuteOperator(BinaryOperator.Xor, constRight))
-					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+					return new ConstantExpression(constLeft.ExecuteOperator(BinaryOperator.Xor, constRight)).At(this);
 				}
 
 				// false xor false => false
@@ -676,17 +667,9 @@ namespace Osprey.Nodes
 
 				// The "not" nodes will be reduced to simpler code in the bytecode.
 
-				var output = new UnaryExpression(Right, UnaryOperator.Not)
-					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+				var output = new UnaryExpression(Right, UnaryOperator.Not).At(this);
 				if (constLeft.IsTrue)
-					output = new UnaryExpression(output, UnaryOperator.Not)
-						{
-							StartIndex = this.StartIndex,
-							EndIndex = this.EndIndex,
-						};
+					output = new UnaryExpression(output, UnaryOperator.Not).At(this);
 				return output;
 			}
 
@@ -768,18 +751,10 @@ namespace Osprey.Nodes
 				if (Right is ConstantExpression)
 				{
 					var constRight = ((ConstantExpression)Right).Value;
-					return new ConstantExpression(constLeft.ExecuteOperator(BinaryOperator.And, constRight))
-					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+					return new ConstantExpression(constLeft.ExecuteOperator(BinaryOperator.And, constRight)).At(this);
 				}
 				if (!constLeft.IsTrue)
-					return new ConstantExpression(ConstantValue.False)
-					{
-						StartIndex = this.StartIndex,
-						EndIndex = this.EndIndex,
-					};
+					return new ConstantExpression(ConstantValue.False).At(this);
 			}
 
 			return this;
@@ -845,6 +820,8 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
+			FoldOperands();
+
 			if (Left is ConstantExpression && Right is ConstantExpression)
 			{
 				var constLeft = ((ConstantExpression)Left).Value;
@@ -854,11 +831,7 @@ namespace Osprey.Nodes
 				if (Negated)
 					result = result.ExecuteOperator(UnaryOperator.Not);
 
-				return new ConstantExpression(result)
-				{
-					StartIndex = this.StartIndex,
-					EndIndex = this.EndIndex,
-				};
+				return new ConstantExpression(result).At(this);
 			}
 
 			return this;
@@ -897,6 +870,8 @@ namespace Osprey.Nodes
 		/// <summary>The type to test against.</summary>
 		public TypeName Type;
 
+		private Compiler compiler; // For FoldConstant
+
 		public override bool IsTypeKnown(Compiler compiler) { return true; }
 
 		public override Type GetKnownType(Compiler compiler)
@@ -912,45 +887,19 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
+			Expression = Expression.FoldConstant();
+
 			if (Expression is ConstantExpression)
 			{
-				var constExpr = ((ConstantExpression)Expression).Value;
-
-				var typeName = Type == null ? null : Type.Type.FullName;
+				var constValue = ((ConstantExpression)Expression).Value;
 
 				bool result;
-				switch (constExpr.Type)
-				{
-					case ConstantValueType.Null:
-						result = typeName == null;
-						break;
-					case ConstantValueType.Boolean:
-						result = typeName == "aves.Boolean";
-						break;
-					case ConstantValueType.Int:
-						result = typeName == "aves.Int";
-						break;
-					case ConstantValueType.UInt:
-						result = typeName == "aves.UInt";
-						break;
-					case ConstantValueType.Real:
-						result = typeName == "aves.Real";
-						break;
-					case ConstantValueType.String:
-						result = typeName == "aves.String";
-						break;
-					case ConstantValueType.Enum:
-						result = constExpr.EnumValue.Type == Type.Type;
-						break;
-					default:
-						result = false; // should never happenen
-						break;
-				}
-				return new ConstantExpression(ConstantValue.CreateBoolean(result))
-				{
-					StartIndex = this.StartIndex,
-					EndIndex = this.EndIndex,
-				};
+				if (Type == null)
+					result = constValue.Type == ConstantValueType.Null;
+				else
+					result = constValue.GetTypeObject(compiler).InheritsFrom(Type.Type);
+
+				return new ConstantExpression(ConstantValue.CreateBoolean(result)).At(this);
 			}
 
 			return this;
@@ -958,7 +907,9 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			Expression = Expression.ResolveNames(context, document);
+			compiler = document.Compiler;
+
+			Expression = Expression.ResolveNames(context, document, false, false);
 			if (Type != null)
 				context.GetContainingNamespace().ResolveTypeName(Type, document); // wanted for its side-effects
 			return this;
@@ -1096,7 +1047,7 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			Inner = Inner.ResolveNames(context, document);
+			Inner = Inner.ResolveNames(context, document, false, false);
 			return this;
 		}
 
@@ -1196,9 +1147,9 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			Condition = Condition.ResolveNames(context, document);
-			TruePart = TruePart.ResolveNames(context, document);
-			FalsePart = FalsePart.ResolveNames(context, document);
+			Condition = Condition.ResolveNames(context, document, false, false);
+			TruePart = TruePart.ResolveNames(context, document, false, false);
+			FalsePart = FalsePart.ResolveNames(context, document, false, false);
 			return this;
 		}
 
@@ -1275,9 +1226,9 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			Target = Target.ResolveNames(context, document);
+			Target = Target.ResolveNames(context, document, false, false);
 			EnsureAssignable(Target);
-			Value = Value.ResolveNames(context, document);
+			Value = Value.ResolveNames(context, document, false, false);
 			return this;
 		}
 
@@ -1416,7 +1367,7 @@ namespace Osprey.Nodes
 						}
 
 						var inner = new ThisAccess();
-						inner.ResolveNames(context, document);
+						inner.ResolveNames(context, document, false, false);
 
 						result = new InstanceMemberAccess(inner, field.Parent, field);
 					}
@@ -1443,7 +1394,7 @@ namespace Osprey.Nodes
 						}
 
 						var inner = new ThisAccess();
-						inner.ResolveNames(context, document);
+						inner.ResolveNames(context, document, false, false);
 
 						result = new InstanceMemberAccess(inner, (Class)method.Parent, method);
 					}
@@ -1464,7 +1415,7 @@ namespace Osprey.Nodes
 							((LocalMethod)block.Method).Function.CapturesThis = true;
 
 						var inner = new ThisAccess();
-						inner.ResolveNames(context, document);
+						inner.ResolveNames(context, document, false, false);
 
 						result = new InstanceMemberAccess(inner, prop.Parent, prop);
 					}
@@ -2301,7 +2252,7 @@ namespace Osprey.Nodes
 
 		public override Type GetKnownType(Compiler compiler)
 		{
-			throw new InvalidOperationException("Don't call GetKnownType on ThisAccess. Compile specially instead.");
+			throw new InvalidOperationException("Don't call GetKnownType on BaseAccess. Compile specially instead.");
 		}
 
 		public override string ToString(int indent)
@@ -3018,12 +2969,12 @@ namespace Osprey.Nodes
 			}
 			else if (Inner.IsTypeKnown(document.Compiler))
 			{
-				bool hasInstance;
-				Class @class;
+				bool _;
+				Class instType;
 
 				if (Inner is ThisAccess || Inner is BaseAccess)
 				{
-					@class = context.GetContainingClass(out hasInstance);
+					instType = context.GetContainingClass(out _);
 				}
 				else
 				{
@@ -3033,25 +2984,25 @@ namespace Osprey.Nodes
 					if (type is Enum)
 						throw new CompileTimeException(Inner, "Enum values cannot be invoked.");
 
-					@class = (Class)type;
+					instType = (Class)type;
 				}
 
 				NamedMember inaccessibleMember;
-				var invocators = @class.GetMember(".call",
-					instType: Inner is BaseAccess ? @class.BaseType : @class,
-					fromType: @class,
+				var invocators = instType.GetMember(".call",
+					instType: Inner is BaseAccess ? instType.BaseType : instType,
+					fromType: context.GetContainingClass(out _),
 					inaccessibleMember: out inaccessibleMember);
 				if (inaccessibleMember != null)
 					throw new CompileTimeException(Inner, string.Format("The member '{0}' is not accessible in this context.",
 						inaccessibleMember.FullName));
 				if (invocators == null || invocators.Kind != MemberKind.MethodGroup)
 					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator.",
-						@class.FullName));
+						instType.FullName));
 
 				var invocator = ((MethodGroup)invocators).FindOverload(Arguments.Count, true);
 				if (invocator == null)
 					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator that takes {1} arguments.",
-						@class.FullName, Arguments.Count));
+						instType.FullName, Arguments.Count));
 
 				Inner = new InstanceMemberAccess(Inner, ((MethodGroup)invocators).ParentAsClass, invocators);
 			}
@@ -3874,38 +3825,16 @@ namespace Osprey.Nodes
 			// instance is on the stack
 			var endLabel = new Label("safe-chain-end");
 
-			foreach (var node in Chain)
+			for (var i = 0; i < Chain.Count; i++)
 			{
-				if (node.IsSafe)
+				var link = Chain[i];
+				if (link.IsSafe)
 				{
 					method.Append(new SimpleInstruction(Opcode.Dup)); // duplicate result of last expression
 					method.Append(Branch.IfNull(endLabel)); // branch to end if null
 				}
 
-				if (node is SafeMemberAccess)
-				{
-					var memberAccess = (SafeMemberAccess)node;
-					method.Append(new LoadMember(method.Module.GetStringId(memberAccess.Member)));
-				}
-				else if (node is SafeInvocation)
-				{
-					var invocation = (SafeInvocation)node;
-					foreach (var arg in invocation.Arguments)
-						arg.Compile(compiler, method);
-					method.Append(new Call(invocation.Arguments.Count));
-				}
-				else if (node is SafeIndexerAccess)
-				{
-					var indexer = (SafeIndexerAccess)node;
-					foreach (var arg in indexer.Arguments)
-						arg.Compile(compiler, method);
-					method.Append(new LoadIndexer(indexer.Arguments.Count));
-				}
-				else if (node is SafeIteratorLookup)
-				{
-					var iterLookup = (SafeIteratorLookup)node;
-					method.Append(new SimpleInstruction(Opcode.Lditer));
-				}
+				i += link.Compile(compiler, method, this, i);
 			}
 
 			// The endLabel could only ever be reached by either
@@ -3931,6 +3860,8 @@ namespace Osprey.Nodes
 		public virtual void ResolveNames(IDeclarationSpace context, FileNamespace document) { }
 
 		public virtual void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator) { }
+
+		public abstract int Compile(Compiler compiler, MethodBuilder method, SafeAccess parent, int index);
 	}
 
 	public sealed class SafeMemberAccess : SafeNode
@@ -3947,6 +3878,26 @@ namespace Osprey.Nodes
 		public override string ToString(int indent)
 		{
 			return (IsSafe ? "?." : ".") + Member;
+		}
+
+		public override int Compile(Compiler compiler, MethodBuilder method, SafeAccess parent, int index)
+		{
+			var memberId = method.Module.GetStringId(Member);
+			// If the next SafeNode in the chain is an unsafe-invocation,
+			// then we can compile this into a callmem instruction.
+			var next = index < parent.Chain.Count - 1 ? parent.Chain[index + 1] : null;
+			if (next != null && !next.IsSafe && next is SafeInvocation)
+			{
+				var nextCall = (SafeInvocation)next;
+				foreach (var arg in nextCall.Arguments)
+					arg.Compile(compiler, method); // First, load each argument
+				// Then call the member
+				method.Append(new CallMember(memberId, nextCall.Arguments.Count));
+				return 2; // skip this and the next
+			}
+
+			method.Append(new LoadMember(memberId));
+			return 1; // skip only this
 		}
 	}
 
@@ -3975,13 +3926,21 @@ namespace Osprey.Nodes
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
 			for (var i = 0; i < Arguments.Count; i++)
-				Arguments[i] = Arguments[i].ResolveNames(context, document);
+				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
+		}
+
+		public override int Compile(Compiler compiler, MethodBuilder method, SafeAccess parent, int index)
+		{
+			foreach (var arg in Arguments)
+				arg.Compile(compiler, method);
+			method.Append(new Call(Arguments.Count));
+			return 1;
 		}
 	}
 
@@ -4010,13 +3969,21 @@ namespace Osprey.Nodes
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
 			for (var i = 0; i < Arguments.Count; i++)
-				Arguments[i] = Arguments[i].ResolveNames(context, document);
+				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
+		}
+
+		public override int Compile(Compiler compiler, MethodBuilder method, SafeAccess parent, int index)
+		{
+			foreach (var arg in Arguments)
+				arg.Compile(compiler, method);
+			method.Append(new LoadIndexer(Arguments.Count));
+			return 1;
 		}
 	}
 
@@ -4029,6 +3996,12 @@ namespace Osprey.Nodes
 		public override string ToString(int indent)
 		{
 			return (IsSafe ? "?." : ".") + "iter";
+		}
+
+		public override int Compile(Compiler compiler, MethodBuilder method, SafeAccess parent, int index)
+		{
+			method.Append(new SimpleInstruction(Opcode.Lditer));
+			return 1;
 		}
 	}
 

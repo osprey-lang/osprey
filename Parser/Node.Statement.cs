@@ -478,7 +478,7 @@ namespace Osprey.Nodes
 				return;
 			Initializer = Initializer.FoldConstant();
 			if (isConst && !(Initializer is ConstantExpression))
-				throw new CompileTimeException(this, "The expression could be reduced to a constant value.");
+				throw new CompileTimeException(this, "The expression could not be reduced to a constant value.");
 		}
 
 		public void ResolveNames(IDeclarationSpace context, FileNamespace document)
@@ -532,7 +532,11 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			Value = Value.ResolveNames(context, document);
+			Value = Value.ResolveNames(context, document, false, false);
+			if (Value.IsTypeKnown(document.Compiler) &&
+				!Value.GetKnownType(document.Compiler).InheritsFrom(document.Compiler.ListType))
+				throw new CompileTimeException(Value,
+					"The value in a parallel local variable declaration must be of type aves.List.");
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -720,7 +724,7 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			Expression = Expression.ResolveNames(context, document);
+			Expression = Expression.ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -893,7 +897,7 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			Condition = Condition.ResolveNames(context, document);
+			Condition = Condition.ResolveNames(context, document, false, false);
 			base.ResolveNames(context, document, reachable);
 			if (Else != null)
 				Else.ResolveNames(context, document, reachable);
@@ -1157,7 +1161,7 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			List = List.ResolveNames(context, document);
+			List = List.ResolveNames(context, document, false, false);
 			base.ResolveNames(context, document, reachable); // Body
 			if (Else != null)
 				Else.ResolveNames(context, document, reachable);
@@ -1783,7 +1787,7 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			Condition = Condition.ResolveNames(context, document);
+			Condition = Condition.ResolveNames(context, document, false, false);
 			base.ResolveNames(context, document, reachable); // Body
 		}
 
@@ -1872,7 +1876,7 @@ namespace Osprey.Nodes
 		{
 			base.ResolveNames(context, document, reachable); // Body
 			if (Condition != null)
-				Condition = Condition.ResolveNames(context, document);
+				Condition = Condition.ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -2312,7 +2316,7 @@ namespace Osprey.Nodes
 			}
 
 			for (var i = 0; i < ReturnValues.Count; i++)
-				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document);
+				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -2419,7 +2423,7 @@ namespace Osprey.Nodes
 			block.Method.AddYield(this);
 
 			for (var i = 0; i < ReturnValues.Count; i++)
-				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document);
+				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -2590,7 +2594,13 @@ namespace Osprey.Nodes
 			}
 
 			if (Value != null)
-				Value = Value.ResolveNames(context, document);
+			{
+				Value = Value.ResolveNames(context, document, false, false);
+				if (Value.IsTypeKnown(document.Compiler) &&
+					!Value.GetKnownType(document.Compiler).InheritsFrom(document.Compiler.ErrorType))
+					throw new CompileTimeException(this,
+						"If the expression in a throw statement has a known type, that type must be or derive from aves.Error.");
+			}
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -2649,9 +2659,9 @@ namespace Osprey.Nodes
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			Target = Target.ResolveNames(context, document);
+			Target = Target.ResolveNames(context, document, false, false);
 			AssignmentExpression.EnsureAssignable(Target);
-			Value = Value.ResolveNames(context, document);
+			Value = Value.ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -2698,13 +2708,18 @@ namespace Osprey.Nodes
 		{
 			for (var i = 0; i < Targets.Count; i++)
 			{
-				var result = Targets[i].ResolveNames(context, document);
+				var result = Targets[i].ResolveNames(context, document, false, false);
 				AssignmentExpression.EnsureAssignable(result);
 				Targets[i] = result;
 			}
 
 			for (var i = 0; i < Values.Count; i++)
-				Values[i] = Values[i].ResolveNames(context, document);
+				Values[i] = Values[i].ResolveNames(context, document, false, false);
+
+			if (Values.Count == 1 && Values[0].IsTypeKnown(document.Compiler) &&
+				!Values[0].GetKnownType(document.Compiler).InheritsFrom(document.Compiler.ListType))
+				throw new CompileTimeException(Values[0],
+					"The value in a parallel assignment must be of type aves.List.");
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -2851,9 +2866,16 @@ namespace Osprey.Nodes
 		{
 			HashSet<Variable> variables = new HashSet<Variable>();
 			foreach (var e in Targets)
-				if (!(e is LocalVariableAccess) ||
-					!variables.Add(((LocalVariableAccess)e).Variable))
-					return false;
+			{
+				var local = e as LocalVariableAccess;
+				var global = e as GlobalVariableAccess;
+				if (local == null && (global == null || global.Variable.IsCaptured))
+					return false; // Neither local nor non-captured global
+
+				var variable = local != null ? local.Variable : global.Variable;
+				if (!variables.Add(variable))
+					return false; // Already a target, can't compile as right-to-left unpacking
+			}
 			return true;
 		}
 	}

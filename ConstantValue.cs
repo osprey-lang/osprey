@@ -712,21 +712,22 @@ namespace Osprey
 				{
 					var leftReal = left.ToReal();
 					var rightReal = right.ToReal();
-					return left.ToReal() == right.ToReal() ||
-						double.IsNaN(leftReal) && double.IsNaN(rightReal);
+					return left.ToReal() == right.ToReal();
 				}
 
 				if (left.Type == ConstantValueType.Int)
 				{
 					if (right.Type == ConstantValueType.Int)
-						return left.IntValue == right.IntValue;
-					return unchecked((ulong)left.IntValue) == (right.UIntValue & long.MaxValue);
+						return left.num.IntValue == right.num.IntValue;
+					return left.num.IntValue >= 0 &&
+						unchecked((ulong)left.num.IntValue) == right.num.UIntValue;
 				}
 				else // left == UInt
 				{
 					if (right.Type == ConstantValueType.UInt)
-						return left.UIntValue == right.UIntValue;
-					return (left.UIntValue & long.MaxValue) == unchecked((ulong)right.IntValue);
+						return left.num.UIntValue == right.num.UIntValue;
+					return right.num.IntValue >= 0 &&
+						left.num.UIntValue == unchecked((ulong)right.num.IntValue);
 				}
 			}
 

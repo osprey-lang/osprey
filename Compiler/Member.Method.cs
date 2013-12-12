@@ -177,7 +177,7 @@ namespace Osprey.Members
 		/// <param name="name">The name of the method.</param>
 		/// <param name="node">The node that declares the method.</param>
 		public Method(MethodDeclaration node)
-			: base(node.Name, MemberKind.Method, node, node.Access)
+			: base(node.DeclaredName, MemberKind.Method, node, node.Access)
 		{
 			// Note: node.Body can be a Block or EmptyStatement.
 			// If it's the latter, then node.Body as Block is null,

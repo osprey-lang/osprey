@@ -908,13 +908,15 @@ namespace Osprey
 						}
 					}
 				}
-				else if (Accept(i, TokenType.Identifier))
+				else if (Accept(i, TokenType.Identifier, TokenType.This))
 				{
 					// At this point, we could only ever be dealing with a method declared
 					// without an access level modifier and function keyword, e.g.:
 					// class Test {
 					//     foo(a, b) { }
 					// }
+					// Note that the name of the method could still be 'this', because it
+					// might be an invocator.
 					var method = ParseMethod(ref i, modifiers);
 					method.DocString = startTok.Documentation;
 					target.Methods.Add(method);
@@ -2422,12 +2424,16 @@ namespace Osprey
 				{
 					i++;
 					if (Accept(i, TokenType.Iter))
+					{
+						if (left is BaseAccess)
+							throw new ParseException(tok[i], "'base' cannot be used in an iterator lookup expression.");
 						left = new IteratorLookup(left)
 						{
 							StartIndex = left.StartIndex,
 							EndIndex = tok[i++].EndIndex,
 							Document = document,
 						};
+					}
 					else if (Accept(i, TokenType.Identifier))
 						left = new MemberAccess(left, tok[i].Value)
 						{
@@ -2442,6 +2448,9 @@ namespace Osprey
 					type == TokenType.ParenOpenSafe ||
 					type == TokenType.SquareOpenSafe) // safe access
 				{
+					if (left is BaseAccess)
+						throw new ParseException(tok[i], "'base' cannot be used in a safe access.");
+
 					var access = new SafeAccess(left) { StartIndex = left.StartIndex };
 					ParseSafeAccessChain(ref i, access.Chain);
 					access.EndIndex = tok[i - 1].EndIndex;
@@ -2710,8 +2719,7 @@ namespace Osprey
 
 		private Expression ParseListCreationExpr(ref int i)
 		{
-			Expect(i, TokenType.SquareOpen);
-			var start = tok[i++].Index;
+			var start = Expect(ref i, TokenType.SquareOpen).Index;
 
 			var items = new List<Expression>();
 
@@ -2726,7 +2734,7 @@ namespace Osprey
 			// [,] is an illegal list in Osprey: trailing commas are allowed only if
 			// there is at least one item.
 			// At least one expression is needed now, even in a list comprehension;
-			// [for i in [1 to 10]] is not allowed, and neither is [yield for x in [1 to 10]].
+			// [for i in [1 to 10]] is not allowed, and neither is [where true].
 			items.Add(ParseExpression(ref i));
 
 			if (tok[i].Value == "to") // range expression, e.g. [1 to 10] or [something.length - x() to 12 + hi/mom];
@@ -2756,7 +2764,7 @@ namespace Osprey
 				items.Add(ParseExpression(ref i));
 			}
 
-			if (Accept(i, TokenType.For)) // List comprehension
+			if (Accept(i, TokenType.For) || tok[i].Value == "where") // List comprehension
 			{
 				var parts = new List<ListCompPart>();
 				while (Accept(i, TokenType.For) || tok[i].Value == "where")

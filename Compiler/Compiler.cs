@@ -503,7 +503,7 @@ namespace Osprey
 		}
 
 		/// <summary>
-		/// Compiles the Osprey project to a specific stream.
+		/// Compiles the Osprey project to a specific output path.
 		/// </summary>
 		/// <param name="targetPath">The path of the target file of the compilation. Its current contents, if any, will be overwritten.</param>
 		/// <exception cref="ArgumentNullException"><paramref name="targetPath"/> is null.</exception>
@@ -512,24 +512,8 @@ namespace Osprey
 		/// <exception cref="CompileTimeException">An error occurs during compilation.</exception>
 		private void Compile(string targetPath)
 		{
-			using (var stream = File.Open(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
-				Compile(stream);
-		}
-
-		/// <summary>
-		/// Compiles the Osprey project to a specific stream.
-		/// </summary>
-		/// <param name="target">The stream that receives the bytes of the compiled program.</param>
-		/// <exception cref="ArgumentNullException"><paramref name="target"/> is null.</exception>
-		/// <exception cref="ParseException">An error occurs while parsing a source file.</exception>
-		/// <exception cref="ModuleLoadException">An error occurs while opening a dependent module.</exception>
-		/// <exception cref="CompileTimeException">An error occurs during compilation.</exception>
-		private void Compile(Stream target)
-		{
-			if (target == null)
+			if (targetPath == null)
 				throw new ArgumentNullException("target");
-			if (!target.CanWrite || !target.CanSeek)
-				throw new ArgumentException("The target stream must be both writable and seekable.", "target");
 
 			// Note: although I could wrap this entire method in a try-catch and force exceptions
 			// into one of the types ParseException, ModuleLoadException or CompileTimeException,
@@ -655,16 +639,19 @@ namespace Osprey
 
 			compileTimer.Stop();
 
-			var posBefore = target.Position;
+			var emitTimer = new Stopwatch();
+			long bytesWritten;
+			using (var stream = File.Open(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
+			{
+				// Step 12: Save the output module. Once we've done this, we're all done! Holy carp.
+				emitTimer.Start();
 
-			// Step 12: Save the output module. Once we've done this, we're all done! Holy carp.
-			var emitTimer = Stopwatch.StartNew();
+				outputModule.Save(stream);
 
-			outputModule.Save(target);
+				emitTimer.Stop();
 
-			emitTimer.Stop();
-
-			var posAfter = target.Position;
+				bytesWritten = stream.Position;
+			}
 
 			Notice("Compilation finished at " + DateTime.Now);
 			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds.ToString(CI.InvariantCulture));
@@ -672,7 +659,7 @@ namespace Osprey
 
 			var totalTime = parseTimer.Elapsed + compileTimer.Elapsed + emitTimer.Elapsed;
 			Notice("Total time taken (ms): " + totalTime.TotalMilliseconds.ToString(CI.InvariantCulture));
-			Notice("Total bytes written: " + (posAfter - posBefore).ToString(CI.InvariantCulture));
+			Notice("Total bytes written: " + bytesWritten.ToString(CI.InvariantCulture));
 		}
 
 		private void ProcessFiles()
@@ -1678,11 +1665,6 @@ namespace Osprey
 			Compile(options, targetPath, null, sourceFiles);
 		}
 
-		public static void Compile(CompilerOptions options, Stream target, params string[] sourceFiles)
-		{
-			Compile(options, target, null, sourceFiles);
-		}
-
 		public static void Compile(CompilerOptions options, string targetPath, Dictionary<string, bool> constants, params string[] sourceFiles)
 		{
 			using (var c = new Compiler(options, constants, sourceFiles))
@@ -1691,23 +1673,6 @@ namespace Osprey
 				if (c.nativeLibrary != null)
 				{
 					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(targetPath),
-						Path.GetFileName(c.nativeLibrary.FileName)));
-					if (libTarget != c.nativeLibrary.FileName)
-						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
-				}
-				if (options.DocFile != null)
-					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile, options.PrettyPrintJson);
-			}
-		}
-
-		public static void Compile(CompilerOptions options, Stream target, Dictionary<string, bool> constants, params string[] sourceFiles)
-		{
-			using (var c = new Compiler(options, constants, sourceFiles))
-			{
-				c.Compile(target);
-				if (c.nativeLibrary != null)
-				{
-					var libTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFiles[0]),
 						Path.GetFileName(c.nativeLibrary.FileName)));
 					if (libTarget != c.nativeLibrary.FileName)
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
@@ -1944,7 +1909,7 @@ namespace Osprey
 	/// <summary>
 	/// Specifies the verbosity of the compiler.
 	/// </summary>
-	public enum CompilerVerbosity
+	public enum CompilerVerbosity : byte
 	{
 		/// <summary>
 		/// The compiler outputs no messages beyond normal warnings and notices.
@@ -1963,7 +1928,7 @@ namespace Osprey
 	/// <summary>
 	/// Specifies the type of a project that is being compiled.
 	/// </summary>
-	public enum ProjectType
+	public enum ProjectType : byte
 	{
 		/// <summary>
 		/// The project is an application, which is executable and has a main method.
