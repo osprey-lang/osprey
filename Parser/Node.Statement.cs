@@ -192,6 +192,43 @@ namespace Osprey.Nodes
 				if (reachable && !stmt.IsEndReachable)
 					reachable = false;
 			}
+
+			if (DeclSpace.members.Count > 0)
+				foreach (var member in DeclSpace.members.Values)
+					switch (member.Kind)
+					{
+						case MemberKind.Variable:
+							{
+								var variable = (Variable)member;
+								if ((variable.ReadCount | variable.AssignmentCount) == 0 &&
+									!variable.IsParameter)
+								{
+									string warning;
+									if (variable.ReadCount == 0 && variable.AssignmentCount == 0)
+										warning = "The variable '{0}' never used.";
+									else if (variable.ReadCount == 0)
+										warning = "The variable '{0}' is assigned but its value is never used.";
+									else // variable.AssignmentCount == 0
+										warning = "The variable '{0}' is read but never assigned. It will always have the default value null.";
+
+									document.Compiler.Warning(string.Format(warning, variable.Name),
+										CompilerVerbosity.NotVerbose,
+										MessageLocation.FromNode(variable.Node));
+								}
+							}
+							break;
+						case MemberKind.LocalConstant:
+						case MemberKind.LocalFunction:
+							if (member.ReadCount == 0)
+							{
+								document.Compiler.Warning(string.Format("The local {0} '{1}' is declared but never used.",
+									member.Kind == MemberKind.LocalFunction ? "function" : "constant",
+									member.Name),
+									CompilerVerbosity.NotVerbose,
+									MessageLocation.FromNode(member.Node));
+							}
+							break;
+					}
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -387,9 +424,6 @@ namespace Osprey.Nodes
 
 		public override void DeclareNames(BlockSpace parent)
 		{
-			//if (IsGlobal)
-				//return;
-
 			foreach (var decl in Declarators)
 			{
 				if (IsConst)
@@ -399,6 +433,8 @@ namespace Osprey.Nodes
 					if (!IsGlobal)
 						decl.Variable = new Variable(decl.Name, decl);
 					parent.DeclareVariable(decl.Variable);
+					if (decl.Initializer != null)
+						decl.Variable.AssignmentCount++;
 				}
 			}
 		}
@@ -555,6 +591,7 @@ namespace Osprey.Nodes
 						EndIndex = Value.EndIndex,
 						Document = Document,
 					});
+					Variables[i].AssignmentCount++; // Always initialized
 				}
 				parent.DeclareVariable(Variables[i]);
 			}
@@ -669,8 +706,12 @@ namespace Osprey.Nodes
 				param.ResolveNames(context, document);
 			Body.ResolveNames(context, document, reachable);
 
-			if (DeclSpace != null && DeclSpace.Method.IsGenerator)
-				document.Compiler.AddGeneratorMethod(DeclSpace.Method);
+			if (DeclSpace != null)
+			{
+				DeclSpace.ReadCount = 0; // References inside the function body don't count
+				if (DeclSpace.Method.IsGenerator)
+					document.Compiler.AddGeneratorMethod(DeclSpace.Method);
+			}
 		}
 
 		public override void DeclareNames(BlockSpace parent)
@@ -1189,6 +1230,7 @@ namespace Osprey.Nodes
 						EndIndex = this.EndIndex,
 						Document = Document,
 					}, VariableKind.IterationVariable);
+				Variables[i].AssignmentCount++;
 				body.DeclareVariable(Variables[i]);
 			}
 

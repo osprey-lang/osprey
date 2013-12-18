@@ -131,6 +131,13 @@ namespace Osprey.Nodes
 			this.Document = other.Document;
 			return this;
 		}
+		internal Expression At(int startIndex, int endIndex, Document document)
+		{
+			this.StartIndex = startIndex;
+			this.EndIndex = endIndex;
+			this.Document = document;
+			return this;
+		}
 	}
 
 	public class ConstantExpression : Expression
@@ -264,7 +271,12 @@ namespace Osprey.Nodes
 
 	public abstract class AssignableExpression : Expression
 	{
-		internal bool IsAssignment = false;
+		private bool isAssignment = false;
+		public virtual bool IsAssignment
+		{
+			get { return isAssignment; }
+			set { isAssignment = value; }
+		}
 
 		public abstract void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue);
 
@@ -372,7 +384,7 @@ namespace Osprey.Nodes
 				case BinaryOperator.FunctionApplication: return "->";
 				case BinaryOperator.Concatenation: return "::";
 				case BinaryOperator.Comparison: return "<=>";
-				default: throw new ArgumentException("Invalid BinaryOperator value.");
+				default: throw new ArgumentOutOfRangeException("op", "Invalid BinaryOperator value.");
 			}
 		}
 
@@ -410,10 +422,12 @@ namespace Osprey.Nodes
 			ResolveOperands(context, document);
 
 			if (Operator == BinaryOperator.FunctionApplication)
+			{
 				if (Right.IsTypeKnown(document.Compiler) &&
 					!Right.GetKnownType(document.Compiler).InheritsFrom(document.Compiler.ListType))
 					throw new CompileTimeException(Right,
 						"The the right-hand operand in a function application must be of type aves.List.");
+			}
 
 			return this;
 		}
@@ -468,6 +482,79 @@ namespace Osprey.Nodes
 		{
 			Left = Left.TransformClosureLocals(currentBlock, forGenerator);
 			Right = Right.TransformClosureLocals(currentBlock, forGenerator);
+		}
+	}
+
+	public sealed class ConcatenationExpression : BinaryOperatorExpression
+	{
+		public ConcatenationExpression(Expression left, Expression right)
+			: base(left, right, BinaryOperator.Concatenation)
+		{ }
+
+		public override bool IsTypeKnown(Compiler compiler)
+		{
+			if (Left.IsTypeKnown(compiler) && Right.IsTypeKnown(compiler))
+			{
+				var leftType = Left.GetKnownType(compiler);
+				var rightType = Right.GetKnownType(compiler);
+
+				if (leftType == compiler.ListType || rightType == compiler.ListType ||
+					leftType == compiler.HashType || rightType == compiler.HashType)
+					return leftType == rightType;
+				else
+					return true;
+			}
+			return false;
+		}
+
+		public override Type GetKnownType(Compiler compiler)
+		{
+			if (Left.IsTypeKnown(compiler) && Right.IsTypeKnown(compiler))
+			{
+				var leftType = Left.GetKnownType(compiler);
+				var rightType = Right.GetKnownType(compiler);
+
+				if (leftType == compiler.ListType || rightType == compiler.ListType)
+				{
+					if (leftType == rightType)
+						return compiler.ListType;
+				}
+				else if (leftType == compiler.HashType || rightType == compiler.HashType)
+				{
+					if (leftType == rightType)
+						return compiler.HashType;
+				}
+				else
+					return compiler.StringType;
+			}
+			return null;
+		}
+
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
+		{
+			base.ResolveOperands(context, document);
+
+			var compiler = document.Compiler;
+			if (Left.IsTypeKnown(compiler) && Right.IsTypeKnown(compiler))
+			{
+				var leftType = Left.GetKnownType(compiler);
+				var rightType = Right.GetKnownType(compiler);
+
+				if (leftType == compiler.ListType || rightType == compiler.ListType)
+				{
+					if (leftType != rightType)
+						throw new CompileTimeException(leftType == compiler.ListType ? Right : Left,
+							"If one operand of '::' is a list, the other must be as well.");
+				}
+				if (leftType == compiler.HashType || rightType == compiler.HashType)
+				{
+					if (leftType != rightType)
+						throw new CompileTimeException(leftType == compiler.HashType ? Right : Left,
+							"If one operand of '::' is a hash, the other must be as well.");
+				}
+			}
+
+			return this;
 		}
 	}
 
@@ -604,8 +691,7 @@ namespace Osprey.Nodes
 				//   A    B    A or B
 				//   0    0    0
 				//   0    1    1
-				//   1    _    1
-				//   1    _    1
+				//   1    NE   1
 				//
 				// Here, we want to "fall through" if A is FALSE, because then
 				// B needs to be evaluated. Otherwise, the result is true.
@@ -623,8 +709,7 @@ namespace Osprey.Nodes
 				//   A    B    ¬A and ¬B (= ¬(A or B))
 				//   0    0    1
 				//   0    1    0
-				//   1    _    0
-				//   1    _    0
+				//   1    NE   0
 				//
 				// Here, we want to fall through if A is FALSE, because then
 				// B needs to be evaluated. Otherwise, the result is false.
@@ -766,7 +851,6 @@ namespace Osprey.Nodes
 			{
 				//   A    B    A and B
 				//   0   NE    0
-				//   0   NE    0
 				//   1    0    0
 				//   1    1    1
 				//
@@ -782,7 +866,6 @@ namespace Osprey.Nodes
 			else
 			{
 				//   A    B    ¬A or ¬B (= ¬(A and B))
-				//   0   NE    1
 				//   0   NE    1
 				//   1    0    1
 				//   1    1    0

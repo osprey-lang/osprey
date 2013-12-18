@@ -16,6 +16,9 @@ namespace Osprey.Nodes
 		{
 			Variable = variable;
 			AccessKind = kind;
+
+			// Assume the variable is being read, until IsAssignment is set to true.
+			variable.ReadCount++;
 		}
 
 		/// <summary>The variable that this expression accesses.</summary>
@@ -23,6 +26,30 @@ namespace Osprey.Nodes
 
 		/// <summary>The kind of access this node represents.</summary>
 		public readonly LocalAccessKind AccessKind;
+
+		public override bool IsAssignment
+		{
+			get { return base.IsAssignment; }
+			set
+			{
+				if (Variable != null && value != IsAssignment)
+				{
+					// The value has changed! We must update the Variable's status.
+					if (value)
+					{
+						Variable.AssignmentCount++;
+						Variable.ReadCount--;
+					}
+					else
+					{
+						Variable.AssignmentCount--;
+						Variable.ReadCount++;
+					}
+				}
+
+				base.IsAssignment = value;
+			}
+		}
 		
 		public override string ToString(int indent)
 		{
@@ -194,9 +221,10 @@ namespace Osprey.Nodes
 	public sealed class LocalConstantAccess : ConstantExpression
 	{
 		public LocalConstantAccess(LocalConstant constant)
-			: base() // will be updated later
+			: base() // Value will be updated later
 		{
 			Constant = constant;
+			constant.ReadCount++;
 		}
 
 		public LocalConstant Constant;
@@ -231,6 +259,7 @@ namespace Osprey.Nodes
 		public LocalFunctionAccess(LocalFunction function)
 		{
 			Function = function;
+			function.ReadCount++;
 		}
 
 		public LocalFunction Function;

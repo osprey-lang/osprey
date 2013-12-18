@@ -95,8 +95,7 @@ namespace Osprey
 				{
 					if (e.Node != null)
 					{
-						var loc = new MessageLocation(e.Document.FileName,
-							e.Document.FileSource, e.Node.StartIndex, e.Node.EndIndex);
+						var loc = MessageLocation.FromNode(e.Node);
 						err.Write("[error {0}] Compiler error: ", loc.ToString(1));
 					}
 					else

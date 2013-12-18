@@ -1480,6 +1480,9 @@ namespace Osprey.Members
 
 		public BlockSpace Parent { get; internal set; }
 
+		/// <summary>The number of times the local member is read.</summary>
+		internal int ReadCount = 0;
+
 		public override Namespace GetContainingNamespace()
 		{
 			return Parent.GetContainingNamespace();
@@ -1528,6 +1531,9 @@ namespace Osprey.Members
 		internal Field CaptureField;
 
 		internal int AdditionalAccessStart = -1, AdditionalAccessEnd = -1;
+
+		/// <summary>The number of times the variable is assigned to.</summary>
+		internal int AssignmentCount = 0;
 
 		public VariableDeclarator VarNode
 		{

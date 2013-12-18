@@ -1870,27 +1870,27 @@ namespace Osprey
 		/// <summary>
 		/// Specifies that the compiler is allowed to use extension keywords.
 		/// </summary>
-		UseExtensions = 1,
+		UseExtensions = 1 << 0,
 		/// <summary>
 		/// Specifies that the compiler should not include a reference to the standard module.
 		/// This flag should only be specified when compiling the standard module.
 		/// </summary>
-		NoStandardModule = 2,
+		NoStandardModule = 1 << 1,
 		/// <summary>
 		/// Stops the compiler from outputting warnings to the standard output.
 		/// </summary>
 		/// <remarks>This should not be used in conjunction with <see cref="Verbose"/>.</remarks>
-		SilenceWarnings = 4,
+		SilenceWarnings = 1 << 2,
 		/// <summary>
 		/// Stops the compiler from outputting notices to the standard output.
 		/// </summary>
 		/// <remarks>This should not be used in conjunction with <see cref="Verbose"/>.</remarks>
-		SilenceNotices = 8,
+		SilenceNotices = 1 << 3,
 		/// <summary>
 		/// If specified, the compiler does not verify that __extern bodies actually resolve to existing methods.
 		/// Use this flag very cautiously! There's a reason the compiler checks these.
 		/// </summary>
-		SkipExternChecks = 16,
+		SkipExternChecks = 1 << 4,
 		/// <summary>
 		/// Specifies the <see cref="SilentWarnings"/> and <see cref="SilenceNotices"/> flags.
 		/// </summary>
@@ -1899,11 +1899,11 @@ namespace Osprey
 		/// <summary>
 		/// Redirects errors to the standard output stream.
 		/// </summary>
-		ErrorToStdout = 32,
+		ErrorToStdout = 1 << 5,
 		/// <summary>
 		/// Specifies that documentation JSON files should be pretty-printed.
 		/// </summary>
-		PrettyPrintJson = 64,
+		PrettyPrintJson = 1 << 6,
 	}
 
 	/// <summary>
@@ -2003,6 +2003,15 @@ namespace Osprey
 				line.ToString(CI.InvariantCulture),
 				column.ToString(CI.InvariantCulture),
 				length.ToString(CI.InvariantCulture));
+		}
+
+		internal static MessageLocation FromNode(ParseNode node)
+		{
+			if (node == null)
+				throw new ArgumentNullException("node");
+
+			return new MessageLocation(node.Document.FileName,
+				node.Document.FileSource, node.StartIndex, node.EndIndex);
 		}
 	}
 }

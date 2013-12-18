@@ -449,9 +449,11 @@ namespace Osprey
 			{
 				var flags = reader.ReadOverloadFlags();
 
-				ushort paramCount = reader.ReadUInt16();
-				// Skip param names (we don't actually need them!)
-				reader.Seek(sizeof(uint) * paramCount, SeekOrigin.Current);
+				int paramCount = reader.ReadUInt16();
+				var parameters = new Parameter[paramCount];
+				for (var p = 0; p < paramCount; p++)
+					parameters[p] = new Parameter(module.members.Strings[reader.ReadUInt32()],
+						defaultValue: null);
 
 				ushort optionalParamCount;
 				if ((flags & OverloadFlags.ShortHeader) == OverloadFlags.ShortHeader)
@@ -483,6 +485,7 @@ namespace Osprey
 					new ClassMemberMethod(name, null, access, null, signature) :
 					new Method(name, access, null, signature);
 
+				overload.Parameters = parameters;
 				overload.IsAbstract = (flags & OverloadFlags.Abstract) == OverloadFlags.Abstract;
 				overload.IsStatic = (methodFlags & MethodFlags.Instance) == 0;
 				overload.IsImplDetail = (methodFlags & MethodFlags.Impl) == MethodFlags.Impl;

@@ -336,52 +336,38 @@ namespace Osprey
 						}
 
 						return new ConstantExpression(result)
-						{
-							StartIndex = left.StartIndex,
-							EndIndex = right.EndIndex,
-							Document = document,
-						};
+							.At(left.StartIndex, right.EndIndex, document);
 					}
 				}
 				// [a, b] :: [c, d] => [a, b, c, d]
-				if (op == BinaryOperator.Concatenation &&
-					leftInner is ListLiteralExpression && rightInner is ListLiteralExpression)
+				if (op == BinaryOperator.Concatenation)
 				{
-					var result = new ListLiteralExpression(new List<Expression>())
+					if (leftInner is ListLiteralExpression && rightInner is ListLiteralExpression)
 					{
-						StartIndex = left.StartIndex,
-						EndIndex = right.EndIndex,
-						Document = document,
-					};
-					result.Values.AddRange(((ListLiteralExpression)leftInner).Values);
-					result.Values.AddRange(((ListLiteralExpression)rightInner).Values);
-					return result;
+						var result = (ListLiteralExpression)
+							new ListLiteralExpression(new List<Expression>())
+							.At(left.StartIndex, right.EndIndex, document);
+						result.Values.AddRange(((ListLiteralExpression)leftInner).Values);
+						result.Values.AddRange(((ListLiteralExpression)rightInner).Values);
+						return result;
+					}
+
+					return new ConcatenationExpression(left, right)
+						.At(left.StartIndex, right.EndIndex, document);
 				}
 
 				// a != b   becomes   not (a == b)
 				if (op == BinaryOperator.Inequality)
 				{
 					var inner = new BinaryOperatorExpression(left, right, BinaryOperator.Equality)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = right.EndIndex,
-						Document = document,
-					};
+						.At(left.StartIndex, right.EndIndex, document);
 					return new UnaryExpression(inner, UnaryOperator.Not)
-					{
-						StartIndex = inner.StartIndex,
-						EndIndex = inner.EndIndex,
-						Document = document,
-					};
+						.At(inner.StartIndex, inner.EndIndex, document);
 				}
 			}
 
 			return new BinaryOperatorExpression(left, right, op)
-			{
-				StartIndex = left.StartIndex,
-				EndIndex = right.EndIndex,
-				Document = document,
-			};
+				.At(left.StartIndex, right.EndIndex, document);
 		}
 
 		/// <summary>
@@ -422,22 +408,12 @@ namespace Osprey
 								e);
 						}
 
-						return new ConstantExpression(result)
-						{
-							StartIndex = start,
-							EndIndex = operand.EndIndex,
-							Document = document,
-						};
+						return new ConstantExpression(result).At(start, operand.EndIndex, document);
 					}
 				}
 			}
 
-			return new UnaryExpression(operand, op)
-			{
-				StartIndex = start,
-				EndIndex = operand.EndIndex,
-				Document = document,
-			};
+			return new UnaryExpression(operand, op).At(start, operand.EndIndex, document);
 		}
 
 		#region Declarations
@@ -2108,11 +2084,7 @@ namespace Osprey
 
 				var value = ParseExpression(ref i);
 				return new AssignmentExpression(left, value)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = value.EndIndex,
-						Document = document,
-					};
+					.At(left.StartIndex, value.EndIndex, document);
 			}
 			return left;
 		}
@@ -2127,11 +2099,7 @@ namespace Osprey
 				Expect(ref i, TokenType.Colon);
 				var falsePart = ParseExpression(ref i);
 				return new ConditionalExpression(left, truePart, falsePart)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = falsePart.EndIndex,
-						Document = document,
-					};
+					.At(left.StartIndex, falsePart.EndIndex, document);
 			}
 			return left;
 		}
@@ -2144,11 +2112,7 @@ namespace Osprey
 				i++;
 				var right = ParseNullCoalescingExpr(ref i);
 				return new NullCoalescingExpression(left, right)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = right.EndIndex,
-						Document = document,
-					};
+					.At(left.StartIndex, right.EndIndex, document);
 			}
 			return left;
 		}
@@ -2161,11 +2125,7 @@ namespace Osprey
 				i++;
 				var right = ParseNullOrExpr(ref i);
 				return new NullOrExpression(left, right)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = right.EndIndex,
-						Document = document,
-					};
+					.At(left.StartIndex, right.EndIndex, document);
 			}
 			return left;
 		}
@@ -2177,11 +2137,7 @@ namespace Osprey
 			{
 				var right = ParseConditionalXorExpr(ref i);
 				left = new ConditionalOrExpression(left, right)
-				{
-					StartIndex = left.StartIndex, // The start index never changes
-					EndIndex = right.EndIndex,
-					Document = document,
-				};
+					.At(left.StartIndex, right.EndIndex, document);
 			}
 			return left;
 		}
@@ -2193,11 +2149,7 @@ namespace Osprey
 			{
 				var right = ParseConditionalAndExpr(ref i);
 				left = new ConditionalXorExpression(left, right)
-				{
-					StartIndex = left.StartIndex,
-					EndIndex = right.EndIndex,
-					Document = document,
-				};
+					.At(left.StartIndex, right.EndIndex, document);
 			}
 			return left;
 		}
@@ -2209,11 +2161,7 @@ namespace Osprey
 			{
 				var right = ParseEqualityExpr(ref i);
 				left = new ConditionalAndExpression(left, right)
-				{
-					StartIndex = left.StartIndex,
-					EndIndex = right.EndIndex,
-					Document = document,
-				};
+					.At(left.StartIndex, right.EndIndex, document);
 			}
 			return left;
 		}
@@ -2230,24 +2178,14 @@ namespace Osprey
 					if (negated) i++;
 
 					if (Accept(i, TokenType.Null)) // 'is [not] null'; special syntax and shiz
-					{
 						return new TypeTestExpression(left, negated, null)
-							{
-								StartIndex = left.StartIndex,
-								EndIndex = tok[i++].EndIndex,
-								Document = document,
-							};
-					}
+							.At(left.StartIndex, tok[i++].EndIndex, document);
 
 					try
 					{
 						var type = ParseTypeName(ref i);
 						return new TypeTestExpression(left, negated, type)
-							{
-								StartIndex = left.StartIndex,
-								EndIndex = type.EndIndex,
-								Document = document,
-							};
+							.At(left.StartIndex, type.EndIndex, document);
 					}
 					catch (ParseException e)
 					{
@@ -2267,11 +2205,7 @@ namespace Osprey
 					i++; // skip 'refeq'
 					var right = ParseRelationalExpr(ref i);
 					left = new ReferenceTestExpression(left, negated, right)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = right.EndIndex,
-						Document = document,
-					};
+						.At(left.StartIndex, right.EndIndex, document);
 				}
 			}
 			return left;
@@ -2427,20 +2361,10 @@ namespace Osprey
 					{
 						if (left is BaseAccess)
 							throw new ParseException(tok[i], "'base' cannot be used in an iterator lookup expression.");
-						left = new IteratorLookup(left)
-						{
-							StartIndex = left.StartIndex,
-							EndIndex = tok[i++].EndIndex,
-							Document = document,
-						};
+						left = new IteratorLookup(left).At(left.StartIndex, tok[i++].EndIndex, document);
 					}
 					else if (Accept(i, TokenType.Identifier))
-						left = new MemberAccess(left, tok[i].Value)
-						{
-							StartIndex = left.StartIndex,
-							EndIndex = tok[i++].EndIndex,
-							Document = document,
-						};
+						left = new MemberAccess(left, tok[i].Value).At(left.StartIndex, tok[i++].EndIndex, document);
 					else
 						throw new ParseException(tok[i], "Expected identifier or 'iter'.");
 				}
@@ -2451,10 +2375,9 @@ namespace Osprey
 					if (left is BaseAccess)
 						throw new ParseException(tok[i], "'base' cannot be used in a safe access.");
 
-					var access = new SafeAccess(left) { StartIndex = left.StartIndex };
+					var access = new SafeAccess(left);
 					ParseSafeAccessChain(ref i, access.Chain);
-					access.EndIndex = tok[i - 1].EndIndex;
-					access.Document = document;
+					access.At(left.StartIndex, tok[i - 1].EndIndex, document);
 					left = access;
 				}
 				else if (type == TokenType.ParenOpen)
@@ -2465,11 +2388,7 @@ namespace Osprey
 					if (left is MemberAccess)
 						((MemberAccess)left).IsInvocation = true;
 					left = new InvocationExpression(left, args)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = tok[i++].EndIndex,
-						Document = document,
-					};
+						.At(left.StartIndex, tok[i++].EndIndex, document);
 				}
 				else // tok[i].Type == TokenType.SquareOpen
 				{
@@ -2482,11 +2401,7 @@ namespace Osprey
 					Expect(i, TokenType.SquareClose);
 
 					left = new IndexerAccess(left, args)
-					{
-						StartIndex = left.StartIndex,
-						EndIndex = tok[i++].EndIndex,
-						Document = document,
-					};
+						.At(left.StartIndex, tok[i++].EndIndex, document);
 				}
 			}
 			// If 'base' is followed by an assignment operator, let this error be caught
@@ -2554,11 +2469,7 @@ namespace Osprey
 				Expect(ref i, TokenType.ParenClose);
 
 				return new ParenthesizedExpression(inner)
-					{
-						StartIndex = start,
-						EndIndex = tok[i - 1].EndIndex,
-						Document = document,
-					};
+					.At(start, tok[i - 1].EndIndex, document);
 			}
 			if (Accept(i, TokenType.Literal))
 			{
@@ -2576,9 +2487,7 @@ namespace Osprey
 					default:
 						throw new ParseException(t, "Invalid/unknown literal type");
 				}
-				result.StartIndex = start;
-				result.EndIndex = t.EndIndex;
-				result.Document = document;
+				result.At(start, t.EndIndex, document);
 				return result;
 			}
 			if (Accept(i, TokenType.Identifier))
@@ -2592,23 +2501,19 @@ namespace Osprey
 				}
 
 				return new SimpleNameExpression(tok[i].Value)
-				{
-					StartIndex = start,
-					EndIndex = tok[i++].EndIndex,
-					Document = document,
-				};
+					.At(start, tok[i++].EndIndex, document);
 			}
 
 			if (Accept(i, TokenType.This))
-				return new ThisAccess() { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
+				return new ThisAccess().At(start, tok[i++].EndIndex, document);
 			if (Accept(i, TokenType.Base))
-				return new BaseAccess() { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
+				return new BaseAccess().At(start, tok[i++].EndIndex, document);
 
 			if (Accept(ref i, TokenType.Global))
 			{
 				Expect(ref i, TokenType.Dot);
 				Expect(i, TokenType.Identifier);
-				return new GlobalAccess(tok[i].Value) { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
+				return new GlobalAccess(tok[i].Value).At(start, tok[i++].EndIndex, document);
 			}
 			if (Accept(i, TokenType.New))
 				return ParseObjectCreationExpr(ref i);
@@ -2636,9 +2541,7 @@ namespace Osprey
 				Expect(i, TokenType.ParenClose);
 
 				var expr = isTypeof ? (Expression)new TypeofExpression(inner) : (Expression)new IteratorLookup(inner);
-				expr.StartIndex = start;
-				expr.EndIndex = tok[i++].EndIndex;
-				expr.Document = document;
+				expr.At(start, tok[i++].EndIndex, document);
 
 				return expr;
 			}
@@ -2668,11 +2571,7 @@ namespace Osprey
 			Expect(i, TokenType.ParenClose);
 
 			return new NamedConstant(scope, name)
-			{
-				StartIndex = startIndex,
-				EndIndex = tok[i++].EndIndex,
-				Document = document,
-			};
+				.At(startIndex, tok[i++].EndIndex, document);
 		}
 
 		private Expression ParseObjectCreationExpr(ref int i)
@@ -2690,11 +2589,7 @@ namespace Osprey
 			Expect(i, TokenType.ParenClose);
 
 			return new ObjectCreationExpression(type, args)
-				{
-					StartIndex = start,
-					EndIndex = tok[i++].EndIndex,
-					Document = document,
-				};
+				.At(start, tok[i++].EndIndex, document);
 		}
 
 		private List<Expression> ParseArgumentList(ref int i, bool allowEmpty = true, TokenType closing = TokenType.ParenClose)
@@ -2725,11 +2620,7 @@ namespace Osprey
 
 			if (Accept(i, TokenType.SquareClose)) // empty list
 				return new ListLiteralExpression(items)
-					{
-						StartIndex = start,
-						EndIndex = tok[i++].EndIndex,
-						Document = document,
-					};
+					.At(start, tok[i++].EndIndex, document);
 			
 			// [,] is an illegal list in Osprey: trailing commas are allowed only if
 			// there is at least one item.
@@ -2750,11 +2641,7 @@ namespace Osprey
 				Expect(i, TokenType.SquareClose);
 
 				return new RangeExpression(items[0], items[1], step)
-					{
-						StartIndex = start,
-						EndIndex = tok[i++].EndIndex,
-						Document = document,
-					};
+					.At(start, tok[i++].EndIndex, document);
 			}
 
 			// If there are commas not followed by ], there are more items in the list
@@ -2801,11 +2688,7 @@ namespace Osprey
 				Expect(i, TokenType.SquareClose);
 
 				return new ListComprehension(items, parts)
-					{
-						StartIndex = start,
-						EndIndex = tok[i++].EndIndex,
-						Document = document,
-					};
+					.At(start, tok[i++].EndIndex, document);
 			}
 
 			Accept(ref i, TokenType.Comma); // trailing comma; if it were followed by anything but ], it would have been caught above
@@ -2813,11 +2696,7 @@ namespace Osprey
 			Expect(i, TokenType.SquareClose);
 
 			return new ListLiteralExpression(items)
-				{
-					StartIndex = start,
-					EndIndex = tok[i++].EndIndex,
-					Document = document,
-				};
+				.At(start, tok[i++].EndIndex, document);
 		}
 
 		private Expression ParseHashCreationExpr(ref int i)
@@ -2828,7 +2707,7 @@ namespace Osprey
 			List<HashMember> members = new List<HashMember>();
 
 			if (Accept(i, TokenType.CurlyClose)) // empty hash
-				return new HashLiteralExpression(members) { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
+				return new HashLiteralExpression(members).At(start, tok[i++].EndIndex, document);
 
 			// {,} is not a valid hash: trailing commas are only allowed if there's at least one member
 			do
@@ -2879,11 +2758,7 @@ namespace Osprey
 			Expect(i, TokenType.CurlyClose);
 
 			return new HashLiteralExpression(members)
-				{
-					StartIndex = start,
-					EndIndex = tok[i++].EndIndex,
-					Document = document,
-				};
+				.At(start, tok[i++].EndIndex, document);
 		}
 
 		private Expression ParseLambaExpr(ref int i)
@@ -2894,18 +2769,13 @@ namespace Osprey
 			{
 				var lambdaOp = TokenTypeToLambdaOperator(tok[i].Type);
 				return new LambdaOperatorExpression(lambdaOp)
-					{
-						StartIndex = start,
-						EndIndex = tok[i++].EndIndex,
-						Document = document,
-					};
+					.At(start, tok[i++].EndIndex, document);
 			}
 			else if (Accept(i, TokenType.Dot, TokenType.SafeAccess))
 			{
-				var lambda = new LambdaMemberExpression() { StartIndex = start };
+				var lambda = new LambdaMemberExpression();
 				ParseSafeAccessChain(ref i, lambda.SafeAccessChain);
-				lambda.EndIndex = tok[i - 1].EndIndex;
-				lambda.Document = document;
+				lambda.At(start, tok[i - 1].EndIndex, document);
 				return lambda;
 			}
 			var parameters = new List<Parameter>();
@@ -2941,11 +2811,7 @@ namespace Osprey
 				throw new ParseException(tok[i], "Unexpected token " + tok[i] + ". Expected lambda expression body.");
 
 			return new LambdaExpression(parameters, splat, body)
-				{
-					StartIndex = start,
-					EndIndex = tok[i - 1].EndIndex,
-					Document = document,
-				};
+				.At(start, tok[i - 1].EndIndex, document);
 		}
 
 		private LambdaOperator TokenTypeToLambdaOperator(TokenType type)

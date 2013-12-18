@@ -446,35 +446,54 @@ namespace Osprey.Members
 			// We compile optional parameters by outputting a switch that
 			// initializes parameters based on the argument count.
 
-			// Calculate the total number of required parameters, including
-			// the instance if there is one.
+			// All missing parameters are auto-initialized to null when the method is called,
+			// hence we only need to output a switch for those optional parameters whose
+			// default value is not null.
+			var firstOptionalNonNull = -1; // The index of the first optional parameter with a non-null default value
+			var lastOptionalNonNull = -1; // Same as above, but the last such parameter
+			for (var i = 0; i < Parameters.Length; i++)
+				if (Parameters[i].DefaultValue != null &&
+					!Parameters[i].DefaultValue.IsNull)
+				{
+					if (firstOptionalNonNull == -1)
+						firstOptionalNonNull = i;
+					lastOptionalNonNull = i;
+				}
+			if (firstOptionalNonNull == -1)
+				return;
 
+			// Calculate the total number of parameters that do not require initialization,
+			// including the instance if there is one.
 			var offset = IsStatic ? 0 : 1; // 'this' is a required, unnamed parameter
-			var requiredParams = Signature.ParameterCount - Signature.OptionalParameterCount + offset;
+			var uninitializedParams = firstOptionalNonNull + offset;
 
 			builder.Append(new SimpleInstruction(Opcode.Ldargc)); // Load argument count
-			if (requiredParams != 0)
+			if (uninitializedParams != 0)
 			{
-				// Make sure ldargc is 0 when all optional parameters are missing
-				builder.Append(new LoadConstantInt(requiredParams));
+				// Make sure top of stack is 0 when all optional parameters are missing
+				builder.Append(new LoadConstantInt(uninitializedParams));
 				builder.Append(new SimpleInstruction(Opcode.Sub));
 			}
 
-			var optionalCount = Signature.OptionalParameterCount;
+			var endLabel = new Label();
+
+			var optionalCount = lastOptionalNonNull - firstOptionalNonNull + 1;
 			var jumpTargets = new List<Label>(optionalCount);
 			for (var i = 0; i < optionalCount; i++)
-				jumpTargets.Add(new Label());
+				jumpTargets.Add(Parameters[i + firstOptionalNonNull].DefaultValue.IsNull ? endLabel : new Label());
 
 			builder.Append(new Switch(jumpTargets)); // Jump to the first unassigned parameter
-			var endLabel = new Label();
 			builder.Append(Branch.Always(endLabel)); // No missing parameters
 
 			for (var i = 0; i < optionalCount; i++)
 			{
+				var index = firstOptionalNonNull + i;
+				if (Parameters[index].DefaultValue.IsNull)
+					continue;
+
 				builder.Append(jumpTargets[i]); // The label for this parameter
-				var index = requiredParams + i;
-				Parameters[index - offset].DefaultValue.Compile(compiler, builder); // Evaluate the value
-				builder.Append(new StoreLocal(builder.GetParameter(index))); // Store!
+				Parameters[index].DefaultValue.Compile(compiler, builder); // Evaluate the value
+				builder.Append(new StoreLocal(builder.GetParameter(index + offset))); // Store!
 				// Fall through to the next parameter, which is also missing
 			}
 
