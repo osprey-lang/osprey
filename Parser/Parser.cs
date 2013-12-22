@@ -1392,7 +1392,7 @@ namespace Osprey
 			if (Accept(i, end))
 			{
 				if (!allowEmpty)
-					throw new ParseException(tok[i], "At least one parameter is needed");
+					throw new ParseException(tok[i], "At least one parameter is needed.");
 				// Don't skip closing bracket
 				return output;
 			}
@@ -2601,7 +2601,7 @@ namespace Osprey
 				if (allowEmpty)
 					return args;
 				else
-					throw new ParseException(tok[i], "Expected at least one expression.");
+					throw new ParseException(tok[i], "At least one argument is needed.");
 			}
 
 			do

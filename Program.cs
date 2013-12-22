@@ -16,16 +16,15 @@ namespace Osprey
 			try { Console.OutputEncoding = Encoding.UTF8; } catch { }
 			try { Console.InputEncoding = Encoding.UTF8; } catch { }
 
-			CompilerOptions options;
-			bool silenceErrors, suppressSource;
-			string outFile;
+			CompilerOptions compilerOptions;
+			ProgramOptions programOptions;
 			Dictionary<string, bool> constants;
 			List<string> sourceFiles;
 			try
 			{
 				var sourceFileIndex = ParseArguments(args,
-					out options, out silenceErrors, out suppressSource,
-					out outFile, out constants);
+					out compilerOptions, out programOptions,
+					out constants);
 
 				sourceFiles = new List<string>();
 				if (sourceFileIndex != -1)
@@ -50,12 +49,12 @@ namespace Osprey
 				if (sourceFiles.Count == 0)
 					throw new ArgumentException("There must be at least one source file.");
 
-				if (outFile == null)
-					outFile = Path.Combine(Path.GetDirectoryName(sourceFiles[0]),
+				if (programOptions.OutFile == null)
+					programOptions.OutFile = Path.Combine(Path.GetDirectoryName(sourceFiles[0]),
 						Path.GetFileNameWithoutExtension(sourceFiles[0]) + ".ovm");
 
-				if (options.LibraryPath == null)
-					options.LibraryPath = Environment.CurrentDirectory;
+				if (compilerOptions.LibraryPath == null)
+					compilerOptions.LibraryPath = Environment.CurrentDirectory;
 			}
 			catch (ArgumentException e)
 			{
@@ -64,17 +63,17 @@ namespace Osprey
 			}
 			
 #if DEBUG
-			Compiler.Compile(options, outFile, constants, sourceFiles.ToArray());
+			Compiler.Compile(compilerOptions, programOptions.OutFile, constants, sourceFiles.ToArray());
 			Console.ReadKey(intercept: true);
 #else
-			var err = options.ErrorToStdout ? Console.Out : Console.Error;
+			var err = compilerOptions.ErrorToStdout ? Console.Out : Console.Error;
 			try
 			{
-				Compiler.Compile(options, outFile, constants, sourceFiles.ToArray());
+				Compiler.Compile(compilerOptions, programOptions.OutFile, constants, sourceFiles.ToArray());
 			}
 			catch (ParseException e)
 			{
-				if (!silenceErrors)
+				if (!programOptions.SilenceErrors)
 				{
 					err.Write("[error {0}] Parse error: ",
 						new MessageLocation(e.FileName, e.GetFileSource(),
@@ -85,15 +84,15 @@ namespace Osprey
 					Console.ForegroundColor = ConsoleColor.Gray;
 
 					err.WriteLine();
-					if (!suppressSource)
+					if (!programOptions.SuppressSource)
 						PrintErrorLocation(e, err);
 				}
 			}
 			catch (CompileTimeException e)
 			{
-				if (!silenceErrors)
+				if (!programOptions.SilenceErrors)
 				{
-					if (e.Node != null)
+					if (e.Node != null && e.Node.Document != null)
 					{
 						var loc = MessageLocation.FromNode(e.Node);
 						err.Write("[error {0}] Compiler error: ", loc.ToString(1));
@@ -106,13 +105,13 @@ namespace Osprey
 					Console.ForegroundColor = ConsoleColor.Gray;
 
 					err.WriteLine();
-					if (!suppressSource && e.Node != null)
+					if (!programOptions.SuppressSource && e.Node != null)
 						PrintErrorLocation(e, err);
 				}
 			}
 			catch (ModuleLoadException e)
 			{
-				if (!silenceErrors)
+				if (!programOptions.SilenceErrors)
 				{
 					err.Write("[error] Module load error: ");
 					Console.ForegroundColor = ConsoleColor.Red;
@@ -124,7 +123,7 @@ namespace Osprey
 			}
 			catch (Exception e)
 			{
-				if (!silenceErrors)
+				if (!programOptions.SilenceErrors)
 				{
 					Console.Error.WriteLine("[error] Other exception:");
 					Console.ForegroundColor = ConsoleColor.Red;
@@ -274,21 +273,18 @@ namespace Osprey
 		/// Parses the command-line arguments and returns the index of the first source file within the arguments array.
 		/// </summary>
 		/// <param name="args">The command-line arguments passed to the compiler.</param>
-		/// <param name="options">The <see cref="CompilerOptions"/> that receives the parsed arguments.</param>
+		/// <param name="compilerOptions">The <see cref="CompilerOptions"/> that receives the parsed arguments.</param>
 		/// <param name="outFile">The output file, or null if none was specified.</param>
 		/// <returns>The index of the first source file within <paramref name="args"/>.</returns>
-		private static int ParseArguments(string[] args, out CompilerOptions options,
-			out bool silenceErrors, out bool suppressSource, out string outFile,
-			out Dictionary<string, bool> constants)
+		private static int ParseArguments(string[] args, out CompilerOptions compilerOptions,
+			out ProgramOptions programOptions, out Dictionary<string, bool> constants)
 		{
-			options = new CompilerOptions();
-			options.UseExtensions = true; // Use extensions by default
+			compilerOptions = new CompilerOptions();
+			compilerOptions.UseExtensions = true; // Use extensions by default
 
-			silenceErrors = false;
-			suppressSource = false;
+			programOptions = new ProgramOptions();
 
 			var seenSwitches = new HashSet<string>();
-			outFile = null;
 
 			constants = new Dictionary<string, bool>();
 
@@ -308,27 +304,27 @@ namespace Osprey
 						case "out":
 							if (i == argc - 1)
 								throw new ArgumentException("'/out' must be followed by a file name.");
-							outFile = args[++i];
+							programOptions.OutFile = args[++i];
 							break;
 
 						case "libpath":
 							if (i == argc - 1)
 								throw new ArgumentException("'/libpath' must be followed by a directory name.");
-							options.LibraryPath = args[++i];
+							compilerOptions.LibraryPath = args[++i];
 							break;
 
 						case "nativelib":
 							if (i == argc - 1)
 								throw new ArgumentException("'/nativelib' must be followed by a file name.");
-							options.NativeLibrary = args[++i];
+							compilerOptions.NativeLibrary = args[++i];
 							break;
 
 						case "noexternchecks":
-							options.SkipExternChecks = true;
+							compilerOptions.SkipExternChecks = true;
 							break;
 
 						case "nostdlib":
-							options.NoStandardModule = true;
+							compilerOptions.NoStandardModule = true;
 							break;
 
 						case "type":
@@ -336,9 +332,9 @@ namespace Osprey
 								throw new ArgumentException("'/type' must be followed by a project type (app or module).");
 							i++;
 							if (args[i] == "app")
-								options.Type = ProjectType.Application;
+								compilerOptions.Type = ProjectType.Application;
 							else if (args[i] == "module")
-								options.Type = ProjectType.Module;
+								compilerOptions.Type = ProjectType.Module;
 							else
 								throw new ArgumentException(
 									string.Format("Invalid project type '{0}' (must be \"app\" or \"module\").", args[i]));
@@ -347,25 +343,25 @@ namespace Osprey
 						case "meta":
 							if (i == argc - 1)
 								throw new ArgumentException("'/meta' must be followed by a file name.");
-							options.MetadataFile = args[++i];
+							compilerOptions.MetadataFile = args[++i];
 							break;
 
 						case "name":
 							if (i == argc - 1)
 								throw new ArgumentException("'/name' must be followed by a project name.");
-							options.ModuleName = args[++i];
+							compilerOptions.ModuleName = args[++i];
 							break;
 
 						case "verbose":
 							if (seenSwitches.Contains("extraverbose") || seenSwitches.Contains("silent"))
 								throw new ArgumentException("'/verbose' cannot be used together with '/extraverbose' or '/silent'.");
-							options.Verbosity = CompilerVerbosity.Verbose;
+							compilerOptions.Verbosity = CompilerVerbosity.Verbose;
 							break;
 
 						case "extraverbose":
 							if (seenSwitches.Contains("verbose") || seenSwitches.Contains("silent"))
 								throw new ArgumentException("'/extraverbose' cannot be used together with '/verbose' or '/silent'.");
-							options.Verbosity = CompilerVerbosity.ExtraVerbose;
+							compilerOptions.Verbosity = CompilerVerbosity.ExtraVerbose;
 							break;
 
 						case "silent":
@@ -373,43 +369,43 @@ namespace Osprey
 								throw new ArgumentException("'/silent' cannot be used together with '/verbose' or '/extraverbose'.");
 							if (seenSwitches.Contains("nowarn") || seenSwitches.Contains("noinfo"))
 								throw new ArgumentException("'/silent' cannot be used together with '/nowarn' or '/noinfo'.");
-							options.SilenceNotices = true;
-							options.SilenceWarnings = true;
-							silenceErrors = true;
+							compilerOptions.SilenceNotices = true;
+							compilerOptions.SilenceWarnings = true;
+							programOptions.SilenceErrors = true;
 							break;
 
 						case "nowarn":
 							if (seenSwitches.Contains("silent"))
 								throw new ArgumentException("'/nowarn' cannot be used together with '/silent'.");
-							options.SilenceWarnings = true;
+							compilerOptions.SilenceWarnings = true;
 							break;
 
 						case "noinfo":
 							if (seenSwitches.Contains("silent"))
 								throw new ArgumentException("'/noinfo' cannot be used together with '/silent'.");
-							options.SilenceNotices = true;
+							compilerOptions.SilenceNotices = true;
 							break;
 
 						case "noext":
-							options.UseExtensions = false;
+							compilerOptions.UseExtensions = false;
 							break;
 
 						case "doc":
 							if (i == argc - 1)
 								throw new ArgumentException("'/doc' must be followed by a file name.");
-							options.DocFile = args[++i];
+							compilerOptions.DocFile = args[++i];
 							break;
 
 						case "errtostdout":
-							options.ErrorToStdout = true;
+							compilerOptions.ErrorToStdout = true;
 							break;
 
 						case "hidesource":
-							suppressSource = true;
+							programOptions.SuppressSource = true;
 							break;
 
 						case "formatjson":
-							options.PrettyPrintJson = true;
+							compilerOptions.PrettyPrintJson = true;
 							break;
 
 						case "const":
@@ -441,6 +437,13 @@ namespace Osprey
 			}
 
 			return -1; // D:
+		}
+
+		private struct ProgramOptions
+		{
+			public bool SilenceErrors;
+			public bool SuppressSource;
+			public string OutFile;
 		}
 	}
 }

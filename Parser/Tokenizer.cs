@@ -274,7 +274,7 @@ namespace Osprey
 					else
 						emptySection = false;
 
-					i++; // all of these are single UTF-16 codons
+					i++; // all of these are single UTF-16 code units
 				}
 
 				if (emptySection)

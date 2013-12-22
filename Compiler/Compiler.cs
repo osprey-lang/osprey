@@ -952,9 +952,20 @@ namespace Osprey
 			Notice("Resolving base type names...", CompilerVerbosity.Verbose);
 
 			// Prepare some stuff
-			FindType(StandardNames.TypeRootName);
-			FindType(StandardNames.EnumName);
-			FindType(StandardNames.EnumSetName);
+			try
+			{
+				FindType(StandardNames.TypeRootName);
+				FindType(StandardNames.EnumName);
+				FindType(StandardNames.EnumSetName);
+			}
+			catch (UndefinedNameException e)
+			{
+				throw new UndefinedNameException(null,
+					e.Name, string.Format(NoStandardModule ?
+						"The standard type '{0}' is not defined. Since the /nostdlib flag is in use, you must define this type." :
+						"The standard type '{0}' could not be found.", e.Name),
+					e);
+			}
 
 			foreach (var doc in documents)
 				try
