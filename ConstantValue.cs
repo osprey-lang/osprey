@@ -204,7 +204,7 @@ namespace Osprey
 
 		public bool IsString { get { return this.type == ConstantValueType.String; } }
 
-		private double ToReal()
+		internal double ToReal()
 		{
 			if (type == ConstantValueType.Real)
 				return num.RealValue;
@@ -215,7 +215,7 @@ namespace Osprey
 			throw new NotSupportedException();
 		}
 
-		private long ToInt()
+		internal long ToInt()
 		{
 			if (type == ConstantValueType.Int)
 				return num.IntValue;
@@ -226,7 +226,7 @@ namespace Osprey
 			throw new NotSupportedException();
 		}
 
-		private ulong ToUInt()
+		internal ulong ToUInt()
 		{
 			if (type == ConstantValueType.UInt)
 				return num.UIntValue;

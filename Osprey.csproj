@@ -86,6 +86,7 @@
     <Compile Include="Compiler\Member.Interfaces.cs" />
     <Compile Include="Compiler\Member.cs" />
     <Compile Include="Module\NativeLibrary.cs" />
+    <Compile Include="Parser\Node.Assembler.cs" />
     <Compile Include="Parser\Node.cs" />
     <Compile Include="Parser\Node.Expression.cs" />
     <Compile Include="Parser\Node.Extensions.cs" />

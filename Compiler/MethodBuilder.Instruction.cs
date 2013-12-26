@@ -357,45 +357,7 @@ namespace Osprey.Instructions
 
 		public override string ToString()
 		{
-			switch (opcode)
-			{
-				case Opcode.Nop: return "nop";
-				case Opcode.Dup: return "dup";
-				case Opcode.Pop: return "pop";
-				case Opcode.Ldargc: return "ldargc";
-				case Opcode.Apply: return "apply";
-				case Opcode.Ret: return "ret";
-				case Opcode.Retnull: return "retnull";
-				case Opcode.Add: return "add";
-				case Opcode.Sub: return "sub";
-				case Opcode.Or: return "or";
-				case Opcode.Xor: return "xor";
-				case Opcode.Mul: return "mul";
-				case Opcode.Div: return "div";
-				case Opcode.Mod: return "mod";
-				case Opcode.And: return "and";
-				case Opcode.Pow: return "pow";
-				case Opcode.Shl: return "shl";
-				case Opcode.Shr: return "shr";
-				case Opcode.Hashop: return "hashop";
-				case Opcode.Dollar: return "dollar";
-				case Opcode.Plus: return "plus";
-				case Opcode.Neg: return "neg";
-				case Opcode.Not: return "not";
-				case Opcode.Eq: return "eq";
-				case Opcode.Cmp: return "cmp";
-				case Opcode.Lt: return "lt";
-				case Opcode.Gt: return "gt";
-				case Opcode.Lte: return "lte";
-				case Opcode.Gte: return "gte";
-				case Opcode.Concat: return "concat";
-				case Opcode.Lditer: return "lditer";
-				case Opcode.Ldtype: return "ldtype";
-				case Opcode.Throw: return "throw";
-				case Opcode.Rethrow: return "rethrow";
-				case Opcode.Endfinally: return "endfinally";
-			}
-			throw new InvalidOperationException("Invalid opcode for simple instruction.");
+			return OpcodeToString(this.opcode);
 		}
 
 		public static SimpleInstruction FromOperator(BinaryOperator op)
@@ -440,6 +402,49 @@ namespace Osprey.Instructions
 				default: throw new ArgumentException("Invalid operator for SimpleInstruction.FromOperator.");
 			}
 			return new SimpleInstruction(opcode);
+		}
+
+		public static string OpcodeToString(Opcode opcode)
+		{
+			switch (opcode)
+			{
+				case Opcode.Nop: return "nop";
+				case Opcode.Dup: return "dup";
+				case Opcode.Pop: return "pop";
+				case Opcode.Ldargc: return "ldargc";
+				case Opcode.Apply: return "apply";
+				case Opcode.Ret: return "ret";
+				case Opcode.Retnull: return "retnull";
+				case Opcode.Add: return "add";
+				case Opcode.Sub: return "sub";
+				case Opcode.Or: return "or";
+				case Opcode.Xor: return "xor";
+				case Opcode.Mul: return "mul";
+				case Opcode.Div: return "div";
+				case Opcode.Mod: return "mod";
+				case Opcode.And: return "and";
+				case Opcode.Pow: return "pow";
+				case Opcode.Shl: return "shl";
+				case Opcode.Shr: return "shr";
+				case Opcode.Hashop: return "hashop";
+				case Opcode.Dollar: return "dollar";
+				case Opcode.Plus: return "plus";
+				case Opcode.Neg: return "neg";
+				case Opcode.Not: return "not";
+				case Opcode.Eq: return "eq";
+				case Opcode.Cmp: return "cmp";
+				case Opcode.Lt: return "lt";
+				case Opcode.Gt: return "gt";
+				case Opcode.Lte: return "lte";
+				case Opcode.Gte: return "gte";
+				case Opcode.Concat: return "concat";
+				case Opcode.Lditer: return "lditer";
+				case Opcode.Ldtype: return "ldtype";
+				case Opcode.Throw: return "throw";
+				case Opcode.Rethrow: return "rethrow";
+				case Opcode.Endfinally: return "endfinally";
+			}
+			throw new ArgumentOutOfRangeException("opcode", "Invalid opcode for simple instruction.");
 		}
 	}
 

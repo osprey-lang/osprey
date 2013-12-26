@@ -607,7 +607,7 @@ namespace Osprey.Members
 				Type result = null;
 
 				NamedMember member = members[first];
-				for (var i = 1; i < name.Parts.Count; i++)
+				for (var i = 1; i < name.Parts.Length; i++)
 				{
 					// Note: this loop is only entered if name.Parts.Count > 1
 					if (member.Kind != MemberKind.Namespace)
@@ -726,7 +726,7 @@ namespace Osprey.Members
 
 			// Try to find a fully qualified member in the project namespace
 			NamedMember member = projectNamespace;
-			for (var i = 0; i < name.Parts.Count; i++)
+			for (var i = 0; i < name.Parts.Length; i++)
 			{
 				if (member.Kind != MemberKind.Namespace)
 					break; // Not found!
@@ -734,7 +734,7 @@ namespace Osprey.Members
 				if (!((Namespace)member).Members.TryGetValue(name.Parts[i], out member))
 					break; // Also not found!
 
-				if (i == name.Parts.Count - 1)
+				if (i == name.Parts.Length - 1)
 				{
 					if (member is Type)
 						output.Add((Type)member); // Found!
@@ -744,7 +744,7 @@ namespace Osprey.Members
 				}
 			}
 
-			if (name.Parts.Count == 1 && !name.IsGlobal)
+			if (name.Parts.Length == 1 && !name.IsGlobal)
 			{
 				var first = name.Parts[0];
 				foreach (var ns in importedNamespaces)

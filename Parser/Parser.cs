@@ -19,16 +19,20 @@ namespace Osprey
 		private Tokenizer tok;
 		private Document document;
 		private ParseFlags flags;
+
+		public Tokenizer Tok { get { return tok; } }
+		public Document Document { get { return document; } }
+
 		/// <summary>
 		/// If true, the parser uses compiler-specific extensions.
 		/// Otherwise, they're completely ignored.
 		/// </summary>
-		private bool UseExtensions
+		public bool UseExtensions
 		{
 			get { return (flags & ParseFlags.UseExtensions) != ParseFlags.None; }
 		}
 
-		private bool SimplifiedTree
+		public bool SimplifiedTree
 		{
 			get { return (flags & ParseFlags.SimplifiedTree) != ParseFlags.None; }
 		}
@@ -41,7 +45,7 @@ namespace Osprey
 		/// <param name="index">The index to test.</param>
 		/// <param name="type">The token type to test against.</param>
 		/// <returns>true if the token at the specified index matches <paramref name="type"/>; otherwise, false.</returns>
-		private bool Accept(int index, TokenType type)
+		public bool Accept(int index, TokenType type)
 		{
 			return tok[index].Match(type);
 		}
@@ -52,7 +56,7 @@ namespace Osprey
 		/// <param name="t1">The first type to test against.</param>
 		/// <param name="t2">The second type to test against</param>
 		/// <returns>true if the token at the specified index matches either <see cref="TokenType"/> argument; otherwise, false.</returns>
-		private bool Accept(int index, TokenType t1, TokenType t2)
+		public bool Accept(int index, TokenType t1, TokenType t2)
 		{
 			return tok[index].Match(t1) || tok[index].Match(t2);
 		}
@@ -64,7 +68,7 @@ namespace Osprey
 		/// <param name="t2">The second type to test against</param>
 		/// <param name="t3">The third type to test against.</param>
 		/// <returns>true if the token at the specified index matches any of the <see cref="TokenType"/> arguments; otherwise, false.</returns>
-		private bool Accept(int index, TokenType t1, TokenType t2, TokenType t3)
+		public bool Accept(int index, TokenType t1, TokenType t2, TokenType t3)
 		{
 			return tok[index].Match(t1) || tok[index].Match(t2) || tok[index].Match(t3);
 		}
@@ -77,7 +81,7 @@ namespace Osprey
 		/// <param name="t3">The third type to test against.</param>
 		/// <param name="t4">The fourth type to test against.</param>
 		/// <returns>true if the token at the specified index matches any of the <see cref="TokenType"/> arguments; otherwise, false.</returns>
-		private bool Accept(int index, TokenType t1, TokenType t2, TokenType t3, TokenType t4)
+		public bool Accept(int index, TokenType t1, TokenType t2, TokenType t3, TokenType t4)
 		{
 			return tok[index].Match(t1) || tok[index].Match(t2) || tok[index].Match(t3) || tok[index].Match(t4);
 		}
@@ -87,7 +91,7 @@ namespace Osprey
 		/// <param name="index">The index to test.</param>
 		/// <param name="types">An array of types to test against.</param>
 		/// <returns>true if the token at the specified index matches one of the types in <paramref name="types"/>; otherwise, false.</returns>
-		private bool Accept(int index, params TokenType[] types)
+		public bool Accept(int index, params TokenType[] types)
 		{
 			for (var i = 0; i < types.Length; i++)
 				if (tok[index].Match(types[i]))
@@ -101,7 +105,7 @@ namespace Osprey
 		/// <param name="index">The index to test.</param>
 		/// <param name="type">The token type to test against.</param>
 		/// <returns>true if the token at the specified index matches <paramref name="type"/>; otherwise, false.</returns>
-		private bool Accept(ref int index, TokenType type)
+		public bool Accept(ref int index, TokenType type)
 		{
 			if (Accept(index, type))
 			{
@@ -117,7 +121,7 @@ namespace Osprey
 		/// <param name="t1">The first type to test against.</param>
 		/// <param name="t2">The second type to test against</param>
 		/// <returns>true if the token at the specified index matches any of the <see cref="TokenType"/> arguments; otherwise, false.</returns>
-		private bool Accept(ref int index, TokenType t1, TokenType t2)
+		public bool Accept(ref int index, TokenType t1, TokenType t2)
 		{
 			if (Accept(index, t1, t2))
 			{
@@ -134,7 +138,7 @@ namespace Osprey
 		/// <param name="t2">The second type to test against</param>
 		/// <param name="t3">The third type to test against.</param>
 		/// <returns>true if the token at the specified index matches any of the <see cref="TokenType"/> arguments; otherwise, false.</returns>
-		private bool Accept(ref int index, TokenType t1, TokenType t2, TokenType t3)
+		public bool Accept(ref int index, TokenType t1, TokenType t2, TokenType t3)
 		{
 			if (Accept(index, t1, t2, t3))
 			{
@@ -152,7 +156,7 @@ namespace Osprey
 		/// <param name="t3">The third type to test against.</param>
 		/// <param name="t4">The fourth type to test against.</param>
 		/// <returns>true if the token at the specified index matches any of the <see cref="TokenType"/> arguments; otherwise, false.</returns>
-		private bool Accept(ref int index, TokenType t1, TokenType t2, TokenType t3, TokenType t4)
+		public bool Accept(ref int index, TokenType t1, TokenType t2, TokenType t3, TokenType t4)
 		{
 			if (Accept(index, t1, t2, t3, t4))
 			{
@@ -167,7 +171,7 @@ namespace Osprey
 		/// <param name="index">The index to test.</param>
 		/// <param name="types">An array of types to test against.</param>
 		/// <returns>true if the token at the specified index matches one of the types in <paramref name="types"/>; otherwise, false.</returns>
-		private bool Accept(ref int index, params TokenType[] types)
+		public bool Accept(ref int index, params TokenType[] types)
 		{
 			for (var i = 0; i < types.Length; i++)
 				if (tok[index].Match(types[i]))
@@ -178,7 +182,7 @@ namespace Osprey
 			return false;
 		}
 
-		private bool AcceptExtension(int index, string keyword)
+		public bool AcceptExtension(int index, string keyword)
 		{
 			if (UseExtensions &&
 				tok[index].Match(TokenType.Identifier) &&
@@ -187,7 +191,7 @@ namespace Osprey
 			return false;
 		}
 
-		private bool AcceptExtension(ref int index, string keyword)
+		public bool AcceptExtension(ref int index, string keyword)
 		{
 			if (AcceptExtension(index, keyword))
 			{
@@ -207,7 +211,7 @@ namespace Osprey
 		/// <param name="index">The index of the token to test.</param>
 		/// <param name="type">The type to test against.</param>
 		/// <returns>The token at the specified index.</returns>
-		private Token Expect(int index, TokenType type)
+		public Token Expect(int index, TokenType type)
 		{
 			if (!Accept(index, type))
 				throw new ParseException(tok[index], "Expected " + FormatTokenType(type) + "; got " + tok[index].ToString() + ".");
@@ -220,7 +224,7 @@ namespace Osprey
 		/// <param name="type">The type to test against.</param>
 		/// <param name="message">The exception message to display in case of an exception.</param>
 		/// <returns>The token at the specified index.</returns>
-		private Token Expect(int index, TokenType type, string message)
+		public Token Expect(int index, TokenType type, string message)
 		{
 			if (!Accept(index, type))
 				throw new ParseException(tok[index], message);
@@ -233,7 +237,7 @@ namespace Osprey
 		/// <param name="index">The index of the token to test.</param>
 		/// <param name="type">The type to test against.</param>
 		/// <returns>The token at the specified index (prior to incrementing).</returns>
-		private Token Expect(ref int index, TokenType type)
+		public Token Expect(ref int index, TokenType type)
 		{
 			if (!Accept(index, type))
 				throw new ParseException(tok[index], "Expected " + FormatTokenType(type) + "; got " + tok[index].ToString() + ".");
@@ -246,7 +250,7 @@ namespace Osprey
 		/// <param name="type">The type to test against.</param>
 		/// <param name="message">The exception message to display in case of an exception.</param>
 		/// <returns>The token at the specified index (prior to incrementing).</returns>
-		private Token Expect(ref int index, TokenType type, string message)
+		public Token Expect(ref int index, TokenType type, string message)
 		{
 			if (!Accept(index, type))
 				throw new ParseException(tok[index], message);
@@ -1343,7 +1347,7 @@ namespace Osprey
 
 		#endregion
 
-		private TypeName ParseTypeName(ref int i)
+		internal TypeName ParseTypeName(ref int i)
 		{
 			var start = tok[i].Index;
 			var global = false;
@@ -1364,7 +1368,7 @@ namespace Osprey
 			return new TypeName(idents, global) { StartIndex = start, EndIndex = tok[i - 1].EndIndex, Document = document };
 		}
 
-		private QualifiedName ParseQualifiedName(ref int i)
+		internal QualifiedName ParseQualifiedName(ref int i)
 		{
 			Expect(i, TokenType.Identifier);
 

@@ -110,7 +110,7 @@ namespace Osprey.Members
 					return method;
 
 			if (lookInBase && BaseGroup != null)
-				return BaseGroup.FindOverload(argCount);
+				return BaseGroup.FindOverload(argCount, true);
 
 			return null;
 		}
@@ -132,7 +132,7 @@ namespace Osprey.Members
 					return method;
 
 			if (lookInBase && BaseGroup != null)
-				return BaseGroup.FindOverload(signature);
+				return BaseGroup.FindOverload(signature, true);
 
 			return null;
 		}

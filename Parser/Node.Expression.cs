@@ -1608,15 +1608,15 @@ namespace Osprey.Nodes
 	{
 		public QualifiedName(string value)
 		{
-			Parts = new List<string>(value.Split('.'));
+			Parts = value.Split('.');
 		}
-		public QualifiedName(List<string> parts)
+		public QualifiedName(IEnumerable<string> parts)
 		{
-			Parts = parts;
+			Parts = parts.ToArray();
 		}
 
 		/// <summary>The strings that the qualified name consists of.</summary>
-		public List<string> Parts;
+		public string[] Parts;
 
 		public override string ToString(int indent)
 		{
@@ -1634,7 +1634,7 @@ namespace Osprey.Nodes
 		{
 			IsGlobal = global;
 		}
-		public TypeName(List<string> parts, bool global)
+		public TypeName(IEnumerable<string> parts, bool global)
 			: base(parts)
 		{
 			IsGlobal = global;
@@ -2940,7 +2940,7 @@ namespace Osprey.Nodes
 
 		public double RealValue { get { return Value.RealValue; } }
 
-		private static ConstantValue ParseToken(Token token)
+		internal static ConstantValue ParseToken(Token token)
 		{
 			string tokVal = token.Value;
 
