@@ -1596,7 +1596,7 @@ namespace Osprey.Members
 		{
 			var parameters = new Parameter[node.Parameters.Count + (node.IsSetter ? 1 : 0)];
 			for (var i = 0; i < node.Parameters.Count; i++)
-				parameters[i] = node.Parameters[0];
+				parameters[i] = node.Parameters[i];
 			if (node.IsSetter)
 				parameters[node.Parameters.Count] = new Parameter("value", null)
 				{
