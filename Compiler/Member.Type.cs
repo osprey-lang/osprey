@@ -1654,9 +1654,9 @@ namespace Osprey.Members
 	public class Constructor : ClassMember
 	{
 		public Constructor(ConstructorDeclaration node, Class parent)
-			: base(node.IsStatic ? ".init" : ".new", MemberKind.Constructor, node, node.Access, parent)
+			: base(node.IsStatic ? StaticCtorName : InstanceCtorName, MemberKind.Constructor, node, node.Access, parent)
 		{
-			method = new ClassMemberMethod(node.IsStatic ? ".init" : ".new", this, node.Access,
+			method = new ClassMemberMethod(node.IsStatic ? StaticCtorName : InstanceCtorName, this, node.Access,
 				node.Body, new Signature(node.Parameters, node.Splat))
 				{
 					Flags = node.IsStatic ? MemberFlags.Constructor : MemberFlags.InstanceConstructor,
@@ -1675,27 +1675,27 @@ namespace Osprey.Members
 			method.Parameters = parameters;
 		}
 		public Constructor(Block body, AccessLevel access, Class parent, Splat splat, params Parameter[] parameters)
-			: base(".new", MemberKind.Constructor, null, access, parent)
+			: base(InstanceCtorName, MemberKind.Constructor, null, access, parent)
 		{
-			method = new ClassMemberMethod(".new", this, access, body, splat, parameters)
+			method = new ClassMemberMethod(InstanceCtorName, this, access, body, splat, parameters)
 			{
 				Flags = MemberFlags.InstanceConstructor,
 			};
 			this.IsStatic = false;
 		}
 		public Constructor(Block body, AccessLevel access, Class parent, Signature signature)
-			: base(".new", MemberKind.Constructor, null, access, parent)
+			: base(InstanceCtorName, MemberKind.Constructor, null, access, parent)
 		{
-			method = new ClassMemberMethod(".new", this, access, body, signature)
+			method = new ClassMemberMethod(InstanceCtorName, this, access, body, signature)
 			{
 				Flags = MemberFlags.InstanceConstructor,
 			};
 			this.IsStatic = false;
 		}
 		public Constructor(Block body, Class parent)
-			: base(".init", MemberKind.Constructor, null, AccessLevel.Private, parent)
+			: base(StaticCtorName, MemberKind.Constructor, null, AccessLevel.Private, parent)
 		{
-			method = new ClassMemberMethod(".init", this, AccessLevel.Private, body, Signature.Empty)
+			method = new ClassMemberMethod(StaticCtorName, this, AccessLevel.Private, body, Signature.Empty)
 			{
 				Flags = MemberFlags.Constructor,
 			};
@@ -1719,14 +1719,17 @@ namespace Osprey.Members
 				throw new CompileTimeException(method.Returns.First(hasReturnValue),
 					"Constructors can only contain empty return statements.");
 		}
+
+		internal const string InstanceCtorName = ".new";
+		internal const string StaticCtorName = ".init";
 	}
 
 	public class Iterator : ClassMember
 	{
 		public Iterator(IteratorDeclaration node, Class parent)
-			: base(".iter", MemberKind.Iterator, node, AccessLevel.None, parent)
+			: base(MemberName, MemberKind.Iterator, node, AccessLevel.None, parent)
 		{
-			method = new ClassMemberMethod(".iter", this, AccessLevel.Public, node.Body, Splat.None, new Parameter[0])
+			method = new ClassMemberMethod(MemberName, this, AccessLevel.Public, node.Body, Splat.None, new Parameter[0])
 			{
 				Flags = MemberFlags.Instance | MemberFlags.AutoOverride | MemberFlags.Overridable | MemberFlags.ImplDetail,
 			};
@@ -1735,6 +1738,8 @@ namespace Osprey.Members
 		private ClassMemberMethod method;
 		/// <summary>Gets the method that contains the iterator implementation.</summary>
 		public ClassMemberMethod Method { get { return method; } }
+
+		internal const string MemberName = ".iter";
 	}
 
 	public class OperatorOverload : ClassMember

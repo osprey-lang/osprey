@@ -409,7 +409,7 @@ namespace Osprey
 					var method = ReadSingleMethodDef(reader, module, target);
 
 					target.ImportMethodGroup(method);
-					if (method.Name == ".new")
+					if (method.Name == Constructor.InstanceCtorName)
 						target.Constructors = method;
 					methodDefs.Add(method);
 					method.Module = module;

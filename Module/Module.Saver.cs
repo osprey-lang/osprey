@@ -624,7 +624,7 @@ namespace Osprey
 				MethodFlags.Protected;
 			if (!method.IsStatic)
 				flags |= MethodFlags.Instance;
-			if (method.Name == ".new" || method.Name == ".init")
+			if (method.Name == Constructor.InstanceCtorName || method.Name == Constructor.StaticCtorName)
 				flags |= MethodFlags.Ctor;
 			if (method.Any(o => o.IsImplDetail))
 				flags |= MethodFlags.Impl;

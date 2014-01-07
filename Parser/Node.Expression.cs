@@ -1826,7 +1826,7 @@ namespace Osprey.Nodes
 			var returnValue = new SafeAccess(new LocalVariableAccess(param, LocalAccessKind.NonCapturing));
 			returnValue.Chain = SafeAccessChain; // Overwrite the chain; no need to copy things
 
-			var returnStmt = new ReturnStatement(new List<Expression>());
+			var returnStmt = new ReturnStatement(new List<Expression>(1));
 			returnStmt.ReturnValues.Add(returnValue);
 
 			var bodyBlock = new Block();
@@ -3908,7 +3908,7 @@ namespace Osprey.Nodes
 			// instance is on the stack
 			var endLabel = new Label("safe-chain-end");
 
-			for (var i = 0; i < Chain.Count; i++)
+			for (var i = 0; i < Chain.Count; )
 			{
 				var link = Chain[i];
 				if (link.IsSafe)

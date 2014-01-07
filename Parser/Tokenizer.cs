@@ -668,6 +668,7 @@ namespace Osprey
 			void IDisposable.Dispose()
 			{
 				owner = null;
+				current = null;
 			}
 
 			object System.Collections.IEnumerator.Current

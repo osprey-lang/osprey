@@ -46,7 +46,7 @@ namespace Osprey
 
 		~Compiler()
 		{
-			Dispose();
+			Dispose(disposing: false);
 		}
 
 		private CompilerFlags flags;
@@ -466,27 +466,16 @@ namespace Osprey
 
 		public void Dispose()
 		{
-			if (nativeLibrary != null)
+			Dispose(disposing: true);
+		}
+
+		private void Dispose(bool disposing)
+		{
+			if (disposing && nativeLibrary != null)
+			{
 				nativeLibrary.Dispose();
-			nativeLibrary = null;
-
-			version = null;
-			metadata = null;
-			sourceFiles = null;
-			documents = null;
-			importedModules = null;
-			methodsWithLocalFunctions = null;
-			additionalLocalExtractors = null;
-			types = null;
-			globalFunctions = null;
-			globalConstants = null;
-			modules = null;
-			projectNamespace = null;
-			mainMethodBody = null;
-			mainMethod = null;
-			outputModule = null;
-
-			typeObjects = null;
+				nativeLibrary = null;
+			}
 		}
 
 		public void EnsureNativeMethodExists(ParseNode errorNode, string name)
