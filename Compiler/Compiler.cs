@@ -787,63 +787,29 @@ namespace Osprey
 
 		private void BuildProjectNamespace(List<Statement> mainMethodBody)
 		{
-			foreach (var doc in documents)
+			for (var i = 0; i < documents.Count; i++)
 				try
 				{
-					BuildDocumentNamespace(doc, mainMethodBody);
+					var doc = documents[i];
+					doc.Namespace = new FileNamespace(projectNamespace, this);
+					ProcessNamespaceMembers(doc.GlobalDeclarationSpace, projectNamespace);
 				}
 				catch (CompileTimeException e)
 				{
-					e.Document = doc;
+					e.Document = documents[i];
 					throw; // rethrow
 				}
-		}
 
-		private void BuildDocumentNamespace(Document doc, List<Statement> mainMethodBody)
-		{
-			doc.Namespace = new FileNamespace(projectNamespace, this);
-
-			if (doc.Statements.Count > 0)
-			{
-				if (projectType == ProjectType.Module)
-					throw new CompileTimeException(doc.Statements[0],
-						"A project compiled as a module may not contain any global statements or global variables.");
-
-				foreach (var stmt in doc.Statements)
+			for (var i = 0; i < documents.Count; i++)
+				try
 				{
-					if (stmt is SimpleLocalVariableDeclaration) // var a = x;
-						foreach (var decl in ((SimpleLocalVariableDeclaration)stmt).Declarators)
-						{
-							var globalVar = new GlobalVariable(decl.Name, decl, doc);
-							decl.Variable = globalVar;
-							doc.Namespace.DeclareGlobalVariable(globalVar);
-							//AddGlobalVariable(doc, globalVar);
-						}
-					else if (stmt is ParallelLocalVariableDeclaration) // var (a, b) = list;
-					{
-						var declaration = (ParallelLocalVariableDeclaration)stmt;
-						declaration.Variables = new Variable[declaration.Names.Count];
-						for (var i = 0; i < declaration.Names.Count; i++)
-						{
-							var name = declaration.Names[i];
-
-							var globalVar = new GlobalVariable(name,
-								new VariableDeclarator(name, null)
-								{
-									StartIndex = stmt.StartIndex,
-									EndIndex = stmt.EndIndex,
-									Document = stmt.Document,
-								}, doc);
-							declaration.Variables[i] = globalVar;
-							doc.Namespace.DeclareGlobalVariable(globalVar);
-							//AddGlobalVariable(doc, globalVar);
-						}
-					}
-					mainMethodBody.Add(stmt);
+					InitializeGlobalVariables(documents[i], mainMethodBody);
 				}
-			}
-			
-			ProcessNamespaceMembers(doc.GlobalDeclarationSpace, projectNamespace);
+				catch (CompileTimeException e)
+				{
+					e.Document = documents[i];
+					throw;
+				}
 		}
 
 		private void ProcessNamespaceMembers(NamespaceDeclaration nsDecl, Namespace parent)
@@ -895,6 +861,49 @@ namespace Osprey
 
 			foreach (var subNs in nsDecl.Namespaces)
 				ProcessNamespaceMembers(subNs, ns);
+		}
+
+		private void InitializeGlobalVariables(Document doc, List<Statement> mainMethodBody)
+		{
+			if (doc.Statements.Count > 0)
+			{
+				if (projectType == ProjectType.Module)
+					throw new CompileTimeException(doc.Statements[0],
+						"A project compiled as a module may not contain any global statements or global variables.");
+
+				foreach (var stmt in doc.Statements)
+				{
+					if (stmt is SimpleLocalVariableDeclaration) // var a = x;
+						foreach (var decl in ((SimpleLocalVariableDeclaration)stmt).Declarators)
+						{
+							var globalVar = new GlobalVariable(decl.Name, decl, doc);
+							decl.Variable = globalVar;
+							doc.Namespace.DeclareGlobalVariable(globalVar);
+							//AddGlobalVariable(doc, globalVar);
+						}
+					else if (stmt is ParallelLocalVariableDeclaration) // var (a, b) = list;
+					{
+						var declaration = (ParallelLocalVariableDeclaration)stmt;
+						declaration.Variables = new Variable[declaration.Names.Count];
+						for (var i = 0; i < declaration.Names.Count; i++)
+						{
+							var name = declaration.Names[i];
+
+							var globalVar = new GlobalVariable(name,
+								new VariableDeclarator(name, null)
+								{
+									StartIndex = stmt.StartIndex,
+									EndIndex = stmt.EndIndex,
+									Document = stmt.Document,
+								}, doc);
+							declaration.Variables[i] = globalVar;
+							doc.Namespace.DeclareGlobalVariable(globalVar);
+							//AddGlobalVariable(doc, globalVar);
+						}
+					}
+					mainMethodBody.Add(stmt);
+				}
+			}
 		}
 
 		private void DeclareExtraConstants()
