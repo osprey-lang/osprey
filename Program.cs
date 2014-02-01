@@ -243,16 +243,16 @@ namespace Osprey
 
 			lines = 0;
 			var end = charIndex + length;
-			while (end < fileSource.Length - 1)
+			while (end < fileSource.Length)
 			{
-				var ch = fileSource[end + 1];
+				var ch = fileSource[end];
 				if (IsLineSeparator(ch))
 				{
 					if (lines == maxContext)
 						break;
 
 					// \r\n counts as a unit
-					if (end < fileSource.Length - 2 && ch == '\r' && fileSource[end + 2] == '\n')
+					if (end < fileSource.Length - 1 && ch == '\r' && fileSource[end + 1] == '\n')
 						end++;
 					lines++;
 				}
@@ -261,7 +261,7 @@ namespace Osprey
 			}
 
 			startIndex = start;
-			return fileSource.Substring(start, end - start + 1);
+			return fileSource.Substring(start, end - start);
 		}
 
 		private static bool IsLineSeparator(char ch)

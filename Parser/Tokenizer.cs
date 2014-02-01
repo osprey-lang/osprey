@@ -134,7 +134,7 @@ namespace Osprey
 			if (ch == '"')
 				return ScanRegularString(ref i);
 
-			if (ch == 'r' && IsChar(i + 1, '"'))
+			if ((ch == 'r' || ch == 'R') && IsChar(i + 1, '"'))
 				return ScanVerbatimString(ref i);
 
 			//if (ch == '\'')
@@ -435,7 +435,7 @@ namespace Osprey
 		private Token ScanVerbatimString(ref int i)
 		{
 			var startIndex = i;
-			i += 2; // skip r"
+			i += 2; // skip r"/R"
 
 			var sb = new StringBuilder();
 
