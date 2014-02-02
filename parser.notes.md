@@ -18,15 +18,15 @@ The following transformations are performed when `ParseFlags.SimplifiedTree` is 
 
 8. Binary operator expressions of the form `a != b` get turned into `not (a == b)`.
 
-Notably, parenthesized expressions are _not_ stripped. This is partly because it is invalid for the inner expression in a parenthesized expression to refer to a namespace or type. In other words, the following should not compile:
+Notably, parenthesized expressions are _not_ stripped. There are two reasons for this. Firstly, it is invalid for the inner expression in a parenthesized expression to refer to a namespace or type. In other words, the following should not compile:
 
 	class Foo { static value; }
 	(Foo).value = 10;
 
 even though `Foo` declares a field `value`. If the parenthesized expression were stripped out, we would not be able to detect this situation, as the compiler would see it as `Foo.value`, which is valid. `ParenthesizedExpression.ResolveNames` performs this check, and never returns a `ParenthesizedExpression`.
 
-The other reason has to do with lvalues. A parenthesized expression can never be assigned to, e.g. the following is wrong:
+Secondly, a parenthesized expression can never be assigned to, e.g. the following is wrong:
 
 	(a.b.c) = 123;
 
-but if we stripped out the parenthesized expression, it would compile just fine.
+but if we stripped out the parenthesized expression, it would compile just fine (assuming `a` exists, of course).

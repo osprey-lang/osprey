@@ -2856,7 +2856,7 @@ namespace Osprey.Nodes
 		{
 			var tokVal = token.Value;
 
-			var isHex = tokVal.StartsWith("0x", true, CI.InvariantCulture);
+			var isHex = tokVal.StartsWith("0x", StringComparison.InvariantCultureIgnoreCase);
 			if (isHex)
 				tokVal = tokVal.Substring(2); // strip hex specifier
 
@@ -2901,9 +2901,9 @@ namespace Osprey.Nodes
 				try
 				{
 					if (isHex)
-						value = (ulong)multiplier * ulong.Parse(tokVal, NumberStyles.AllowHexSpecifier, CI.InvariantCulture);
+						value = checked((ulong)multiplier * ulong.Parse(tokVal, NumberStyles.AllowHexSpecifier, CI.InvariantCulture));
 					else
-						value = (ulong)multiplier * ulong.Parse(tokVal, CI.InvariantCulture);
+						value = checked((ulong)multiplier * ulong.Parse(tokVal, CI.InvariantCulture));
 				}
 				catch (OverflowException e)
 				{
@@ -2917,9 +2917,9 @@ namespace Osprey.Nodes
 				try
 				{
 					if (isHex)
-						value = multiplier * long.Parse(tokVal, NumberStyles.AllowHexSpecifier, CI.InvariantCulture);
+						value = checked(multiplier * long.Parse(tokVal, NumberStyles.AllowHexSpecifier, CI.InvariantCulture));
 					else
-						value = multiplier * long.Parse(tokVal, CI.InvariantCulture);
+						value = checked(multiplier * long.Parse(tokVal, CI.InvariantCulture));
 					if (value < 0)
 						throw new OverflowException();
 				}
