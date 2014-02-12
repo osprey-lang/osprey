@@ -29,7 +29,7 @@ namespace Osprey.Nodes
 		/// for the reachability of their end point.
 		/// </remarks>
 		public virtual bool IsEndReachable { get { return true; } }
-		
+
 		/// <summary>
 		/// Performs constant folding on the statement.
 		/// </summary>
@@ -857,7 +857,7 @@ namespace Osprey.Nodes
 
 		/// <summary>The else clause of the if statement, or null if there is none.</summary>
 		public ElseClause Else;
-		
+
 		public override bool CanReturn
 		{
 			get
@@ -2325,7 +2325,7 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			for (var i =0; i < ReturnValues.Count; i++)
+			for (var i = 0; i < ReturnValues.Count; i++)
 				ReturnValues[i] = ReturnValues[i].FoldConstant();
 		}
 
@@ -2848,7 +2848,12 @@ namespace Osprey.Nodes
 				// And store them in reverse!
 				for (var i = Targets.Count - 1; i >= 0; i--)
 				{
-					var variable = ((LocalVariableAccess)Targets[i]).GetLocal(method);
+					LocalVariable variable;
+					if (Targets[i] is GlobalVariableAccess)
+						variable = method.GetLocal(((GlobalVariableAccess)Targets[i]).Variable.Name);
+					else
+						variable = ((LocalVariableAccess)Targets[i]).GetLocal(method);
+
 					method.Append(new StoreLocal(variable));
 				}
 			}

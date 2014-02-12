@@ -37,7 +37,8 @@ namespace Osprey
 						if (dirPart.Length == 0)
 							dirPart = Environment.CurrentDirectory;
 
-						var matchingFiles = Directory.GetFiles(dirPart, filePart);
+						var matchingFiles = Directory.GetFiles(dirPart, filePart,
+							programOptions.RecursiveWildcards ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
 						if (matchingFiles.Length == 0 &&
 							!(filePart.Contains('*') || filePart.Contains('?')))
 							throw new ArgumentException(string.Format("Could not find a matching file for non-wildcard path: {0}", args[i]));
@@ -295,7 +296,7 @@ namespace Osprey
 
 				if (arg.Length > 0 && (arg[0] == '/' || arg[0] == '-'))
 				{
-					arg = arg.Substring(1);
+					arg = arg.Substring(1).ToLowerInvariant();
 					if (seenSwitches.Contains(arg))
 						throw new ArgumentException(string.Format("Parameter '{0}' occurs more than once.", args[i]));
 
@@ -420,6 +421,10 @@ namespace Osprey
 							}
 							continue; // Don't add the switch to the set!
 
+						case "r":
+							programOptions.RecursiveWildcards = true;
+							break;
+
 						case "f":
 							return i + 1; // Source file list begins here!
 
@@ -443,6 +448,7 @@ namespace Osprey
 		{
 			public bool SilenceErrors;
 			public bool SuppressSource;
+			public bool RecursiveWildcards;
 			public string OutFile;
 		}
 	}
