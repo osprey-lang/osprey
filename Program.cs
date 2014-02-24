@@ -11,7 +11,7 @@ namespace Osprey
 {
 	public class Program
 	{
-		public static void Main(string[] args)
+		public static int Main(string[] args)
 		{
 			try { Console.OutputEncoding = Encoding.UTF8; } catch { }
 			try { Console.InputEncoding = Encoding.UTF8; } catch { }
@@ -60,9 +60,10 @@ namespace Osprey
 			catch (ArgumentException e)
 			{
 				Console.Error.WriteLine("[error] Could not parse command-line arguments: {0}", e.Message);
-				return;
+				return 1;
 			}
-			
+
+			var exitCode = 0;
 #if DEBUG
 			Compiler.Compile(compilerOptions, programOptions.OutFile, constants, sourceFiles.ToArray());
 			Console.ReadKey(intercept: true);
@@ -88,6 +89,7 @@ namespace Osprey
 					if (!programOptions.SuppressSource)
 						PrintErrorLocation(e, err);
 				}
+				exitCode = 1;
 			}
 			catch (CompileTimeException e)
 			{
@@ -109,6 +111,7 @@ namespace Osprey
 					if (!programOptions.SuppressSource && e.Node != null)
 						PrintErrorLocation(e, err);
 				}
+				exitCode = 1;
 			}
 			catch (ModuleLoadException e)
 			{
@@ -121,6 +124,7 @@ namespace Osprey
 					err.WriteLine();
 					err.WriteLine("Module file: {0}", e.FileName);
 				}
+				exitCode = 1;
 			}
 			catch (Exception e)
 			{
@@ -131,8 +135,10 @@ namespace Osprey
 					Console.Error.WriteLine(e.ToString());
 					Console.ForegroundColor = ConsoleColor.Gray;
 				}
+				exitCode = 1;
 			}
 #endif
+			return exitCode;
 		}
 
 		private static void PrintHighlighted(string code, TextWriter target)
