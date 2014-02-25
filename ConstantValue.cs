@@ -313,7 +313,7 @@ namespace Osprey
 				case BinaryOperator.BitwiseXor:
 				case BinaryOperator.BitwiseAnd:
 					return (this.type == ConstantValueType.Int || this.type == ConstantValueType.UInt) &&
-						right.IsNumeric
+						(right.type == ConstantValueType.Int || right.type == ConstantValueType.UInt)
 						||
 						this.type == ConstantValueType.Enum && right.type == ConstantValueType.Enum &&
 						this.enumType.IsSet && this.enumType == right.enumType;
@@ -336,7 +336,8 @@ namespace Osprey
 				case BinaryOperator.GreaterEqual:
 				case BinaryOperator.Comparison:
 					// Note: <, <=, > and >= are all implemented in terms of <=>
-					return this.type == right.type &&
+					return this.IsNumeric && right.IsNumeric ||
+						this.type == right.type &&
 						this.type != ConstantValueType.Null &&
 						(this.type != ConstantValueType.Enum || this.enumType == right.enumType);
 
@@ -712,7 +713,8 @@ namespace Osprey
 				{
 					var leftReal = left.ToReal();
 					var rightReal = right.ToReal();
-					return left.ToReal() == right.ToReal();
+					return double.IsNaN(leftReal) && double.IsNaN(rightReal) ||
+						leftReal == rightReal;
 				}
 
 				if (left.Type == ConstantValueType.Int)
@@ -753,6 +755,9 @@ namespace Osprey
 
 		public static int Compare(ConstantValue left, ConstantValue right)
 		{
+			if (left.IsNumeric && right.IsNumeric)
+				return CompareNumeric(left, right);
+
 			if (left.type != right.type ||
 				left.type == ConstantValueType.Null ||
 				left.type == ConstantValueType.Enum && left.enumType != right.enumType)
@@ -765,22 +770,61 @@ namespace Osprey
 			{
 				case ConstantValueType.Boolean:
 					return left.BooleanValue.CompareTo(right.BooleanValue);
-				case ConstantValueType.Int:
-					return left.IntValue.CompareTo(right.IntValue);
-				case ConstantValueType.UInt:
-					return left.UIntValue.CompareTo(right.UIntValue);
-				case ConstantValueType.Real:
-					// .NET orders doubles in the following order:
-					//    NaN < -∞ < -0.0 == +0.0 < +∞
-					// This is fully compatible with Osprey's ordering.
-					return left.RealValue.CompareTo(right.RealValue);
 				case ConstantValueType.String:
 					return left.stringValue.CompareTo(right.StringValue);
 				case ConstantValueType.Enum:
 					return left.num.IntValue.CompareTo(right.num.IntValue);
 				default:
-					throw new InvalidOperationException("Compiler bug!");
+					throw new InvalidOperationException("Compiler bug: fell through the switch.");
 			}
+		}
+
+		private static int CompareNumeric(ConstantValue left, ConstantValue right)
+		{
+			double leftReal, rightReal;
+
+			switch (left.type)
+			{
+				case ConstantValueType.Int:
+					if (right.type == ConstantValueType.Real)
+					{
+						leftReal = (double)left.num.IntValue;
+						rightReal = right.num.RealValue;
+						break;
+					}
+					if (right.type == ConstantValueType.UInt)
+					{
+						if (left.num.IntValue < 0 ||
+							right.num.UIntValue > long.MaxValue)
+							return -1;
+					}
+					return left.num.IntValue.CompareTo(right.num.IntValue);
+				case ConstantValueType.UInt:
+					if (right.type == ConstantValueType.Real)
+					{
+						leftReal = (double)left.num.UIntValue;
+						rightReal = right.num.RealValue;
+						break;
+					}
+					if (right.type == ConstantValueType.Int)
+					{
+						if (right.num.IntValue < 0 ||
+							left.num.UIntValue > long.MaxValue)
+							return 1;
+					}
+					return left.num.UIntValue.CompareTo(right.num.UIntValue);
+				case ConstantValueType.Real:
+					leftReal = left.num.RealValue;
+					rightReal = right.num.RealValue;
+					break;
+				default:
+					throw new InvalidOperationException("Compiler bug: fell through the switch.");
+			}
+
+			// .NET orders doubles in the following order:
+			//    NaN < -∞ < -0.0 == +0.0 < +∞
+			// This is fully compatible with Osprey's ordering.
+			return leftReal.CompareTo(rightReal);
 		}
 
 		public static ConstantValue RefEquals(ConstantValue left, ConstantValue right)
