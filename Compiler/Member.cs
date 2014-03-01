@@ -1804,7 +1804,7 @@ namespace Osprey.Members
 	public class LocalMethod : Method, IDeclarationSpace
 	{
 		public LocalMethod(string name, LocalFunction function, Statement body, Splat splat, params Parameter[] parameters)
-			: base(name, AccessLevel.Public, body, new Signature(parameters, splat))
+			: base(function.Node, name, AccessLevel.Public, body, new Signature(parameters, splat))
 		{
 			this.function = function;
 			IsImplDetail = true;

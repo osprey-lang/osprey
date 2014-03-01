@@ -482,8 +482,8 @@ namespace Osprey
 					Splat.None);
 
 				var overload = parent is Class ?
-					new ClassMemberMethod(name, null, access, null, signature) :
-					new Method(name, access, null, signature);
+					new ClassMemberMethod(null, name, null, access, null, signature) :
+					new Method(null, name, access, null, signature);
 
 				overload.Parameters = parameters;
 				overload.IsAbstract = (flags & OverloadFlags.Abstract) == OverloadFlags.Abstract;

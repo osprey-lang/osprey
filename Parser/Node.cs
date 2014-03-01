@@ -53,6 +53,9 @@ namespace Osprey.Nodes
 		/// <summary>The source code of the file from which the document was created.</summary>
 		internal string FileSource;
 
+		/// <summary>SHA-1 hash code of the file contents, or null if the program is being compiled without debug symbols.</summary>
+		internal byte[] FileHash;
+
 		/// <summary>The compiler instance that opened the file.</summary>
 		internal Compiler Compiler;
 
@@ -758,24 +761,26 @@ namespace Osprey.Nodes
 					if (fieldParams.Contains(f))
 						continue;
 
-					var inner = new InstanceMemberAccess(new ThisAccess(), @class, f);
-					inner.IsAssignment = true;
-					Body.Initializer.Insert(index++, new AssignmentExpression(inner, field.Initializer)
-					{
-						IgnoreValue = true
-					});
+					var expr = new AssignmentExpression(
+						new InstanceMemberAccess(new ThisAccess(), @class, f) { IsAssignment = true },
+						field.Initializer
+					);
+					expr.IgnoreValue = true;
+					expr.At(field.Initializer);
+					Body.Initializer.Insert(index++, expr);
 				}
 			}
 			else
 			{
 				foreach (var field in fields)
 				{
-					var inner = new StaticFieldAccess((Field)@class.GetMember(field.Name));
-					inner.IsAssignment = true;
-					Body.Initializer.Insert(index++, new AssignmentExpression(inner, field.Initializer)
-					{
-						IgnoreValue = true
-					});
+					var expr = new AssignmentExpression(
+						new StaticFieldAccess((Field)@class.GetMember(field.Name)) { IsAssignment = true },
+						field.Initializer
+					);
+					expr.IgnoreValue = true;
+					expr.At(field.Initializer);
+					Body.Initializer.Insert(index++, expr);
 				}
 			}
 		}

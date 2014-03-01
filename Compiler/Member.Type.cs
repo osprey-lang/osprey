@@ -1270,13 +1270,15 @@ namespace Osprey.Members
 
 	public class ClassMemberMethod : Method
 	{
-		public ClassMemberMethod(string name, NamedMember owner, AccessLevel access, Statement body, Splat splat, params Parameter[] parameters)
-			: base(name, access, body, splat, parameters)
+		public ClassMemberMethod(ParseNode node, string name, NamedMember owner,
+			AccessLevel access, Statement body, Splat splat, params Parameter[] parameters)
+			: base(node, name, access, body, splat, parameters)
 		{
 			this.owner = owner;
 		}
-		public ClassMemberMethod(string name, NamedMember owner, AccessLevel access, Statement body, Signature signature)
-			: base(name, access, body, signature)
+		public ClassMemberMethod(ParseNode node, string name, NamedMember owner,
+			AccessLevel access, Statement body, Signature signature)
+			: base(node, name, access, body, signature)
 		{
 			this.owner = owner;
 		}
@@ -1484,8 +1486,9 @@ namespace Osprey.Members
 				};
 
 			isSetter = node.IsSetter;
-			method = new ClassMemberMethod(GetAccessorMethodName(node.IsSetter, node.Name),
-				this, node.Access, node.Body, Splat.None, parameters)
+			method = new ClassMemberMethod(node,
+				GetAccessorMethodName(node.IsSetter, node.Name), this,
+				node.Access, node.Body, Splat.None, parameters)
 				{
 					IsStatic = node.IsStatic,
 					IsAbstract = node.IsAbstract,
@@ -1549,7 +1552,7 @@ namespace Osprey.Members
 	public class Indexer : ClassMember
 	{
 		public Indexer(Class parent)
-			: base(".item", MemberKind.Property, null, AccessLevel.None, parent)
+			: base(MemberName, MemberKind.Property, null, AccessLevel.None, parent)
 		{ }
 
 		private MethodGroup getterGroup, setterGroup;
@@ -1587,6 +1590,8 @@ namespace Osprey.Members
 			this.getterGroup = getter;
 			this.setterGroup = setter;
 		}
+
+		internal const string MemberName = ".item";
 	}
 
 	public class IndexerAccessor : NamedMember
@@ -1605,8 +1610,9 @@ namespace Osprey.Members
 				};
 
 			this.isSetter = node.IsSetter;
-			method = new ClassMemberMethod(PropertyAccessor.GetAccessorMethodName(node.IsSetter, ".item"),
-				this, node.Access, node.Body, Splat.None, parameters)
+			method = new ClassMemberMethod(node,
+				PropertyAccessor.GetAccessorMethodName(node.IsSetter, Indexer.MemberName), this,
+				node.Access, node.Body, Splat.None, parameters)
 				{
 					IsAbstract = node.IsAbstract,
 					IsOverridable = node.IsOverridable,
@@ -1656,11 +1662,13 @@ namespace Osprey.Members
 		public Constructor(ConstructorDeclaration node, Class parent)
 			: base(node.IsStatic ? StaticCtorName : InstanceCtorName, MemberKind.Constructor, node, node.Access, parent)
 		{
-			method = new ClassMemberMethod(node.IsStatic ? StaticCtorName : InstanceCtorName, this, node.Access,
-				node.Body, new Signature(node.Parameters, node.Splat))
-				{
-					Flags = node.IsStatic ? MemberFlags.Constructor : MemberFlags.InstanceConstructor,
-				};
+			method = new ClassMemberMethod(node,
+				node.IsStatic ? StaticCtorName : InstanceCtorName,
+				this, node.Access, node.Body,
+				new Signature(node.Parameters, node.Splat))
+			{
+				Flags = node.IsStatic ? MemberFlags.Constructor : MemberFlags.InstanceConstructor,
+			};
 			this.IsStatic = node.IsStatic;
 
 			var parameters = new Parameter[node.Parameters.Count];
@@ -1677,7 +1685,8 @@ namespace Osprey.Members
 		public Constructor(Block body, AccessLevel access, Class parent, Splat splat, params Parameter[] parameters)
 			: base(InstanceCtorName, MemberKind.Constructor, null, access, parent)
 		{
-			method = new ClassMemberMethod(InstanceCtorName, this, access, body, splat, parameters)
+			method = new ClassMemberMethod(null, InstanceCtorName, this,
+				access, body, splat, parameters)
 			{
 				Flags = MemberFlags.InstanceConstructor,
 			};
@@ -1686,7 +1695,8 @@ namespace Osprey.Members
 		public Constructor(Block body, AccessLevel access, Class parent, Signature signature)
 			: base(InstanceCtorName, MemberKind.Constructor, null, access, parent)
 		{
-			method = new ClassMemberMethod(InstanceCtorName, this, access, body, signature)
+			method = new ClassMemberMethod(null, InstanceCtorName, this,
+				access, body, signature)
 			{
 				Flags = MemberFlags.InstanceConstructor,
 			};
@@ -1695,7 +1705,8 @@ namespace Osprey.Members
 		public Constructor(Block body, Class parent)
 			: base(StaticCtorName, MemberKind.Constructor, null, AccessLevel.Private, parent)
 		{
-			method = new ClassMemberMethod(StaticCtorName, this, AccessLevel.Private, body, Signature.Empty)
+			method = new ClassMemberMethod(null, StaticCtorName, this,
+				AccessLevel.Private, body, Signature.Empty)
 			{
 				Flags = MemberFlags.Constructor,
 			};
@@ -1729,7 +1740,8 @@ namespace Osprey.Members
 		public Iterator(IteratorDeclaration node, Class parent)
 			: base(MemberName, MemberKind.Iterator, node, AccessLevel.None, parent)
 		{
-			method = new ClassMemberMethod(MemberName, this, AccessLevel.Public, node.Body, Splat.None, new Parameter[0])
+			method = new ClassMemberMethod(node, MemberName, this,
+				AccessLevel.Public, node.Body, Splat.None, new Parameter[0])
 			{
 				Flags = MemberFlags.Instance | MemberFlags.AutoOverride | MemberFlags.Overridable | MemberFlags.ImplDetail,
 			};
@@ -1753,24 +1765,24 @@ namespace Osprey.Members
 				new Parameter(node.Left, null),
 				new Parameter(node.Right, null),
 			};
-			method = new ClassMemberMethod(node.GetMethodName(), this, AccessLevel.Public, node.Body, Splat.None, parameters)
+			method = new ClassMemberMethod(node, node.GetMethodName(), this,
+				AccessLevel.Public, node.Body, Splat.None, parameters)
 			{
 				Flags = MemberFlags.Operator,
 			};
 		}
-
 		public OperatorOverload(UnaryOperatorOverload node, Class parent)
 			: base(null, MemberKind.Operator, node, AccessLevel.Public, parent)
 		{
 			index = node.GetIndex();
 
 			Parameter[] parameters = { new Parameter(node.Operand, null) };
-			method = new ClassMemberMethod(node.GetMethodName(), this, AccessLevel.Public, node.Body, Splat.None, parameters)
+			method = new ClassMemberMethod(node, node.GetMethodName(), this,
+				AccessLevel.Public, node.Body, Splat.None, parameters)
 			{
 				Flags = MemberFlags.Operator,
 			};
 		}
-
 		internal OperatorOverload(int index, Class parent, ClassMemberMethod method)
 			: base(null, MemberKind.Operator, null, AccessLevel.Public, parent)
 		{
@@ -1941,7 +1953,8 @@ namespace Osprey.Members
 			};
 			DeclareField(currentValueField);
 
-			var currentValueGetterMethod = new ClassMemberMethod(PropertyAccessor.GetAccessorMethodName(false, "current"),
+			var currentValueGetterMethod = new ClassMemberMethod(null,
+				PropertyAccessor.GetAccessorMethodName(false, "current"),
 				null, AccessLevel.Public,
 				new Block(
 					new ReturnStatement(

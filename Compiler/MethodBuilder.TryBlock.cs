@@ -93,11 +93,12 @@ namespace Osprey
 		}
 
 		/// <summary>
-		/// Prevents future modifications of the try block member, and finalizes its offsets.
+		/// Prevents future modifications of the try block member, finalizes its offsets, and
+		/// detaches it from its containing <see cref="MethodBuilder"/>.
 		/// This should only be called after the method has been fully constructed; anything
 		/// else results in undefined behaviour.
 		/// </summary>
-		internal void Lock()
+		internal void Detach()
 		{
 			method = null;
 			startOffset = start.ByteOffset;
@@ -108,12 +109,12 @@ namespace Osprey
 
 			if (HasChildTryBlocks)
 				for (var i = 0; i < childTryBlocks.Count; i++)
-					childTryBlocks[i].Lock();
+					childTryBlocks[i].Detach();
 
-			LockInternal();
+			DetachInternal();
 		}
 
-		protected virtual void LockInternal() { }
+		protected virtual void DetachInternal() { }
 	}
 
 	public sealed class TryBlock : TryBlockMember
@@ -194,13 +195,13 @@ namespace Osprey
 			return _finally;
 		}
 
-		protected override void LockInternal()
+		protected override void DetachInternal()
 		{
 			if (kind == TryBlockKind.TryCatch)
 				foreach (var c in catches)
-					c.Lock();
+					c.Detach();
 			else if (kind == TryBlockKind.TryFinally)
-				_finally.Lock();
+				_finally.Detach();
 		}
 	}
 

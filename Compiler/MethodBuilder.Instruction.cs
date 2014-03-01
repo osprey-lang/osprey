@@ -13,9 +13,12 @@ namespace Osprey.Instructions
 	/// <summary>
 	/// Represents a single instruction in a method. It may take one or more arguments, and may modify the stack.
 	/// </summary>
+#if DEBUG
+	[DebuggerDisplay("{DebugString,nq}")]
+#endif
 	public abstract class Instruction
 	{
-		internal List<Label> labels = null;
+		private List<Label> labels = null;
 		/// <summary>
 		/// Associates a label with the instruction.
 		/// </summary>
@@ -48,6 +51,12 @@ namespace Osprey.Instructions
 
 		internal InstructionRestrictions Restrictions;
 
+		private SourceLocation location;
+		/// <summary>
+		/// Gets the source location that generated this instruction.
+		/// </summary>
+		public SourceLocation Location { get { return location; } internal set { location = value; } }
+
 		/// <summary>
 		/// Gets the stack change performed by the instruction.
 		/// A negative value indicates removal of items from the stack,
@@ -77,6 +86,19 @@ namespace Osprey.Instructions
 		{
 			Restrictions |= restriction;
 		}
+
+#if DEBUG
+		internal string DebugString
+		{
+			get
+			{
+				var str = this.ToString();
+				if (location != null)
+					str = string.Format("{0} {{at {1}}}", str, location);
+				return str;
+			}
+		}
+#endif
 	}
 
 	[Flags]

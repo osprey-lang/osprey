@@ -218,8 +218,8 @@ namespace Osprey.Members
 
 			node.DeclSpace = this;
 		}
-		public Method(string name, AccessLevel access, Statement body, Splat splat, params Parameter[] parameters)
-			: base(name, MemberKind.Method, null, access)
+		public Method(ParseNode node, string name, AccessLevel access, Statement body, Splat splat, params Parameter[] parameters)
+			: base(name, MemberKind.Method, node, access)
 		{
 			this.body = BlockSpace.FromStatement(body, this);
 
@@ -242,8 +242,8 @@ namespace Osprey.Members
 				Parameters = new Parameter[0];
 			}
 		}
-		public Method(string name, AccessLevel access, Statement body, Signature signature)
-			: base(name, MemberKind.Method, null, access)
+		public Method(ParseNode node, string name, AccessLevel access, Statement body, Signature signature)
+			: base(name, MemberKind.Method, node, access)
 		{
 			this.body = BlockSpace.FromStatement(body, this);
 			Signature = signature;
@@ -269,27 +269,7 @@ namespace Osprey.Members
 
 		internal Method OverriddenBaseMethod;
 
-		/// <summary>
-		/// The offset of the first instruction of the method body,
-		/// within the module's method block.
-		/// </summary>
-		internal uint BodyOffset;
-		/// <summary>
-		/// The total number of bytes taken up by the compiled body.
-		/// </summary>
-		internal int BodyLength;
-		/// <summary>
-		/// The total number of managed locals required by the method.
-		/// </summary>
-		internal int LocalCount;
-		/// <summary>
-		/// The maximum number of stack slots used by the method.
-		/// </summary>
-		internal int MaxStack;
-		/// <summary>
-		/// The try blocks associated with the method.
-		/// </summary>
-		internal TryBlock[] TryBlocks;
+		internal CompiledMethodData CompiledMethod;
 
 		public bool IsStatic
 		{
@@ -415,12 +395,15 @@ namespace Osprey.Members
 			if (Body is ExternBlockSpace)
 			{
 				var externBody = (ExternBody)(Body.Node);
-				LocalCount = (int)((ConstantExpression)externBody.Locals).Value.IntValue;
-				MaxStack = (int)((ConstantExpression)externBody.MaxStack).Value.IntValue;
+				CompiledMethod = new CompiledMethodData
+				{
+					LocalCount = (int)((ConstantExpression)externBody.Locals).Value.IntValue,
+					MaxStack = (int)((ConstantExpression)externBody.MaxStack).Value.IntValue,
+				};
 				return; // No body to initialize
 			}
 
-			var mb = new MethodBuilder(!IsStatic, Parameters, compiler.OutputModule);
+			var mb = new MethodBuilder(!IsStatic, Parameters, compiler.OutputModule, compiler.UseDebugSymbols);
 			if (Signature.Splat == Splat.None && Signature.OptionalParameterCount > 0)
 				CompileOptionalParams(compiler, mb);
 
@@ -428,17 +411,31 @@ namespace Osprey.Members
 				CompileGenerator(compiler, mb);
 			else
 			{
-				Body.Node.Compile(compiler, mb);
-				if (Body.Node.IsEndReachable)
+				var bodyNode = Body.Node;
+				bodyNode.Compile(compiler, mb);
+				if (bodyNode.IsEndReachable)
+				{
+					// If the end of the method is reachable, then it must mean that the method
+					// uses curly braces for its body; otherwise, if it's a lambda like @= E or
+					// @.blah, or a getter declared as "get x = ...;", there is always an implicit
+					// return at the end of the body.
+					// Hence, we can safely make the following retnull instruction belong to that
+					// curly brace. Note that the main method has a node with a null document.
+					if (bodyNode.Document != null)
+						mb.AppendLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
 					mb.Append(new SimpleInstruction(Opcode.Retnull));
+				}
 			}
 
 			var body = mb.GetBodyBytes();
-			BodyOffset = compiler.OutputModule.AppendMethodBody(body);
-			BodyLength = body.Length;
-			LocalCount = mb.LocalCount;
-			MaxStack = mb.GetMaxStack();
-			TryBlocks = mb.GetTryBlocks();
+			CompiledMethod = new CompiledMethodData(
+				bodyOffset: compiler.OutputModule.AppendMethodBody(body),
+				bodyLength: body.Length,
+				localCount: mb.LocalCount,
+				maxStack: mb.GetMaxStack(),
+				tryBlocks: mb.GetTryBlocks(),
+				debugSymbols: mb.GetDebugSymbols()
+			);
 		}
 
 		private void CompileOptionalParams(Compiler compiler, MethodBuilder builder)
@@ -467,6 +464,7 @@ namespace Osprey.Members
 			var offset = IsStatic ? 0 : 1; // 'this' is a required, unnamed parameter
 			var uninitializedParams = firstOptionalNonNull + offset;
 
+			builder.AppendLocation(this.Node);
 			builder.Append(new SimpleInstruction(Opcode.Ldargc)); // Load argument count
 			if (uninitializedParams != 0)
 			{
@@ -480,19 +478,22 @@ namespace Osprey.Members
 			var optionalCount = lastOptionalNonNull - firstOptionalNonNull + 1;
 			var jumpTargets = new List<Label>(optionalCount);
 			for (var i = 0; i < optionalCount; i++)
-				jumpTargets.Add(Parameters[i + firstOptionalNonNull].DefaultValue.IsNull ? endLabel : new Label());
+				jumpTargets.Add(new Label());
 
 			builder.Append(new Switch(jumpTargets)); // Jump to the first unassigned parameter
 			builder.Append(Branch.Always(endLabel)); // No missing parameters
 
 			for (var i = 0; i < optionalCount; i++)
 			{
+				builder.Append(jumpTargets[i]); // The label for this parameter
+
 				var index = firstOptionalNonNull + i;
-				if (Parameters[index].DefaultValue.IsNull)
+				var param = Parameters[index];
+				if (param.DefaultValue.IsNull)
 					continue;
 
-				builder.Append(jumpTargets[i]); // The label for this parameter
-				Parameters[index].DefaultValue.Compile(compiler, builder); // Evaluate the value
+				builder.AppendLocation(param.DefaultValue);
+				param.DefaultValue.Compile(compiler, builder); // Evaluate the value
 				builder.Append(new StoreLocal(builder.GetParameter(index + offset))); // Store!
 				// Fall through to the next parameter, which is also missing
 			}
@@ -506,6 +507,11 @@ namespace Osprey.Members
 
 			var stateSwitch = new Switch(); // The target list will be updated later
 
+			var bodyNode = Body.Node;
+			// During generator setup, the cursor is at the "{" of the body
+			// Note: it is impossible to have a generator block without curlies.
+			builder.AppendLocation(bodyNode.Document, bodyNode.StartIndex, bodyNode.StartIndex + 1);
+
 			builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
 			builder.Append(LoadField.Create(builder.Module, stateField)); // Load this.'<>state'
 			builder.Append(stateSwitch); // Switch on this.'<>state'
@@ -513,18 +519,21 @@ namespace Osprey.Members
 			// This list will be repopulated when traversing all the statements,
 			// to make sure it only contains reachable yields.
 			Yields.Clear();
-			var canEnd = Body.Node.IsEndReachable || Body.Node.CanReturn;
+			var canEnd = bodyNode.IsEndReachable || bodyNode.CanReturn;
 			if (canEnd)
 				Yields.Add(null); // End label placeholder thing
 
-			Body.Node.Compile(compiler, builder);
+			bodyNode.Compile(compiler, builder);
 
 			var endLabel = canEnd ? new Label("generator-end") : null;
 			stateSwitch.SetTargets(Yields.Select(y => y == null ? endLabel : y.StateLabel));
 
 			if (canEnd)
 			{
-				if (Body.Node.IsEndReachable)
+				// The last step appears to be at the closing "}" of the body
+				builder.AppendLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
+
+				if (bodyNode.IsEndReachable)
 				{
 					builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
 					builder.Append(new LoadConstantInt(0)); // Load the end state
@@ -594,8 +603,7 @@ namespace Osprey.Members
 			genClass = new GeneratorClass(GetGeneratorClassName(namePrefix, method), this, ns, compiler);
 			genClass.SharedType = group.ParentAsClass;
 
-			//var moveNextBody = new Block(body.Node.Statements); // Reuse the statements list
-			var moveNext = new Method("moveNext", AccessLevel.Public, null, Signature.Empty)
+			var moveNext = new Method(this.Node, "moveNext", AccessLevel.Public, null, Signature.Empty)
 			{
 				IsStatic = false,
 				IsOverride = true,
@@ -672,12 +680,54 @@ namespace Osprey.Members
 			return string.Format("I:{0}{1}@{2}__{3}", prefix, method.Name.Replace('.', '#'),
 				groupIndex, method.ClosureCounter++);
 		}
+
+		internal class CompiledMethodData
+		{
+			internal CompiledMethodData() { }
+			internal CompiledMethodData(uint bodyOffset, int bodyLength,
+				int localCount, int maxStack, TryBlock[] tryBlocks,
+				SourceLocation[] debugSymbols)
+			{
+				BodyOffset = bodyOffset;
+				BodyLength = bodyLength;
+				LocalCount = localCount;
+				MaxStack = maxStack;
+				TryBlocks = tryBlocks;
+				DebugSymbols = debugSymbols;
+			}
+
+			/// <summary>
+			/// The offset of the first instruction of the method body,
+			/// within the module's method block.
+			/// </summary>
+			internal uint BodyOffset;
+			/// <summary>
+			/// The total number of bytes taken up by the compiled body.
+			/// </summary>
+			internal int BodyLength;
+			/// <summary>
+			/// The total number of managed locals required by the method.
+			/// </summary>
+			internal int LocalCount;
+			/// <summary>
+			/// The maximum number of stack slots used by the method.
+			/// </summary>
+			internal int MaxStack;
+			/// <summary>
+			/// The try blocks associated with the method.
+			/// </summary>
+			internal TryBlock[] TryBlocks;
+			/// <summary>
+			/// The debug symbols associated with the method.
+			/// </summary>
+			internal SourceLocation[] DebugSymbols;
+		}
 	}
 
 	internal class BytecodeMethod : Method
 	{
 		public BytecodeMethod(string name, AccessLevel access, Splat splat, params Parameter[] parameters)
-			: base(name, access, null, new Signature(parameters, splat))
+			: base(null, name, access, null, new Signature(parameters, splat))
 		{
 			if (parameters != null)
 				this.Parameters = (Parameter[])parameters.Clone();
@@ -705,7 +755,7 @@ namespace Osprey.Members
 
 		internal override void Compile(Compiler compiler)
 		{
-			var mb = new MethodBuilder(!IsStatic, Parameters, compiler.OutputModule);
+			var mb = new MethodBuilder(!IsStatic, Parameters, compiler.OutputModule, false);
 
 			foreach (var obj in contents)
 				if (obj is Label)
@@ -714,11 +764,14 @@ namespace Osprey.Members
 					mb.Append((Instruction)obj);
 
 			var body = mb.GetBodyBytes();
-			BodyOffset = compiler.OutputModule.AppendMethodBody(body);
-			BodyLength = body.Length;
-			LocalCount = mb.LocalCount;
-			MaxStack = mb.GetMaxStack();
-			TryBlocks = mb.GetTryBlocks();
+			CompiledMethod = new CompiledMethodData(
+				bodyOffset: compiler.OutputModule.AppendMethodBody(body),
+				bodyLength: body.Length,
+				localCount: mb.LocalCount,
+				maxStack: mb.GetMaxStack(),
+				tryBlocks: mb.GetTryBlocks(),
+				debugSymbols: null
+			);
 		}
 	}
 

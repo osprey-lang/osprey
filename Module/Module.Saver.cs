@@ -443,8 +443,8 @@ namespace Osprey
 						writer.WriteCString(((ExternBlockSpace)overload.Body).EntryPoint);
 					else
 					{
-						writer.Write(overload.BodyOffset); // offset
-						writer.Write((uint)overload.BodyLength); // length
+						writer.Write(overload.CompiledMethod.BodyOffset); // offset
+						writer.Write((uint)overload.CompiledMethod.BodyLength); // length
 					}
 				}
 			}
@@ -455,11 +455,12 @@ namespace Osprey
 		private void WriteOverloadHeader(ModuleWriter writer, Method overload)
 		{
 			writer.Write((ushort)overload.Signature.OptionalParameterCount); // optionalParamCount
-			writer.Write((ushort)overload.LocalCount); // localCount
-			writer.Write((ushort)overload.MaxStack); // maxStack
+			var compiledMethod = overload.CompiledMethod;
+			writer.Write((ushort)compiledMethod.LocalCount); // localCount
+			writer.Write((ushort)compiledMethod.MaxStack); // maxStack
 
 			// tries
-			if (overload.TryBlocks == null)
+			if (compiledMethod.TryBlocks == null)
 				writer.Write(0u); // size
 			else
 			{
@@ -488,7 +489,7 @@ namespace Osprey
 						}
 					}
 				};
-				flattenTries(flatTries, overload.TryBlocks);
+				flattenTries(flatTries, compiledMethod.TryBlocks);
 
 				writer.BeginCollection(flatTries.Count);
 
@@ -644,8 +645,12 @@ namespace Osprey
 			else if (overload.IsAbstract)
 				flags |= OverloadFlags.Abstract;
 
-			if (overload.LocalCount == 0 && overload.MaxStack <= 8 &&
-				overload.TryBlocks == null && overload.Signature.OptionalParameterCount == 0)
+			// overload.CompiledMethod is null for abstract methods
+			var compiled = overload.CompiledMethod;
+			if ((compiled == null ||
+				compiled.LocalCount == 0 && compiled.MaxStack <= 8 &&
+				compiled.TryBlocks == null) &&
+				overload.Signature.OptionalParameterCount == 0)
 				flags |= OverloadFlags.ShortHeader;
 
 			return flags;

@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Osprey.Instructions;
+using Osprey.Nodes;
 
 namespace Osprey
 {
 	public class MethodBuilder
 	{
-		public MethodBuilder(bool hasInstance, Nodes.Parameter[] parameters, Module module)
+		public MethodBuilder(bool hasInstance, Parameter[] parameters, Module module, bool useDebugSymbols)
 		{
 			if (module == null)
 				throw new ArgumentNullException("module");
@@ -24,6 +25,8 @@ namespace Osprey
 				for (var i = 0; i < parameters.Length; i++)
 					this.parameters.Add(new LocalVariable(i + paramStart, parameters[i].DeclaredName, false, true));
 			}
+
+			this.useDebugSymbols = useDebugSymbols;
 		}
 
 		private Module module;
@@ -73,6 +76,9 @@ namespace Osprey
 
 		private int? maxStack = null;
 
+		private bool useDebugSymbols;
+		private SourceLocation trailingLocation;
+
 		/// <summary>
 		/// Appends an instruction to the end of the method.
 		/// </summary>
@@ -106,10 +112,14 @@ namespace Osprey
 			while (newTryMembers.Count > 0)
 				newTryMembers.Pop().BeginBlock(instr);
 
+			instr.Location = trailingLocation;
+			trailingLocation = null;
+
 			maxStack = null;
 		}
 		/// <summary>
-		/// Appends a label to the end of the method.
+		/// Appends a label to the end of the method. It will be
+		/// attached to the next instruction that is appended.
 		/// </summary>
 		/// <param name="label">The label to append to the method.</param>
 		/// <exception cref="ArgumentNullException"><paramref name="label"/> is null.</exception>
@@ -118,6 +128,62 @@ namespace Osprey
 			if (label == null)
 				throw new ArgumentNullException("label");
 			trailingLabels.Add(label);
+		}
+		/// <summary>
+		/// Appends a source location to the end of the method. It
+		/// will be attached to the next instruction that is appended.
+		/// </summary>
+		/// <param name="location">The source location to append to the method.</param>
+		/// <exception cref="ArgumentNullException"><paramref name="location"/> is null.</exception>
+		/// <exception cref="InvalidOperationException">The method already has a location waiting to be attached to an instruction.</exception>
+		/// <remarks>
+		/// If the program is being compiled without debug symbols, the source location is ignored.
+		/// Consider calling <see cref="AppendLocation"/> instead, as it avoids allocating a <see cref="SourceLocation"/>
+		/// if debug symbols are disabled.
+		/// </remarks>
+		public void Append(SourceLocation location)
+		{
+			if (location == null)
+				throw new ArgumentNullException("location");
+			if (!useDebugSymbols)
+				return;
+
+			AddSourceLocation(location);
+		}
+
+		/// <summary>
+		/// Appends a source location to the end of this method. It
+		/// will be attached to the next instruction that is appended.
+		/// </summary>
+		/// <param name="document">The document that the source location refers to.</param>
+		/// <param name="startIndex">The first character index within the source file.</param>
+		/// <param name="endIndex">The last character index (exclusive) within the source file.</param>
+		/// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
+		public void AppendLocation(Document document, int startIndex, int endIndex)
+		{
+			if (document == null)
+				throw new ArgumentNullException("document");
+			if (!useDebugSymbols)
+				return;
+
+			AddSourceLocation(new SourceLocation(document, startIndex, endIndex));
+		}
+
+		public void AppendLocation(ParseNode node)
+		{
+			if (node == null)
+				throw new ArgumentNullException("node");
+			if (!useDebugSymbols || node.Document == null)
+				return;
+
+			AddSourceLocation(new SourceLocation(node));
+		}
+
+		private void AddSourceLocation(SourceLocation location)
+		{
+			if (trailingLocation != null)
+				throw new InvalidOperationException("There is already a trailing source location in this method.");
+			trailingLocation = location;
 		}
 
 		/// <summary>
@@ -393,7 +459,7 @@ namespace Osprey
 				}
 
 			// Second pass: remove unreachable instructions.
-			// Because the branch resolver abover optimizes branch targets
+			// Because the branch resolver above optimizes branch targets
 			// under certain situations, we may need to remove instructions
 			// that are now unreachable.
 			GetMaxStack(true);
@@ -486,15 +552,46 @@ namespace Osprey
 			return output;
 		}
 
-		public TryBlock[] GetTryBlocks()
+		internal TryBlock[] GetTryBlocks()
 		{
 			if (tryBlocks == null)
 				return null;
 
 			foreach (var @try in tryBlocks)
-				@try.Lock();
+				@try.Detach();
 
 			return tryBlocks.ToArray();
+		}
+
+		internal SourceLocation[] GetDebugSymbols()
+		{
+			if (!useDebugSymbols)
+				return null;
+
+			var output = new List<SourceLocation>();
+
+			SourceLocation lastLocation = null;
+			foreach (var instr in instructions)
+				if (instr.Location != null)
+				{
+					if (lastLocation != null)
+					{
+						lastLocation.endOffset = instr.ByteOffset;
+						output.Add(lastLocation);
+					}
+
+					lastLocation = instr.Location;
+					lastLocation.startOffset = instr.ByteOffset;
+				}
+
+			if (lastLocation != null)
+			{
+				var lastInstr = instructions[instructions.Count - 1];
+				lastLocation.endOffset = lastInstr.ByteOffset + lastInstr.GetSize();
+				output.Add(lastLocation);
+			}
+
+			return output.ToArray();
 		}
 
 		public int GetMaxStack()
@@ -588,8 +685,18 @@ namespace Osprey
 			if (removeUnreachable)
 				for (int i = 0, j = 0; i < knownCounts.Length; i++, j++)
 					if (knownCounts[i] == -1)
+					{
 						// The instruction has not been visited; hence, it is unreachable.
+						// If the instruction has a source location attached to it, we must
+						// propagate it to the next instruction, if that instruction doesn't
+						// also have a source location.
+						if (j < instructions.Count - 1 &&
+							instructions[j].Location != null &&
+							instructions[j + 1].Location == null)
+							instructions[j + 1].Location = instructions[j].Location;
+
 						instructions.RemoveAt(j--);
+					}
 
 			this.maxStack = maxStack;
 			return maxStack;
@@ -696,6 +803,13 @@ namespace Osprey
 			for (var i = 0; i < instructions.Count; i++)
 			{
 				var instr = instructions[i];
+				if (instr.Location != null)
+				{
+					int column;
+					var lineNumber = instr.Location.GetLineNumber(1, out column);
+					sb.AppendFormat("-- \"{0}\", line {1}, char {2}", instr.Location.Document.FileName, lineNumber, column);
+					sb.AppendLine();
+				}
 				if (knownStackCounts != null)
 					sb.AppendFormat("[{2} -{0}+{1}] ", instr.StackChange.Removed, instr.StackChange.Added, knownStackCounts[i]);
 				sb.AppendFormat("OV_{0:X4}: ", instr.ByteOffset);

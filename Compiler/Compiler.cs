@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using Osprey.Instructions;
 using Osprey.Members;
@@ -76,6 +77,11 @@ namespace Osprey
 		private bool SkipExternChecks
 		{
 			get { return (flags & CompilerFlags.SkipExternChecks) == CompilerFlags.SkipExternChecks; }
+		}
+
+		internal bool UseDebugSymbols
+		{
+			get { return (flags & CompilerFlags.NoDebugSymbols) == CompilerFlags.None; }
 		}
 
 		private CompilerVerbosity verbosity;
@@ -552,7 +558,7 @@ namespace Osprey
 				Notice("Initializing main method...", CompilerVerbosity.Verbose);
 				mainMethodContents = new List<Statement>();
 				mainMethodBody = new Block(mainMethodContents);
-				mainMethod = new Method(MainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
+				mainMethod = new Method(null, MainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
 
 				var mainMethodGroup = new MethodGroup(MainMethodName, projectNamespace, AccessLevel.Private);
 				mainMethodGroup.AddOverload(mainMethod);
@@ -681,7 +687,9 @@ namespace Osprey
 					if (sourceFiles.TryGetValue(file, out doc) && doc != null)
 						continue;
 
-					var fileText = File.ReadAllText(file);
+					byte[] fileHash;
+					var fileText = ReadFileAndHash(file, out fileHash);
+
 					try
 					{
 						doc = Parser.Parse(fileText, ParserOptions);
@@ -703,6 +711,7 @@ namespace Osprey
 
 					doc.FileName = file;
 					doc.FileSource = fileText;
+					doc.FileHash = fileHash;
 					doc.Compiler = this;
 
 					sourceFiles[file] = doc; // Add first, to avoid self-dependency issues
@@ -735,13 +744,40 @@ namespace Osprey
 				metadata = new Dictionary<string, string>();
 
 			if (!metadata.ContainsKey("date"))
-				metadata["date"] = DateTime.Now.ToString("yyyy-MM-dd", CI.InvariantCulture);
+				metadata["date"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\Z", CI.InvariantCulture);
 
 			if (!metadata.ContainsKey("compiler"))
 			{
 				var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
 				metadata["compiler"] = string.Format("Osprey Compiler v{0}", assemblyVersion);
 			}
+		}
+
+		private string ReadFileAndHash(string fileName, out byte[] hash)
+		{
+			hash = null;
+
+			string fileText;
+			if (UseDebugSymbols)
+				using (var fs = File.OpenRead(fileName))
+				{
+					if (!fs.CanSeek)
+						throw new IOException(string.Format("The source file '{0}' must be seekable.", fileName));
+
+					// First, hash the entire file
+					using (var sha1 = SHA1.Create())
+						hash = sha1.ComputeHash(fs);
+
+					// Then, seek back to the beginning and use StreamReader
+					// to read the text contents of the file
+					fs.Seek(0, SeekOrigin.Begin);
+					using (var sr = new StreamReader(fs, detectEncodingFromByteOrderMarks: true))
+						fileText = sr.ReadToEnd();
+				}
+			else
+				fileText = File.ReadAllText(fileName);
+
+			return fileText;
 		}
 
 		private void ProcessImports(HashSet<string> newFiles, HashSet<string> modules, string docFile, Document doc)
@@ -1547,6 +1583,95 @@ namespace Osprey
 				outputModule.GetStringId(fieldRef.Value.Name);
 		}
 
+		private void SaveDebugSymbols(string targetPath)
+		{
+			var documentToIndex = new Dictionary<Document, int>(documents.Count);
+			for (var i = 0; i < documents.Count; i++)
+				documentToIndex.Add(documents[i], i);
+
+			using (var outStream = File.Create(targetPath))
+			using (var writer = new ModuleWriter(outStream, Encoding.Unicode))
+			{
+				writer.Write(DebugSymbolsMagicNumber); // magicNumber
+
+				// Source files!
+				// There must always be at least one source file, hence documents.Count
+				// can never be zero.
+				writer.BeginCollection(documents.Count);
+				foreach (var doc in documents)
+				{
+					writer.Write(doc.FileName); // fileName
+					writer.Write(doc.FileHash); // hash
+				}
+				writer.EndCollection();
+
+				// Debug symbols!
+				WriteDebugSymbols(writer, documentToIndex);
+			}
+		}
+
+		private void WriteDebugSymbols(ModuleWriter writer, Dictionary<Document, int> documentToIndex)
+		{
+			// We don't know yet just how many methods there will be with debug symbols.
+			long sizePos = writer.BaseStream.Position;
+			writer.Write(0); // size (placeholder)
+
+			long lengthPos = writer.BaseStream.Position;
+			writer.Write(0); // length (placeholder)
+
+			Func<Method, bool> hasSymbols = m => m.CompiledMethod != null && m.CompiledMethod.DebugSymbols != null;
+
+			int length = 0;
+			foreach (var kvp in outputModule.Members.GlobalFuncDefs.Concat(outputModule.Members.MethodDefs))
+			{
+				var group = kvp.Value;
+				if (group.Any(hasSymbols))
+				{
+					length++;
+					WriteMethodDebugSymbols(writer, documentToIndex, group);
+				}
+			}
+
+			long endPos = writer.BaseStream.Position;
+			writer.BaseStream.Seek(sizePos, SeekOrigin.Begin);
+			writer.Write(checked((int)(endPos - lengthPos))); // size
+			writer.Write(length); // length
+		}
+
+		private void WriteMethodDebugSymbols(ModuleWriter writer,
+			Dictionary<Document, int> documentToIndex, MethodGroup group)
+		{
+			writer.Write(group.Id); // methodId
+
+			writer.BeginCollection(group.Count);
+			foreach (var method in group)
+			{
+				if (method.CompiledMethod == null || method.CompiledMethod.DebugSymbols == null)
+				{
+					writer.Write(0); // count
+					continue;
+				}
+
+				var debug = method.CompiledMethod.DebugSymbols;
+				writer.Write(debug.Length); // count
+				for (var i = 0; i < debug.Length; i++)
+				{
+					var d = debug[i];
+					writer.Write(d.BytecodeStartOffset); // startOffset
+					writer.Write(d.BytecodeEndOffset);   // endOffset
+					writer.Write(documentToIndex[d.Document]); // sourceFile
+
+					int column;
+					var lineNumber = d.GetLineNumber(1, out column);
+					writer.Write(lineNumber);         // lineNumber
+					writer.Write(column);             // column
+					writer.Write(d.SourceStartIndex); // sourceStartIndex
+					writer.Write(d.SourceEndIndex);   // sourceEndIndex
+				}
+			}
+			writer.EndCollection();
+		}
+
 		/// <summary>
 		/// Outputs a notice-type compiler message.
 		/// </summary>
@@ -1686,6 +1811,10 @@ namespace Osprey
 					if (libTarget != c.nativeLibrary.FileName)
 						File.Copy(c.nativeLibrary.FileName, libTarget, overwrite: true);
 				}
+
+				if (!options.NoDebugSymbols)
+					c.SaveDebugSymbols(targetPath + ".dbg");
+
 				if (options.DocFile != null)
 					DocGenerator.Generate(c.projectNamespace, c, c.documents, options.DocFile, options.PrettyPrintJson);
 			}
@@ -1723,6 +1852,8 @@ namespace Osprey
 			{LambdaOperator.Xor, "λ<boolXor>"},
 			{LambdaOperator.And, "λ<boolAnd>"}
 		};
+
+		private static byte[] DebugSymbolsMagicNumber = { (byte)'O', (byte)'V', (byte)'D', (byte)'S' };
 	}
 
 	public struct CompilerOptions
@@ -1812,6 +1943,14 @@ namespace Osprey
 		{
 			get { return (flags & CompilerFlags.PrettyPrintJson) == CompilerFlags.PrettyPrintJson; }
 			set { ToggleFlag(CompilerFlags.PrettyPrintJson, value); }
+		}
+		/// <summary>
+		/// Gets or sets the <see cref="CompilerFlags.NoDebugSymbols"/> flag.
+		/// </summary>
+		public bool NoDebugSymbols
+		{
+			get { return (flags & CompilerFlags.NoDebugSymbols) == CompilerFlags.NoDebugSymbols; }
+			set { ToggleFlag(CompilerFlags.NoDebugSymbols, value); }
 		}
 
 		private CompilerVerbosity verbosity;
@@ -1913,6 +2052,10 @@ namespace Osprey
 		/// Specifies that documentation JSON files should be pretty-printed.
 		/// </summary>
 		PrettyPrintJson = 1 << 6,
+		/// <summary>
+		/// Suppresses generation of debug symbols.
+		/// </summary>
+		NoDebugSymbols = 1 << 7,
 	}
 
 	/// <summary>

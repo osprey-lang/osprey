@@ -415,6 +415,10 @@ namespace Osprey
 							compilerOptions.PrettyPrintJson = true;
 							break;
 
+						case "nodebug":
+							compilerOptions.NoDebugSymbols = true;
+							break;
+
 						case "const":
 							if (i >= argc - 2 || (args[i + 2] != "true" && args[i + 2] != "false"))
 								throw new ArgumentException("'/const' must be followed by a name and either 'true' or 'false'.");
