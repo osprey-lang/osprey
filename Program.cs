@@ -43,8 +43,7 @@ namespace Osprey
 							!(filePart.Contains('*') || filePart.Contains('?')))
 							throw new ArgumentException(string.Format("Could not find a matching file for non-wildcard path: {0}", args[i]));
 
-						foreach (var file in matchingFiles)
-							sourceFiles.Add(Path.Combine(dirPart, file));
+						sourceFiles.AddRange(matchingFiles);
 					}
 
 				if (sourceFiles.Count == 0)
