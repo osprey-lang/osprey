@@ -1585,6 +1585,8 @@ namespace Osprey
 
 		private void SaveDebugSymbols(string targetPath)
 		{
+			Notice("[debug] Writing debug symbols...", CompilerVerbosity.Verbose);
+
 			var documentToIndex = new Dictionary<Document, int>(documents.Count);
 			for (var i = 0; i < documents.Count; i++)
 				documentToIndex.Add(documents[i], i);
@@ -1608,12 +1610,15 @@ namespace Osprey
 				// Debug symbols!
 				WriteDebugSymbols(writer, documentToIndex);
 			}
+
+			Notice("[debug] Finished writing debug symbols.", CompilerVerbosity.Verbose);
 		}
 
 		private void WriteDebugSymbols(ModuleWriter writer, Dictionary<Document, int> documentToIndex)
 		{
 			// We don't know yet just how many methods there will be with debug symbols.
 			long sizePos = writer.BaseStream.Position;
+			writer.Write(0); // totalOverloadsWithSymbols (placeholder)
 			writer.Write(0); // size (placeholder)
 
 			long lengthPos = writer.BaseStream.Position;
@@ -1621,6 +1626,7 @@ namespace Osprey
 
 			Func<Method, bool> hasSymbols = m => m.CompiledMethod != null && m.CompiledMethod.DebugSymbols != null;
 
+			int totalOverloadsWithSymbols = 0;
 			int length = 0;
 			foreach (var kvp in outputModule.Members.GlobalFuncDefs.Concat(outputModule.Members.MethodDefs))
 			{
@@ -1628,29 +1634,42 @@ namespace Osprey
 				if (group.Any(hasSymbols))
 				{
 					length++;
-					WriteMethodDebugSymbols(writer, documentToIndex, group);
+					WriteMethodDebugSymbols(writer, documentToIndex, group, ref totalOverloadsWithSymbols);
 				}
 			}
 
 			long endPos = writer.BaseStream.Position;
 			writer.BaseStream.Seek(sizePos, SeekOrigin.Begin);
+			writer.Write(totalOverloadsWithSymbols); // totalOverloadsWithSymbols
 			writer.Write(checked((int)(endPos - lengthPos))); // size
 			writer.Write(length); // length
+
+			Notice(CompilerVerbosity.Verbose,
+				"[debug] Wrote debug symbols for {0} method group{1}",
+				length, length == 1 ? "" : "s");
 		}
 
 		private void WriteMethodDebugSymbols(ModuleWriter writer,
-			Dictionary<Document, int> documentToIndex, MethodGroup group)
+			Dictionary<Document, int> documentToIndex, MethodGroup group,
+			ref int totalOverloadsWithSymbols)
 		{
+			Notice(CompilerVerbosity.ExtraVerbose,
+				"[debug] Emitting debug symbols for method '{0}'",
+				group.FullName);
+
 			writer.Write(group.Id); // methodId
 
 			writer.BeginCollection(group.Count);
 			foreach (var method in group)
 			{
-				if (method.CompiledMethod == null || method.CompiledMethod.DebugSymbols == null)
+				if (method.CompiledMethod == null || method.CompiledMethod.DebugSymbols == null ||
+					method.CompiledMethod.DebugSymbols.Length == 0)
 				{
 					writer.Write(0); // count
 					continue;
 				}
+
+				totalOverloadsWithSymbols++;
 
 				var debug = method.CompiledMethod.DebugSymbols;
 				writer.Write(debug.Length); // count
