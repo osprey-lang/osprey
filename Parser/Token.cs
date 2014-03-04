@@ -91,10 +91,14 @@ namespace Osprey
 			for (var i = 0; i < index; i++)
 			{
 				char ch = source[i];
-				if (ch == '\n')
+				if (ch == '\r' || ch == '\n' || ch == '\u0085' ||
+					ch == '\u2028' || ch == '\u2029')
 				{
 					col = 0;
 					line++;
+					// \r\n counts as a single unit
+					if (i + 1 < index && ch == '\r' && source[i + 1] == '\n')
+						i++;
 				}
 				else if (ch == '\t')
 					col += tabSize - col % tabSize;

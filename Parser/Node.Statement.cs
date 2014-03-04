@@ -200,7 +200,7 @@ namespace Osprey.Nodes
 						case MemberKind.Variable:
 							{
 								var variable = (Variable)member;
-								if ((variable.ReadCount | variable.AssignmentCount) == 0 &&
+								if ((variable.ReadCount & variable.AssignmentCount) == 0 &&
 									!variable.IsParameter)
 								{
 									string warning;
