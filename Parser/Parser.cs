@@ -764,7 +764,7 @@ namespace Osprey
 					else
 					{
 						Block body;
-						BaseInitializer baseInit = null;
+						ConstructorCall ctorCall = null;
 						if (Accept(i, TokenType.Semicolon))
 							body = new Block()
 							{
@@ -774,11 +774,11 @@ namespace Osprey
 							};
 						else
 							// Permits 'new base(...);' as first statement
-							body = ParseConstructorBody(ref i, out baseInit);
+							body = ParseConstructorBody(ref i, out ctorCall);
 
 						target.Constructors.Add(new ConstructorDeclaration(modifiers.Access, parameters, splat, body)
 						{
-							BaseInitializer = baseInit,
+							ConstructorCall = ctorCall,
 							StartIndex = newTok.Index,
 							EndIndex = newTok.EndIndex,
 							Document = document,
@@ -979,9 +979,9 @@ namespace Osprey
 			return output;
 		}
 
-		private Block ParseConstructorBody(ref int i, out BaseInitializer baseInit)
+		private Block ParseConstructorBody(ref int i, out ConstructorCall ctorCall)
 		{
-			baseInit = null;
+			ctorCall = null;
 
 			if (AcceptExtension(i, "__extern"))
 				return ParseExternBody(ref i);
@@ -992,9 +992,9 @@ namespace Osprey
 			var body = new List<Statement>();
 			if (!Accept(i, TokenType.CurlyClose))
 			{
-				var first = ParseStatement(ref i, allowBaseInitializer: true);
-				if (first is BaseInitializer)
-					baseInit = (BaseInitializer)first;
+				var first = ParseStatement(ref i, allowCtorCall: true);
+				if (first is ConstructorCall)
+					ctorCall = (ConstructorCall)first;
 				body.Add(first);
 			}
 
@@ -1455,11 +1455,11 @@ namespace Osprey
 
 		#region Statements
 
-		private Statement ParseStatement(ref int i, bool allowBaseInitializer = false)
+		private Statement ParseStatement(ref int i, bool allowCtorCall = false)
 		{
 			var stmt = ParseStatementInner(ref i);
-			if (!allowBaseInitializer && stmt is BaseInitializer)
-				throw new ParseException(stmt, tok.Source, "A base initializer is only allowed as the first statment in a constructor.");
+			if (!allowCtorCall && stmt is ConstructorCall)
+				throw new ParseException(stmt, tok.Source, "A constructor call is only allowed as the first statment in a constructor.");
 			return stmt;
 		}
 
@@ -1479,8 +1479,8 @@ namespace Osprey
 				return ParseLoopFlowStatement(ref i);
 			if (Accept(i, TokenType.Throw))
 				return ParseThrowStatement(ref i);
-			if (Accept(i, TokenType.New) && Accept(i + 1, TokenType.Base))
-				return ParseBaseInitializer(ref i);
+			if (Accept(i, TokenType.New) && Accept(i + 1, TokenType.Base, TokenType.This))
+				return ParseConstructorCall(ref i);
 			if (Accept(i, TokenType.Semicolon))
 				return new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 
@@ -1887,10 +1887,10 @@ namespace Osprey
 			return new DoWhileStatement(label, body, cond) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
-		private Statement ParseBaseInitializer(ref int i)
+		private Statement ParseConstructorCall(ref int i)
 		{
 			Expect(i, TokenType.New);
-			Expect(i + 1, TokenType.Base);
+			var isBaseCall = Accept(i + 1, TokenType.Base);
 
 			int start = tok[i].Index, end = tok[i + 1].EndIndex;
 			i += 2;
@@ -1901,7 +1901,7 @@ namespace Osprey
 			Expect(ref i, TokenType.ParenClose);
 			Expect(ref i, TokenType.Semicolon);
 
-			return new BaseInitializer(args) { StartIndex = start, EndIndex = end, Document = document };
+			return new ConstructorCall(args, isBaseCall) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseExpressionStatement(ref int i)

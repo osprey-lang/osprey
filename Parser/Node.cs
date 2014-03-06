@@ -658,8 +658,8 @@ namespace Osprey.Nodes
 		public Splat Splat;
 		/// <summary>The body of the constructor.</summary>
 		public Block Body;
-		/// <summary>The base initializer. If there is one, this value is also the first statement in <see cref="Body"/>.</summary>
-		public BaseInitializer BaseInitializer;
+		/// <summary>The constructor call. If there is one, this value is also the first statement in <see cref="Body"/>.</summary>
+		public ConstructorCall ConstructorCall;
 
 		internal Method DeclSpace { get { return Body.DeclSpace.Method; } }
 
@@ -701,16 +701,16 @@ namespace Osprey.Nodes
 				bool _;
 				var @class = context.GetContainingClass(out _);
 
-				if (!(Body is ExternBody) && BaseInitializer == null &&
+				if (!(Body is ExternBody) && ConstructorCall == null &&
 					@class.BaseType != null)
 				{
-					BaseInitializer = new BaseInitializer(new List<Expression>())
+					ConstructorCall = new ConstructorCall(new List<Expression>(), true)
 						{
 							StartIndex = this.StartIndex,
 							EndIndex = this.EndIndex,
 							Document = this.Document,
 						};
-					Body.Statements.Insert(0, BaseInitializer);
+					Body.Statements.Insert(0, ConstructorCall);
 				}
 
 				foreach (var param in Parameters)
@@ -721,7 +721,7 @@ namespace Osprey.Nodes
 						if (Body.Initializer == null)
 							Body.Initializer = new List<AssignmentExpression>();
 
-						Body.Initializer.Add(new AssignmentExpression(
+						var expr = new AssignmentExpression(
 							new InstanceMemberAccess(new ThisAccess(), @class, param.Member)
 							{
 								IsAssignment = true
@@ -730,7 +730,9 @@ namespace Osprey.Nodes
 								(Variable)Body.DeclSpace.members[param.DeclaredName],
 								LocalAccessKind.NonCapturing
 							)
-						) { IgnoreValue = true });
+						) { IgnoreValue = true };
+						expr.At(param.StartIndex, param.EndIndex, param.Document);
+						Body.Initializer.Add(expr);
 					}
 				}
 			}
@@ -740,8 +742,8 @@ namespace Osprey.Nodes
 
 		internal void AddFieldInitializers(IEnumerable<VariableDeclarator> fields, Class @class)
 		{
-			if (Body is ExternBody)
-				return; // Do nothing
+			if (Body is ExternBody || ConstructorCall != null && !ConstructorCall.IsBaseConstructor)
+				return; // No field initializers for extern bodies or ctors with 'new this(...);'
 
 			if (Body.Initializer == null)
 				Body.Initializer = new List<AssignmentExpression>();

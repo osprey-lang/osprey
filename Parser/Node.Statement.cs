@@ -2972,21 +2972,27 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class BaseInitializer : Statement
+	public sealed class ConstructorCall : Statement
 	{
-		public BaseInitializer(List<Expression> arguments)
+		public ConstructorCall(List<Expression> arguments, bool isBaseCtor)
 		{
 			Arguments = arguments;
+			IsBaseConstructor = isBaseCtor;
 		}
 
-		/// <summary>The arguments passed into the base constructor.</summary>
+		/// <summary>The arguments passed into the constructor.</summary>
 		public List<Expression> Arguments;
+
+		public bool IsBaseConstructor;
 
 		private MethodGroup constructor;
 
 		public override string ToString(int indent)
 		{
-			return new string('\t', indent) + "new base(" + Arguments.JoinString(", ", indent + 1) + ");";
+			return string.Format("{0}new {1}({2});",
+				new string('\t', indent),
+				IsBaseConstructor ? "base" : "this",
+				Arguments.JoinString(", "));
 		}
 
 		public override void FoldConstant()
@@ -2998,16 +3004,26 @@ namespace Osprey.Nodes
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			bool _;
-			Class @class = context.GetContainingClass(out _);
-			if (@class.BaseType == null)
-				throw new CompileTimeException(this, "Base initializers may not be used inside aves.Object.");
+			var thisClass = context.GetContainingClass(out _);
+			var ctorClass = thisClass;
+			if (IsBaseConstructor)
+			{
+				if (thisClass.BaseType == null)
+					throw new CompileTimeException(this, "Base initializers may not be used inside aves.Object.");
+				ctorClass = (Class)thisClass.BaseType;
+			}
 
-			var baseCtor = @class.BaseType.FindConstructor(this, Arguments.Count, instClass: @class, fromClass: @class);
-			if (baseCtor == null)
+			var ctor = ctorClass.FindConstructor(this, Arguments.Count, instClass: thisClass, fromClass: thisClass);
+			if (ctor == null)
 				throw new CompileTimeException(this, string.Format("Could not find a constructor for '{0}' that takes {1} arguments.",
-					@class.BaseType.FullName, Arguments.Count));
+					ctorClass.FullName, Arguments.Count));
 
-			constructor = baseCtor.Group;
+			// Constructor calls are only allowed at the very beginning of a constructor,
+			// hence 'context' really should be a constructor Method's BlockSpace here.
+			if (((BlockSpace)context).Method == ctor)
+				throw new CompileTimeException(this, "Constructor call cannot directly recurse into itself.");
+
+			constructor = ctor.Group;
 
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
