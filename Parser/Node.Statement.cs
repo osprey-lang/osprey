@@ -200,17 +200,17 @@ namespace Osprey.Nodes
 						case MemberKind.Variable:
 							{
 								var variable = (Variable)member;
-								if ((variable.ReadCount & variable.AssignmentCount) == 0 &&
-									!variable.IsParameter)
+								if ((variable.ReadCount == 0 || variable.AssignmentCount == 0) &&
+									!variable.IsParameter && variable.VariableKind != VariableKind.IterationVariable)
 								{
 									string warning;
 									if (variable.ReadCount == 0 && variable.AssignmentCount == 0)
-										warning = "The variable '{0}' never used.";
+										warning = "The variable '{0}' is never used.";
 									else if (variable.ReadCount == 0)
 										warning = "The variable '{0}' is assigned but its value is never used.";
 									else // variable.AssignmentCount == 0
 										warning = "The variable '{0}' is read but never assigned. It will always have the default value null.";
-
+									
 									document.Compiler.Warning(string.Format(warning, variable.Name),
 										CompilerVerbosity.NotVerbose,
 										MessageLocation.FromNode(variable.Node));
