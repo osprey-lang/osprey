@@ -2289,13 +2289,17 @@ namespace Osprey.Nodes
 			base.DeclareNames(parent); // Body
 
 			if (Variable != null)
-				BodyBlock.DeclareVariable(new Variable(Variable,
+			{
+				var variable = new Variable(Variable,
 					new VariableDeclarator(Variable, null)
 					{
 						StartIndex = this.StartIndex,
 						EndIndex = this.EndIndex,
 						Document = Document,
-					}, VariableKind.CatchVariable));
+					}, VariableKind.CatchVariable);
+				variable.AssignmentCount++; // Catch variables start out assigned
+				BodyBlock.DeclareVariable(variable);
+			}
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
