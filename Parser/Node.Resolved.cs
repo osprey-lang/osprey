@@ -89,9 +89,10 @@ namespace Osprey.Nodes
 				{
 					case LocalAccessKind.NonCapturing:
 						{
-							// Iteration variables are readonly; we don't need to access them through the closure class,
-							// except in a generator.
-							if (!forGenerator && Variable.VariableKind == VariableKind.IterationVariable)
+							// Iteration variables are readonly; we don't need to access them
+							// through the closure class, except in a generator.
+							if (!forGenerator &&
+								Variable.VariableKind == VariableKind.IterationVariable)
 								break;
 
 							var varBlock = Variable.Parent;
@@ -103,13 +104,13 @@ namespace Osprey.Nodes
 								(Class)currentBlock.Method.GeneratorClass :
 								(Class)varBlock.ClosureClass;
 
-							return new InstanceMemberAccess(inner, closureClass, Variable.CaptureField);
+							return new InstanceMemberAccess(inner, closureClass, Variable.CaptureField).At(this);
 						}
 					case LocalAccessKind.CapturingSameScope:
 						{
 							// Load 'this.<closure field>'
 							var closureClass = Variable.Parent.ClosureClass;
-							return new InstanceMemberAccess(new ThisAccess(), closureClass, Variable.CaptureField);
+							return new InstanceMemberAccess(new ThisAccess(), closureClass, Variable.CaptureField).At(this);
 						}
 					case LocalAccessKind.CapturingOtherScope:
 						{
@@ -122,12 +123,12 @@ namespace Osprey.Nodes
 
 							// Load variable field
 							var varClosure = varBlock.ClosureClass;
-							return new InstanceMemberAccess(inner, varClosure, Variable.CaptureField);
+							return new InstanceMemberAccess(inner, varClosure, Variable.CaptureField).At(this);
 						}
 					case LocalAccessKind.ClosureLocal:
 						if (forGenerator)
 							return new InstanceMemberAccess(new ThisAccess(),
-								Variable.CaptureField.Parent, Variable.CaptureField);
+								Variable.CaptureField.Parent, Variable.CaptureField).At(this);
 						break;
 				}
 			}

@@ -201,7 +201,9 @@ namespace Osprey.Nodes
 							{
 								var variable = (Variable)member;
 								if ((variable.ReadCount == 0 || variable.AssignmentCount == 0) &&
-									!variable.IsParameter && variable.VariableKind != VariableKind.IterationVariable)
+									variable.VariableKind != VariableKind.Parameter &&
+									variable.VariableKind != VariableKind.IterationVariable &&
+									variable.VariableKind != VariableKind.WithVariable)
 								{
 									string warning;
 									if (variable.ReadCount == 0 && variable.AssignmentCount == 0)
@@ -434,7 +436,7 @@ namespace Osprey.Nodes
 					parent.DeclareConstant(new LocalConstant(decl.Name, decl));
 				else
 				{
-					if (!IsGlobal)
+					if (!IsGlobal && decl.Variable == null)
 						decl.Variable = new Variable(decl.Name, decl);
 					parent.DeclareVariable(decl.Variable);
 					if (decl.Initializer != null)
@@ -1220,9 +1222,10 @@ namespace Osprey.Nodes
 
 		public override void DeclareNames(BlockSpace parent)
 		{
-			base.DeclareNames(parent); // Body, label
-
-			var body = BodyBlock;
+			var block = (Block)Body;
+			if (block.DeclSpace == null)
+				block.DeclSpace = new BlockSpace(block, parent);
+			block.DeclSpace.Owner = this;
 
 			// Note: we need to set the VariableDeclarator indexes to ensure
 			// that the loop variables cannot be used in the List expression.
@@ -1241,8 +1244,10 @@ namespace Osprey.Nodes
 						Document = Document,
 					}, VariableKind.IterationVariable);
 				Variables[i].AssignmentCount++;
-				body.DeclareVariable(Variables[i]);
+				block.DeclSpace.DeclareVariable(Variables[i]);
 			}
+
+			base.DeclareNames(parent); // Body, label
 
 			if (Else != null)
 				Else.DeclareNames(parent);
@@ -2711,6 +2716,90 @@ namespace Osprey.Nodes
 	}
 
 	#endregion
+
+	public sealed class WithStatement : CompoundStatement
+	{
+		public WithStatement(string variableName, Expression initializer, Statement body)
+			: base(body)
+		{
+			VariableName = variableName;
+			Initializer = initializer;
+			Body = body;
+		}
+
+		/// <summary>The name of the variable declared by the statement.</summary>
+		public string VariableName;
+		/// <summary>The value which the variable is initialized to.</summary>
+		public Expression Initializer;
+		
+		public override string ToString(int indent)
+		{
+			return string.Format("{0}with {1} = {2}{3}",
+				new string('\t', indent), VariableName,
+				Initializer.ToString(indent + 1),
+				Body.ToString(indent));
+		}
+
+		public override void FoldConstant()
+		{
+			Initializer = Initializer.FoldConstant();
+			base.FoldConstant();
+		}
+
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
+		{
+			Initializer = Initializer.ResolveNames(context, document, false, false);
+			base.ResolveNames(context, document, reachable);
+		}
+
+		public override void DeclareNames(BlockSpace parent)
+		{
+			var block = (Block)Body;
+			// Add a variable declarator to the beginning of the block,
+			// it's the easiest way of doing it!
+			var variable = new Variable(VariableName, this, VariableKind.WithVariable);
+			var declarator = new VariableDeclarator(VariableName, Initializer)
+			{
+				Variable = variable,
+				StartIndex = this.StartIndex,
+				EndIndex = this.EndIndex,
+				Document = this.Document,
+			};
+			var declaration = new SimpleLocalVariableDeclaration(false, new List<VariableDeclarator> { declarator })
+			{
+				StartIndex = this.StartIndex,
+				EndIndex = this.EndIndex,
+				Document = this.Document,
+			};
+			block.Statements.Insert(0, declaration);
+
+			// And now let's initialize the finally clause
+			var ifStmt = new IfStatement(
+				new TypeTestExpression(
+					new LocalVariableAccess(variable, LocalAccessKind.NonCapturing),
+					true,
+					null
+				) { StartIndex = StartIndex, EndIndex = EndIndex, Document = Document },
+				new Block(new ExpressionStatement(
+					new InvocationExpression(
+						new MemberAccess(
+							new LocalVariableAccess(variable, LocalAccessKind.NonCapturing),
+							"close"
+						),
+						new List<Expression>()
+					)
+				) { StartIndex = StartIndex, EndIndex = EndIndex, Document = Document }),
+				null);
+			ifStmt.StartIndex = this.StartIndex;
+			ifStmt.EndIndex = this.EndIndex;
+			ifStmt.Document = this.Document;
+
+			block = ((TryStatement)block.Statements[block.Statements.Count - 1]).Finally.Body as Block;
+			block.Statements.Add(ifStmt);
+
+			base.DeclareNames(parent);
+		}
+	}
 
 	public sealed class CompoundAssignment : Statement
 	{

@@ -763,7 +763,7 @@ namespace Osprey
 			{"this", TokenType.This}, {"throw", TokenType.Throw}, {"true", TokenType.True},
 			{"try", TokenType.Try}, {"typeof", TokenType.Typeof},
 			{"use", TokenType.Use}, {"var", TokenType.Var},
-			{"while", TokenType.While}, {"xor", TokenType.Xor}, {"yield", TokenType.Yield},
+			{"while", TokenType.While}, {"with", TokenType.With}, {"xor", TokenType.Xor}, {"yield", TokenType.Yield},
 		};
 		internal static readonly Dictionary<string, TokenType> PunctToType = new Dictionary<string, TokenType>
 		{

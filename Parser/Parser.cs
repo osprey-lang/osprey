@@ -1479,6 +1479,8 @@ namespace Osprey
 				return ParseLoopFlowStatement(ref i);
 			if (Accept(i, TokenType.Throw))
 				return ParseThrowStatement(ref i);
+			if (Accept(i, TokenType.With))
+				return ParseWithStatement(ref i);
 			if (Accept(i, TokenType.New) && Accept(i + 1, TokenType.Base, TokenType.This))
 				return ParseConstructorCall(ref i);
 			if (Accept(i, TokenType.Semicolon))
@@ -1885,6 +1887,44 @@ namespace Osprey
 			Expect(ref i, TokenType.Semicolon);
 
 			return new DoWhileStatement(label, body, cond) { StartIndex = start, EndIndex = end, Document = document };
+		}
+
+		private Statement ParseWithStatement(ref int i)
+		{
+			Expect(i, TokenType.With);
+			int start = tok[i].Index, end = tok[i++].EndIndex;
+
+			string varName = Expect(ref i, TokenType.Identifier).Value;
+
+			Expect(ref i, TokenType.Assign);
+
+			var initializer = ParseExpression(ref i);
+			var body = ParseControlBody(ref i);
+
+			if (SimplifiedTree)
+			{
+				// Surround the body with a try-finally. This will allow us to detect
+				// the presence of a try statement (which affects certain things, e.g.
+				// it's not possible to yield inside a try), while also letting us
+				// declare and initialize the 'with' variable in the surrounding block.
+				// Code will be injected later into the finally clause.
+				var @try = new TryStatement((Block)body,
+					catches: new List<CatchClause>(),
+					fin: new FinallyClause(new Block()) { StartIndex = start, EndIndex = end, Document = document })
+				{
+					StartIndex = start,
+					EndIndex = end,
+					Document = document,
+				};
+				body = new Block(@try);
+			}
+
+			return new WithStatement(varName, initializer, body)
+				{
+					StartIndex = start,
+					EndIndex = end,
+					Document = document,
+				};
 		}
 
 		private Statement ParseConstructorCall(ref int i)

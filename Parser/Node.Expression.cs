@@ -1337,10 +1337,7 @@ namespace Osprey.Nodes
 			if (expr is LocalVariableAccess)
 			{
 				var variable = ((LocalVariableAccess)expr).Variable;
-				if (variable.VariableKind == VariableKind.IterationVariable)
-					throw new CompileTimeException(expr,
-						string.Format("The variable '{0}' is an iteration variable and cannot be reassigned.",
-							variable.Name));
+				variable.EnsureAssignable(expr);
 			}
 			else if (expr is InstanceMemberAccess)
 			{

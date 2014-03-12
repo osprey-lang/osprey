@@ -311,6 +311,8 @@ namespace Osprey
 		Yield = 48 | Keyword,
 		/// <summary>ref (unused)</summary>
 		Ref = 49 | Keyword,
+		/// <summary>with</summary>
+		With = 50 | Keyword,
 		#endregion
 
 		#region Literals

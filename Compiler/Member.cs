@@ -1575,6 +1575,16 @@ namespace Osprey.Members
 				throw new CompileTimeException(node,
 					string.Format("The variable '{0}' cannot be accessed in its initializer.", Name));
 		}
+
+		public void EnsureAssignable(ParseNode errorNode)
+		{
+			if (VariableKind == VariableKind.IterationVariable ||
+				VariableKind == VariableKind.WithVariable)
+				throw new CompileTimeException(errorNode,
+					string.Format("The variable '{0}' cannot be reassigned to because it is {1}.",
+						Name,
+						VariableKind == VariableKind.IterationVariable ? "an iteration variable" : "a 'with' variable"));
+		}
 	}
 
 	public enum VariableKind
@@ -1594,6 +1604,8 @@ namespace Osprey.Members
 		CatchVariable,
 		/// <summary>The variable is a global variable.</summary>
 		Global,
+		/// <summary>The variable is declared in a 'with' statement.</summary>
+		WithVariable,
 	}
 
 	/// <summary>
