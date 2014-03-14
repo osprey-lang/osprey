@@ -139,6 +139,7 @@ namespace Osprey
 		internal Type IntType       { get { return FindType(StandardNames.IntName);      } }
 		internal Type UIntType      { get { return FindType(StandardNames.UIntName);     } }
 		internal Type RealType      { get { return FindType(StandardNames.RealName);     } }
+		internal Type CharType      { get { return FindType(StandardNames.CharName);     } }
 		internal Type StringType    { get { return FindType(StandardNames.StringName);   } }
 		internal Type ListType      { get { return FindType(StandardNames.ListName);     } }
 		internal Type HashType      { get { return FindType(StandardNames.HashName);     } }
@@ -1447,9 +1448,12 @@ namespace Osprey
 				{
 					outputModule.GetStringId(constant.FullName);
 					constant.Id = outputModule.GetConstantId(constant);
-					outputModule.GetTypeId(constant.Value.GetTypeObject(this)); // If the type comes from another module, we must reference it!
-					if (constant.Value.Type == ConstantValueType.String)
-						outputModule.GetStringId(constant.Value.StringValue);
+					if (constant.Value.Type != ConstantValueType.Null)
+					{
+						outputModule.GetTypeId(constant.Value.GetTypeObject(this)); // If the type comes from another module, we must reference it!
+						if (constant.Value.Type == ConstantValueType.String)
+							outputModule.GetStringId(constant.Value.StringValue);
+					}
 					Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to constant '{1}'.", constant.Id, constant.FullName);
 				}
 

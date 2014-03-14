@@ -2527,7 +2527,7 @@ namespace Osprey
 					case TokenType.Integer: result = new IntegerLiteral(t); break;
 					case TokenType.Real: result = new RealLiteral(t); break;
 					case TokenType.String: result = new StringLiteral((StringToken)t); break;
-					case TokenType.Regex: result = new RegexLiteral(t.Value); break;
+					case TokenType.Character: result = new CharacterLiteral((CharToken)t); break;
 					default:
 						throw new ParseException(t, "Invalid/unknown literal type");
 				}

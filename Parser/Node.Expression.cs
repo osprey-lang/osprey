@@ -183,22 +183,23 @@ namespace Osprey.Nodes
 				switch (Value.Type)
 				{
 					case ConstantValueType.Null:
-						return "{ConstantExpression}null";
+						return "{const null}";
 					case ConstantValueType.Boolean:
-						return Value.BooleanValue ? "{ConstantExpression}true" : "{ConstantExpression}false";
+						return Value.BooleanValue ? "{const true}" : "{const false}";
 					case ConstantValueType.Int:
-						return "{ConstantExpression}" + Value.IntValue.ToString(CI.InvariantCulture);
+						return "{const " + Value.IntValue.ToString(CI.InvariantCulture) + "}";
 					case ConstantValueType.UInt:
-						return "{ConstantExpression}" + Value.UIntValue.ToString(CI.InvariantCulture);
+						return "{const " + Value.UIntValue.ToString(CI.InvariantCulture) + "u}";
 					case ConstantValueType.Real:
-						return "{ConstantExpression}" + Value.RealValue.ToString(CI.InvariantCulture);
+						return "{const " + Value.RealValue.ToString(CI.InvariantCulture) + "r}";
 					case ConstantValueType.String:
-						return "{ConstantExpression}\"" + Value.StringValue + "\"";
+						return "{const \"" + Value.StringValue + "\"}";
+					case ConstantValueType.Char:
+						return "{const U+" + Value.CharValue.ToString("X4") + "'}";
 					case ConstantValueType.Enum:
-						return "{ConstantExpression enum value}";
+						return "{const enum value}";
 				}
-				return string.Format("{ConstantExpression, Type={2}}",
-					StartIndex, EndIndex, Value.Type);
+				return string.Format("{const, Type={0}}", Value.Type);
 			}
 			return string.Format("{ConstantExpression without value}",
 				StartIndex, EndIndex);
@@ -226,6 +227,11 @@ namespace Osprey.Nodes
 					break;
 				case ConstantValueType.String:
 					method.Append(new LoadString(method.Module.GetStringId(constValue.StringValue)));
+					break;
+				case ConstantValueType.Char:
+					// Use ldenum for char values as well;
+					// ldenum really just loads a primitive value
+					method.Append(new LoadEnum(method.Module.GetTypeId(compiler.CharType), constValue.CharValue));
 					break;
 				case ConstantValueType.Enum:
 					{
@@ -2970,13 +2976,13 @@ namespace Osprey.Nodes
 		public string StringValue { get { return Value.StringValue; } }
 	}
 
-	public sealed class RegexLiteral : Literal
+	public sealed class CharacterLiteral : Literal
 	{
-		public RegexLiteral(string token)
-			: base(token, ConstantValue.Null)
-		{
-			throw new NotImplementedException();
-		}
+		public CharacterLiteral(CharToken token)
+			: base(token.Value, ConstantValue.CreateChar(token.Codepoint))
+		{ }
+
+		public int Codepoint { get { return Value.CharValue; } }
 	}
 
 	#endregion

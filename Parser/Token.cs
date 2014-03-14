@@ -165,6 +165,21 @@ namespace Osprey
 		public string LiteralValue { get { return literalValue; } }
 	}
 
+	public class CharToken : Token
+	{
+		public CharToken(string source, string value, int codepoint, int index)
+			: base(source, value, TokenType.Character, index)
+		{
+			this.codepoint = codepoint;
+		}
+
+		private int codepoint;
+		/// <summary>
+		/// Gets the Unicode code point represented by the token.
+		/// </summary>
+		public int Codepoint { get { return codepoint; } }
+	}
+
 	/// <summary>
 	/// Represents a token type. All TokenType values have a category mask, which represents
 	/// the token's category, e.g. keyword or punctuation. Some may contain information in
@@ -316,14 +331,14 @@ namespace Osprey
 		#endregion
 
 		#region Literals
-		/// <summary>An integer literal.</summary>
+		/// <summary>An integer literal (signed or unsigned).</summary>
 		Integer = 1 | Literal,
 		/// <summary>A real (floating-point) literal.</summary>
 		Real = 2 | Literal,
 		/// <summary>A string literal.</summary>
 		String = 3 | Literal,
-		/// <summary>A regex literal.</summary>
-		Regex = 4 | Literal,
+		/// <summary>A character literal.</summary>
+		Character = 4 | Literal,
 		#endregion
 
 		#region Punctuation

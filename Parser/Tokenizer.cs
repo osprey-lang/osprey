@@ -137,8 +137,8 @@ namespace Osprey
 			if ((ch == 'r' || ch == 'R') && IsChar(i + 1, '"'))
 				return ScanVerbatimString(ref i);
 
-			//if (ch == '\'')
-			//	return ScanRegularExpression(ref i);
+			if (ch == '\'')
+				return ScanCharLiteral(ref i);
 
 			if (ch == '_' || char.IsLetter(source, i) ||
 				char.GetUnicodeCategory(source, i) == UnicodeCategory.LetterNumber)
@@ -374,47 +374,11 @@ namespace Osprey
 
 				if (ch == '\\')
 				{
-					i++; // always skip the backslash!
-					if (IsEOF(i))
-						throw new ParseException(GetErrorToken(i - 1, 1), "Unterminated string literal.");
-
-					var len = 1; // the length of the escape sequence, in number of characters following the \
-					ch = source[i];
-					switch (ch)
-					{
-						case '"': sb.Append('"'); break;
-						case '\\': sb.Append('\\'); break;
-						case '0': sb.Append('\0'); break;
-						case 'a': sb.Append('\a'); break;
-						case 'b': sb.Append('\b'); break;
-						case 'n': sb.Append('\n'); break;
-						case 'r': sb.Append('\r'); break;
-						case 't': sb.Append('\t'); break;
-						case '_': sb.Append('\xA0'); break; // non-breaking space
-						case '-': sb.Append('\xAD'); break; // soft hyphen
-						case 'u':
-						case 'U':
-							len = ch == 'U' ? 9 : 5; // \uxxxx or \Uxxxxxxxx
-							for (var k = 1; k < len; k++)
-								if (IsEOF(i + k) || !IsHex(source[i + k]))
-									throw new ParseException(GetErrorToken(i - 1, 2),
-										ch == 'U'
-											? "'\\U' must be followed by 8 hexadecimal digits."
-											: "'\\u' must be followed by 4 hexadecimal digits.");
-
-							var charCode = uint.Parse(source.Substring(i + 1, len - 1),
-								NumberStyles.AllowHexSpecifier, CI.InvariantCulture);
-
-							if (charCode > 0x10FFFF)
-								throw new ParseException(GetErrorToken(i + 1, len - 1),
-									"Code point in a Unicode escape sequence cannot be greater than U+10FFFF");
-
-							sb.Append(char.ConvertFromUtf32(unchecked((int)charCode)));
-							break;
-						default:
-							throw new ParseException(GetErrorToken(i - 1, 2), "Invalid escape sequence.");
-					}
-					i += len; // skip escape sequence :D
+					int codepoint = ScanEscapeSequence(ref i);
+					if (codepoint > 0xFFFF)
+						sb.Append(char.ConvertFromUtf32(codepoint));
+					else
+						sb.Append(unchecked((char)codepoint));
 				}
 				else
 				{
@@ -466,9 +430,89 @@ namespace Osprey
 				sb.ToString(), startIndex);
 		}
 
-		private Token ScanRegularExpression(ref int i)
+		private Token ScanCharLiteral(ref int i)
 		{
-			throw new NotImplementedException();
+			var startIndex = i;
+			i++; // skip '
+
+			int codepoint = -1;
+			if (!IsEOF(i))
+			{
+				var ch = source[i];
+				if (ch == '\'')
+					throw new ParseException(GetErrorToken(i, 1), "Empty character literal is not allowed.");
+				if (IsNewline(ch))
+					throw new ParseException(GetErrorToken(i, 1), "Newline in character literal.");
+
+				if (ch == '\\')
+					codepoint = ScanEscapeSequence(ref i);
+				else
+				{
+					codepoint = (int)ch;
+					i++; // skip character
+				}
+			}
+			if (IsEOF(i))
+				throw new ParseException(GetErrorToken(startIndex, 1), "Unterminated character literal.");
+			if (source[i] != '\'')
+				throw new ParseException(GetErrorToken(i, 1),
+					"Expected \"'\" (single quote); character literals can only contain one character.");
+			i++; // skip closing '
+
+			return new CharToken(source, source.Substring(startIndex, i - startIndex),
+				codepoint, startIndex);
+		}
+
+		// Parses an escape sequence (of any kind) and returns the Unicode code point.
+		private int ScanEscapeSequence(ref int i)
+		{
+			i++; // always skip the backslash!
+			if (IsEOF(i))
+				throw new ParseException(GetErrorToken(i - 1, 1), "Invalid escape sequence.");
+
+			int codepoint;
+
+			var len = 1; // the length of the escape sequence, in number of characters following the \
+			var ch = source[i];
+			switch (ch)
+			{
+				// ", ' and \ are preserved as is; all others represent other characters
+				case '"':
+				case '\'':
+				case '\\': codepoint = (int)ch; break;
+				case '0': codepoint = (int)'\0'; break;
+				case 'a': codepoint = (int)'\a'; break;
+				case 'b': codepoint = (int)'\b'; break;
+				case 'n': codepoint = (int)'\n'; break;
+				case 'r': codepoint = (int)'\r'; break;
+				case 't': codepoint = (int)'\t'; break;
+				case '_': codepoint = (int)'\xA0'; break; // non-breaking space
+				case '-': codepoint = (int)'\xAD'; break; // soft hyphen
+				case 'u':
+				case 'U':
+					len = ch == 'U' ? 9 : 5; // \uxxxx or \Uxxxxxxxx
+					for (var k = 1; k < len; k++)
+						if (IsEOF(i + k) || !IsHex(source[i + k]))
+							throw new ParseException(GetErrorToken(i - 1, 2),
+								ch == 'U'
+									? "'\\U' must be followed by 8 hexadecimal digits."
+									: "'\\u' must be followed by 4 hexadecimal digits.");
+
+					var charCode = uint.Parse(source.Substring(i + 1, len - 1),
+						NumberStyles.AllowHexSpecifier, CI.InvariantCulture);
+
+					if (charCode > 0x10FFFF)
+						throw new ParseException(GetErrorToken(i + 1, len - 1),
+							"Code point in a Unicode escape sequence cannot be greater than U+10FFFF");
+
+					codepoint = unchecked((int)charCode);
+					break;
+				default:
+					throw new ParseException(GetErrorToken(i - 1, 2), "Invalid escape sequence.");
+			}
+			i += len; // skip escape sequence :D
+
+			return codepoint;
 		}
 
 		private Token ScanIdentifier(ref int i)

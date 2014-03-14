@@ -59,15 +59,13 @@ namespace Osprey
 			cv.stringValue = value;
 			return cv;
 		}
-		//public static ConstantValue CreateRegex(string value)
-		//{
-		//	if (value == null)
-		//		throw new ArgumentNullException("value");
-		//	var cv = new ConstantValue();
-		//	cv.type = ConstantValueType.Regex;
-		//	cv.stringValue = value;
-		//	return cv;
-		//}
+		public static ConstantValue CreateChar(int value)
+		{
+			var cv = new ConstantValue();
+			cv.type = ConstantValueType.Char;
+			cv.num.IntValue = value;
+			return cv;
+		}
 		public static ConstantValue CreateEnumValue(long value, Enum type)
 		{
 			if (type == null)
@@ -156,6 +154,16 @@ namespace Osprey
 			}
 		}
 
+		public int CharValue
+		{
+			get
+			{
+				if (type != ConstantValueType.Char)
+					throw new InvalidOperationException();
+				return unchecked((int)num.IntValue);
+			}
+		}
+
 		private Enum enumType;
 		/// <summary>
 		/// Gets the enum value associated with the constant.
@@ -187,22 +195,32 @@ namespace Osprey
 			{
 				switch (type)
 				{
+					case ConstantValueType.Null:
+						return false;
 					case ConstantValueType.Boolean:
 						return num.BooleanValue;
 					case ConstantValueType.Int:
+					case ConstantValueType.Char:
+					case ConstantValueType.Enum:
 						return num.IntValue != 0;
 					case ConstantValueType.UInt:
 						return num.UIntValue != 0;
 					case ConstantValueType.Real:
 						return num.RealValue != 0.0;
-					case ConstantValueType.Enum:
-						return num.IntValue != 0;
 				}
 				return true; // all other values are true!
 			}
 		}
 
-		public bool IsString { get { return this.type == ConstantValueType.String; } }
+		public bool IsString
+		{
+			get { return this.type == ConstantValueType.String; }
+		}
+
+		public bool IsStringLike
+		{
+			get { return this.type == ConstantValueType.String || this.type == ConstantValueType.Char; }
+		}
 
 		internal double ToReal()
 		{
@@ -253,6 +271,8 @@ namespace Osprey
 					return compiler.RealType;
 				case ConstantValueType.String:
 					return compiler.StringType;
+				case ConstantValueType.Char:
+					return compiler.CharType;
 				case ConstantValueType.Enum:
 					return enumType;
 				default:
@@ -297,6 +317,11 @@ namespace Osprey
 			return base.Equals(obj);
 		}
 
+		public bool Equals(ConstantValue other)
+		{
+			return this == other;
+		}
+
 		public bool SupportsOperator(BinaryOperator op, ConstantValue right)
 		{
 			switch (op)
@@ -336,10 +361,15 @@ namespace Osprey
 				case BinaryOperator.GreaterEqual:
 				case BinaryOperator.Comparison:
 					// Note: <, <=, > and >= are all implemented in terms of <=>
-					return this.IsNumeric && right.IsNumeric ||
-						this.type == right.type &&
-						this.type != ConstantValueType.Null &&
-						(this.type != ConstantValueType.Enum || this.enumType == right.enumType);
+					if (this.IsNumeric)
+						return right.IsNumeric;
+					if (this.type == ConstantValueType.Boolean)
+						return right.type == ConstantValueType.Boolean;
+					if (this.type == ConstantValueType.String || this.type == ConstantValueType.Char)
+						return right.type == ConstantValueType.String || right.type == ConstantValueType.Char;
+					if (this.type == ConstantValueType.Enum)
+						return right.type == ConstantValueType.Enum && this.enumType == right.enumType;
+					return false;
 
 				case BinaryOperator.Or:
 				case BinaryOperator.Xor:
@@ -358,7 +388,9 @@ namespace Osprey
 			switch (op)
 			{
 				case UnaryOperator.Plus:
-					return IsNumeric || type == ConstantValueType.Boolean ||
+					return IsNumeric ||
+						type == ConstantValueType.Boolean ||
+						type == ConstantValueType.Char ||
 						type == ConstantValueType.Enum;
 				case UnaryOperator.Minus:
 					return type == ConstantValueType.Int || type == ConstantValueType.Real;
@@ -758,6 +790,9 @@ namespace Osprey
 			if (left.IsNumeric && right.IsNumeric)
 				return CompareNumeric(left, right);
 
+			if (left.IsStringLike && right.IsStringLike)
+				return CompareStringLike(left, right);
+
 			if (left.type != right.type ||
 				left.type == ConstantValueType.Null ||
 				left.type == ConstantValueType.Enum && left.enumType != right.enumType)
@@ -770,8 +805,6 @@ namespace Osprey
 			{
 				case ConstantValueType.Boolean:
 					return left.BooleanValue.CompareTo(right.BooleanValue);
-				case ConstantValueType.String:
-					return left.stringValue.CompareTo(right.StringValue);
 				case ConstantValueType.Enum:
 					return left.num.IntValue.CompareTo(right.num.IntValue);
 				default:
@@ -827,6 +860,36 @@ namespace Osprey
 			return leftReal.CompareTo(rightReal);
 		}
 
+		private static int CompareStringLike(ConstantValue left, ConstantValue right)
+		{
+			string a = left.IsString ? left.stringValue : char.ConvertFromUtf32(unchecked((int)left.num.IntValue));
+			string b = right.IsString ? right.stringValue : char.ConvertFromUtf32(unchecked((int)right.num.IntValue));
+
+			// Have to reimplement Ovum's string comparison, because .NET has nothing like it
+			int aLen = a.Length, bLen = b.Length;
+
+			int ai = 0, bi = 0;
+
+			unchecked
+			{
+				while (ai < aLen && bi < bLen)
+				{
+					int ac = a[ai++];
+					if (ai < aLen && char.IsSurrogatePair((char)ac, a[ai]))
+						ac = char.ConvertToUtf32((char)ac, a[ai++]);
+
+					int bc = b[bi++];
+					if (bi < bLen && char.IsSurrogatePair((char)bc, b[bi]))
+						bc = char.ConvertToUtf32((char)bc, b[bi++]);
+
+					if (ac != bc)
+						return ac - bc;
+				}
+
+				return a.Length - b.Length;
+			}
+		}
+
 		public static ConstantValue RefEquals(ConstantValue left, ConstantValue right)
 		{
 			if (left.type != right.type)
@@ -857,6 +920,9 @@ namespace Osprey
 					break;
 				case ConstantValueType.String:
 					result = left.StringValue == right.StringValue;
+					break;
+				case ConstantValueType.Char:
+					result = left.num.IntValue == right.num.IntValue;
 					break;
 				default:
 					result = false; // should never actually happen
@@ -889,7 +955,8 @@ namespace Osprey
 				return arg; // no modification necessary
 			if (arg.type == ConstantValueType.Boolean)
 				return CreateInt(arg.BooleanValue ? 1 : 0);
-			if (arg.type == ConstantValueType.Enum)
+			if (arg.type == ConstantValueType.Char ||
+				arg.type == ConstantValueType.Enum)
 				return CreateInt(arg.num.IntValue);
 
 			throw new NotSupportedException();
@@ -976,8 +1043,8 @@ namespace Osprey
 		Real,
 		/// <summary>The constant is of type String.</summary>
 		String,
-		// /// <summary>The constant is of type Regex.</summary>
-		//Regex,
+		/// <summary>The constant is of type Char.</summary>
+		Char,
 		/// <summary>The constant is of an enum type.</summary>
 		Enum,
 	}

@@ -574,30 +574,10 @@ namespace Osprey
 				writer.Write(typeObject.Id); // type ID
 
 			// And then the value
-			switch (value.Type)
-			{
-				case ConstantValueType.Null:
-					writer.Write(0LU); // all zeroes, baby
-					break;
-				case ConstantValueType.Boolean:
-					writer.Write(value.BooleanValue ? 1LU : 0LU);
-					break;
-				case ConstantValueType.Int:
-					writer.Write(value.IntValue);
-					break;
-				case ConstantValueType.UInt:
-					writer.Write(value.UIntValue);
-					break;
-				case ConstantValueType.Real:
-					writer.Write(value.RealValue);
-					break;
-				case ConstantValueType.String:
-					writer.Write((ulong)GetStringId(value.StringValue));
-					break;
-				case ConstantValueType.Enum:
-					writer.Write(value.EnumValue.Value);
-					break;
-			}
+			if (value.Type == ConstantValueType.String)
+				writer.Write((ulong)GetStringId(value.StringValue));
+			else
+				writer.Write(value.GetRawValue());
 		}
 
 		private FieldFlags GetFieldFlags(Field field)

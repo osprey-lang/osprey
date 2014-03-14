@@ -19,6 +19,7 @@ namespace Osprey
 		public const string IntName = StandardNamespace + ".Int";
 		public const string UIntName = StandardNamespace + ".UInt";
 		public const string RealName = StandardNamespace + ".Real";
+		public const string CharName = StandardNamespace + ".Char";
 		public const string StringName = StandardNamespace + ".String";
 
 		// And these are some other standard types
