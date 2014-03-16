@@ -381,6 +381,7 @@ namespace Osprey.Members
 		public int OverloadedOperatorCount { get { return overloadedOperatorCount; } }
 
 		private int lambdaNameCounter = 0;
+		private int closureClassCounter = 0;
 
 		/// <summary>
 		/// Set of inherited abstract methods which have not been overridden in this class.
@@ -678,6 +679,8 @@ namespace Osprey.Members
 		{
 			if (method == null)
 				throw new ArgumentNullException("method");
+			if (method.Group != null)
+				throw new ArgumentException("This method already belongs to another class or namespace.", "method");
 
 			if (this.IsStatic && !method.IsStatic)
 				throw new DeclarationException(method.Node, "Static classes can only declare static members.");
@@ -853,7 +856,7 @@ namespace Osprey.Members
 			if (ctor == null)
 				throw new CompileTimeException(errorNode,
 					string.Format("The type '{0}' does not declare a constructor that takes {1} arguments.",
-						this.FullName, argCount.ToString(CI.InvariantCulture)));
+						this.FullName, argCount.ToStringInvariant()));
 
 			return ctor;
 		}
@@ -1197,6 +1200,18 @@ namespace Osprey.Members
 		internal string GetLambdaName(string nameHint)
 		{
 			return string.Format("λc:{0}${1}", nameHint ?? "__", lambdaNameCounter++);
+		}
+
+		internal string GetClosureClassName(string prefix, out int blockNumber)
+		{
+			blockNumber = closureClassCounter++;
+			return string.Format("C:{0}{1}${2}", prefix, "__", blockNumber.ToStringInvariant());
+		}
+
+		internal string GetGeneratorClassName(string prefix)
+		{
+			var classNumber = closureClassCounter++;
+			return string.Format("I:{0}{1}${2}", prefix, "__", classNumber.ToStringInvariant());
 		}
 
 		private enum ClassState
@@ -1893,7 +1908,7 @@ namespace Osprey.Members
 
 		private static string GetMethodName(LocalFunction function)
 		{
-			if (function.Name.StartsWith("λ:")) // captured lambda
+			if (function.Name.StartsWith("λ:") || function.Name.StartsWith("λc:")) // captured lambda
 				return function.Name;
 			else
 				return string.Format("ƒ:{0}", function.Name);

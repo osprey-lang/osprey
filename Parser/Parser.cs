@@ -2120,6 +2120,10 @@ namespace Osprey
 
 		private Expression ParseExpression(ref int i)
 		{
+			// use-in expressions are NOT primary expressions!
+			if (Accept(i, TokenType.Use))
+				return ParseUseInExpression(ref i);
+
 			var left = ParseConditionalExpr(ref i);
 			if (Accept(i, TokenType.Assign))
 			{
@@ -2856,6 +2860,36 @@ namespace Osprey
 
 			return new LambdaExpression(parameters, splat, body)
 				.At(start, tok[i - 1].EndIndex, document);
+		}
+
+		private Expression ParseUseInExpression(ref int i)
+		{
+			var useTok = Expect(ref i, TokenType.Use);
+
+			var variables = new List<VariableDeclarator>();
+			do
+			{
+				var name = Expect(ref i, TokenType.Identifier);
+				Expect(ref i, TokenType.Assign);
+				var value = ParseExpression(ref i);
+
+				variables.Add(new VariableDeclarator(name.Value, value)
+				{
+					StartIndex = name.Index,
+					EndIndex = value.EndIndex,
+					Document = document,
+				});
+			} while (Accept(ref i, TokenType.Comma));
+
+			Expect(ref i, TokenType.In);
+
+			var inner = ParseExpression(ref i);
+			return new UseInExpression(variables, inner)
+			{
+				StartIndex = useTok.Index,
+				EndIndex = useTok.EndIndex,
+				Document = document,
+			};
 		}
 
 		private LambdaOperator TokenTypeToLambdaOperator(TokenType type)

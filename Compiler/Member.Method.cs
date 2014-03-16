@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Osprey.Nodes;
 using Osprey.Instructions;
+using CI = System.Globalization.CultureInfo;
 using Switch = Osprey.Instructions.Switch;
 
 namespace Osprey.Members
@@ -422,8 +423,10 @@ namespace Osprey.Members
 					// Hence, we can safely make the following retnull instruction belong to that
 					// curly brace. Note that the main method has a node with a null document.
 					if (bodyNode.Document != null)
-						mb.AppendLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
+						mb.PushLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
 					mb.Append(new SimpleInstruction(Opcode.Retnull));
+					if (bodyNode.Document != null)
+						mb.PopLocation();
 				}
 			}
 
@@ -464,7 +467,7 @@ namespace Osprey.Members
 			var offset = IsStatic ? 0 : 1; // 'this' is a required, unnamed parameter
 			var uninitializedParams = firstOptionalNonNull + offset;
 
-			builder.AppendLocation(this.Node);
+			builder.PushLocation(this.Node);
 			builder.Append(new SimpleInstruction(Opcode.Ldargc)); // Load argument count
 			if (uninitializedParams != 0)
 			{
@@ -492,11 +495,13 @@ namespace Osprey.Members
 				if (param.DefaultValue.IsNull)
 					continue;
 
-				builder.AppendLocation(param.DefaultValue);
+				builder.PushLocation(param.DefaultValue);
 				param.DefaultValue.Compile(compiler, builder); // Evaluate the value
 				builder.Append(new StoreLocal(builder.GetParameter(index + offset))); // Store!
+				builder.PopLocation(); // param.DefaultValue
 				// Fall through to the next parameter, which is also missing
 			}
+			builder.PopLocation(); // this.Node
 
 			builder.Append(endLabel);
 		}
@@ -510,11 +515,13 @@ namespace Osprey.Members
 			var bodyNode = Body.Node;
 			// During generator setup, the cursor is at the "{" of the body
 			// Note: it is impossible to have a generator block without curlies.
-			builder.AppendLocation(bodyNode.Document, bodyNode.StartIndex, bodyNode.StartIndex + 1);
+			builder.PushLocation(bodyNode.Document, bodyNode.StartIndex, bodyNode.StartIndex + 1);
 
 			builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
 			builder.Append(LoadField.Create(builder.Module, stateField)); // Load this.'<>state'
 			builder.Append(stateSwitch); // Switch on this.'<>state'
+
+			builder.PopLocation(); // '{'
 
 			// This list will be repopulated when traversing all the statements,
 			// to make sure it only contains reachable yields.
@@ -531,7 +538,7 @@ namespace Osprey.Members
 			if (canEnd)
 			{
 				// The last step appears to be at the closing "}" of the body
-				builder.AppendLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
+				builder.PushLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
 
 				if (bodyNode.IsEndReachable)
 				{
@@ -543,6 +550,8 @@ namespace Osprey.Members
 				builder.Append(endLabel);
 				builder.Append(LoadConstant.False());
 				builder.Append(new SimpleInstruction(Opcode.Ret));
+
+				builder.PopLocation(); // '}'
 			}
 		}
 
@@ -581,27 +590,13 @@ namespace Osprey.Members
 			if (genClass != null)
 				return genClass;
 
-			var method = this;
-			while (method is LocalMethod)
-				method = ((LocalMethod)method).Function.Parent.Method;
+			bool _;
+			var @class = GetContainingClass(out _);
+			var ns = GetContainingNamespace();
+			string namePrefix = @class != null ? @class.Name + "/" : "";
 
-			var group = method.Group;
-
-			Namespace ns;
-			string namePrefix;
-			if (group.Parent.Kind == MemberKind.Namespace)
-			{
-				namePrefix = "";
-				ns = group.ParentAsNamespace;
-			}
-			else // class
-			{
-				namePrefix = group.ParentAsClass.Name + "/";
-				ns = group.ParentAsClass.Parent;
-			}
-
-			genClass = new GeneratorClass(GetGeneratorClassName(namePrefix, method), this, ns, compiler);
-			genClass.SharedType = group.ParentAsClass;
+			genClass = new GeneratorClass(GetGeneratorClassName(namePrefix), this, ns, compiler);
+			genClass.SharedType = @class;
 
 			var moveNext = new Method(this.Node, "moveNext", AccessLevel.Public, null, Signature.Empty)
 			{
@@ -674,11 +669,38 @@ namespace Osprey.Members
 			this.body = new BlockSpace(block, this);
 		}
 
-		private static string GetGeneratorClassName(string prefix, Method method)
+		internal virtual string GetLambdaName(string nameHint)
 		{
-			var groupIndex = method.Group.IndexOfOverload(method);
-			return string.Format("I:{0}{1}@{2}__{3}", prefix, method.Name.Replace('.', '#'),
-				groupIndex, method.ClosureCounter++);
+			return string.Format("λ:{0}${1}",
+				nameHint ?? "__",
+				LambdaNameCounter++.ToStringInvariant());
+		}
+
+		internal virtual string GetLambdaParam()
+		{
+			return string.Format("λ:arg${0}",
+				LambdaParamCounter++.ToStringInvariant());
+		}
+
+		internal virtual string GetClosureClassName(string prefix, out int blockNumber)
+		{
+			var overloadIndex = Group.Count == 1 ?
+				"" :
+				"@" + Group.IndexOfOverload(this).ToStringInvariant();
+			blockNumber = ClosureCounter++;
+			return string.Format("C:{0}{1}{2}__{3}", prefix,
+				Name.Replace('.', '#'),
+				overloadIndex, blockNumber.ToStringInvariant());
+		}
+
+		internal virtual string GetGeneratorClassName(string prefix)
+		{
+			var overloadIndex = Group.Count == 1 ?
+				"" :
+				"@" + Group.IndexOfOverload(this).ToStringInvariant();
+			var classNumber = ClosureCounter++;
+			return string.Format("I:{0}{1}{2}__{3}", prefix, Name.Replace('.', '#'),
+				overloadIndex, classNumber.ToStringInvariant());
 		}
 
 		internal class CompiledMethodData

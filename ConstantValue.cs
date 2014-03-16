@@ -764,20 +764,24 @@ namespace Osprey
 						left.num.UIntValue == unchecked((ulong)right.num.IntValue);
 				}
 			}
+			if (left.IsStringLike && right.IsStringLike)
+			{
+				var leftStr = left.IsString ? left.stringValue : char.ConvertFromUtf32(unchecked((int)left.num.IntValue));
+				var rightStr = right.IsString ? right.stringValue : char.ConvertFromUtf32(unchecked((int)right.num.IntValue));
 
-			if (left.type != right.type)
-				return false;
-			// left.type == right.type below here
+				return leftStr == rightStr;
+			}
 
-			if (left.type == ConstantValueType.Null)
-				return true; // both are null
-			if (left.type == ConstantValueType.Enum)
-				return left.enumType == right.enumType &&
-					left.num.IntValue == right.num.IntValue;
-			if (left.type == ConstantValueType.Boolean)
-				return left.BooleanValue == right.BooleanValue;
-			if (left.type == ConstantValueType.String)
-				return left.StringValue == right.StringValue;
+			if (left.type == right.type)
+			{
+				if (left.type == ConstantValueType.Null)
+					return true; // both are null
+				if (left.type == ConstantValueType.Enum)
+					return left.enumType == right.enumType &&
+						left.num.IntValue == right.num.IntValue;
+				if (left.type == ConstantValueType.Boolean)
+					return left.BooleanValue == right.BooleanValue;
+			}
 			return false;
 		}
 		public static bool operator !=(ConstantValue left, ConstantValue right)

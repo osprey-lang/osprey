@@ -531,7 +531,7 @@ namespace Osprey
 			ProcessFiles();
 			parseTimer.Stop();
 
-			Notice("Time taken to parse (ms): " + parseTimer.Elapsed.TotalMilliseconds.ToString(CI.InvariantCulture));
+			Notice("Time taken to parse (ms): " + parseTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
 
 			// And now we start the real work.
 
@@ -650,12 +650,12 @@ namespace Osprey
 			}
 
 			Notice("Compilation finished at " + DateTime.Now);
-			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds.ToString(CI.InvariantCulture));
-			Notice("Time taken to emit bytes (ms): " + emitTimer.Elapsed.TotalMilliseconds.ToString(CI.InvariantCulture));
+			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
+			Notice("Time taken to emit bytes (ms): " + emitTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
 
 			var totalTime = parseTimer.Elapsed + compileTimer.Elapsed + emitTimer.Elapsed;
-			Notice("Total time taken (ms): " + totalTime.TotalMilliseconds.ToString(CI.InvariantCulture));
-			Notice("Total bytes written: " + bytesWritten.ToString(CI.InvariantCulture));
+			Notice("Total time taken (ms): " + totalTime.TotalMilliseconds.ToStringInvariant());
+			Notice("Total bytes written: " + bytesWritten.ToStringInvariant());
 		}
 
 		private void ProcessFiles()
@@ -1312,6 +1312,13 @@ namespace Osprey
 					ns = func.GetContainingNamespace();
 
 					ProcessLocalFunction(func, null, @class, ns);
+
+					// This branch is only reached if the LocalMethod is a lambda
+					// expression inside a field initializer, in which case there
+					// is a local extractor in additionalLocalExtractors that takes
+					// care of transforming closure locals. So, we don't actually
+					// call TransformClosureLocals on the body, because doing that
+					// more than once is bad.
 				}
 				else
 				{
@@ -1320,16 +1327,15 @@ namespace Osprey
 						ns = method.Group.ParentAsNamespace;
 					else
 						ns = @class.Parent;
+					
+					// ProcessLocalFunction walks through all the nested local functions,
+					// so if we have a LocalMethod, the code above takes care of that.
+					if (method.LocalFunctions != null)
+						foreach (var function in method.LocalFunctions)
+							ProcessLocalFunction(function, method, @class, ns);
+
+					method.Body.Node.TransformClosureLocals(null, false);
 				}
-
-				if (method.LocalFunctions != null)
-					foreach (var function in method.LocalFunctions)
-						ProcessLocalFunction(function, method, @class, ns);
-
-				// And now we need to transform all references to captured things!
-				// And stuff!
-				// yay
-				method.Body.Node.TransformClosureLocals(null, false);
 			}
 
 			if (additionalLocalExtractors != null)
@@ -1389,7 +1395,7 @@ namespace Osprey
 
 			if (localMethod.LocalFunctions != null)
 				foreach (var innerFunction in localMethod.LocalFunctions)
-					ProcessLocalFunction(innerFunction, parentMethod, parentClass, parentNs);
+					ProcessLocalFunction(innerFunction, parentMethod ?? localMethod, parentClass, parentNs);
 		}
 
 		private void ExtractGeneratorClasses()
@@ -2175,9 +2181,9 @@ namespace Osprey
 
 			return string.Format("\"{0}\":{1}:{2}+{3}",
 				fileName,
-				line.ToString(CI.InvariantCulture),
-				column.ToString(CI.InvariantCulture),
-				length.ToString(CI.InvariantCulture));
+				line.ToStringInvariant(),
+				column.ToStringInvariant(),
+				length.ToStringInvariant());
 		}
 
 		internal static MessageLocation FromNode(ParseNode node)

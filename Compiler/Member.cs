@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Osprey;
 using Osprey.Nodes;
+using CI = System.Globalization.CultureInfo;
 
 namespace Osprey.Members
 {
@@ -874,30 +875,44 @@ namespace Osprey.Members
 	{
 		public BlockSpace(Block node, Method method)
 		{
-			Method = method;
+			containingMember = method;
 			Node = node;
 			if (node != null)
 				node.DeclSpace = this;
 		}
 		public BlockSpace(Block node, BlockSpace parent)
 		{
-			Method = parent.Method;
-			Parent = parent;
+			containingMember = parent.containingMember;
+			this.parent = parent;
+			Node = node;
+			if (node != null)
+				node.DeclSpace = this;
+		}
+		public BlockSpace(Block node, Class @class)
+		{
+			containingMember = @class;
 			Node = node;
 			if (node != null)
 				node.DeclSpace = this;
 		}
 
-		/// <summary>Gets the <see cref="Node"/> that introduced the block.</summary>
+		/// <summary>Gets the <see cref="ParseNode"/> that introduced the block.</summary>
 		public Block Node { get; private set; }
 
+		// The Method (in almost all cases) or Class (in case of a use-in expression
+		// in a field initializer) that ultimately contains the block.
+		private IDeclarationSpace containingMember;
+		/// <summary>Gets the member (Method or Class) that contains the block.</summary>
+		public IDeclarationSpace ContainingMember { get { return containingMember; } }
+
 		/// <summary>Gets the method in which the block is contained.</summary>
-		public Method Method { get; internal set; }
+		public Method Method { get { return (Method)containingMember; } }
 
+		private BlockSpace parent;
 		/// <summary>Gets the parent of the block. This is always another block.</summary>
-		public BlockSpace Parent { get; internal set; }
+		public BlockSpace Parent { get { return parent; } }
 
-		IDeclarationSpace IDeclarationSpace.Parent { get { return Parent ?? (IDeclarationSpace)Method; } }
+		IDeclarationSpace IDeclarationSpace.Parent { get { return Parent ?? containingMember; } }
 
 		/// <summary>Gets the statement that this block is the body of.</summary>
 		public Statement Owner { get; internal set; }
@@ -912,8 +927,8 @@ namespace Osprey.Members
 			{
 				if (Parent != null)
 					return Parent;
-				if (Method is LocalMethod)
-					return ((LocalMethod)Method).Function.Parent;
+				if (containingMember is LocalMethod)
+					return ((LocalMethod)containingMember).Function.Parent;
 				return null;
 			}
 		}
@@ -941,11 +956,7 @@ namespace Osprey.Members
 			if (variable == null)
 				throw new ArgumentNullException("variable");
 
-			if (ContainsMember(variable.Name))
-				throw new DuplicateNameException(variable.Node, variable.Name);
-			ReservedName reserved = GetReservedName(variable.Name);
-			if (reserved != null)
-				throw new DeclarationException(variable.Node, reserved.GetReasonMessage());
+			EnsureDeclarable(variable.Name, variable.Node);
 
 			members.Add(variable.Name, variable);
 			variable.Parent = this;
@@ -959,11 +970,13 @@ namespace Osprey.Members
 			if (constant == null)
 				throw new ArgumentNullException("constant");
 
-			if (ContainsMember(constant.Name))
-				throw new DuplicateNameException(constant.Node, constant.Name);
+			EnsureDeclarable(constant.Name, constant.Node);
 
 			members.Add(constant.Name, constant);
 			constant.Parent = this;
+
+			if (Up != null)
+				Up.ReserveName(constant.Name, ReserveReason.UsedInChildBlock);
 		}
 
 		public void DeclareLocalFunction(LocalFunction function)
@@ -971,16 +984,27 @@ namespace Osprey.Members
 			if (function == null)
 				throw new ArgumentNullException("function");
 
-			if (ContainsMember(function.Name))
-				throw new DuplicateNameException(function.Node, function.Name);
+			EnsureDeclarable(function.Name, function.Node);
 
 			members.Add(function.Name, function);
 			function.Parent = this;
+
+			if (Up != null)
+				Up.ReserveName(function.Name, ReserveReason.UsedInChildBlock);
 
 			// Remember to mark the containing Method, too!
 			// If this is a LocalMethod, then that method will mark its parent
 			// once declared inside it.
 			Method.AddLocalFunction(function);
+		}
+
+		private void EnsureDeclarable(string name, ParseNode errorNode)
+		{
+			if (ContainsMember(name))
+				throw new DuplicateNameException(errorNode, name);
+			ReservedName reserved = GetReservedName(name);
+			if (reserved != null)
+				throw new DeclarationException(errorNode, reserved.GetReasonMessage());
 		}
 
 		public void ReserveName(string name, ReserveReason reason)
@@ -1021,8 +1045,8 @@ namespace Osprey.Members
 				return true;
 			if (Parent != null)
 				return Parent.ContainsMember(name);
-			if (Method is LocalMethod)
-				return ((IDeclarationSpace)Method).ContainsMember(name);
+			if (containingMember is LocalMethod)
+				return containingMember.ContainsMember(name);
 			return false;
 		}
 
@@ -1036,8 +1060,8 @@ namespace Osprey.Members
 			if (Parent != null)
 				return Parent.ResolveName(name, fromClass);
 
-			if (Method != null)
-				return ((IDeclarationSpace)Method).ResolveName(name, fromClass);
+			if (containingMember is Method)
+				return containingMember.ResolveName(name, fromClass);
 
 			return null;
 		}
@@ -1065,18 +1089,18 @@ namespace Osprey.Members
 		public Namespace GetContainingNamespace()
 		{
 			if (Parent == null)
-				return Method.GetContainingNamespace();
+				return containingMember.GetContainingNamespace();
 			return Parent.GetContainingNamespace();
 		}
 
 		public Class GetContainingClass(out bool hasInstance)
 		{
-			if (Method == null) // This is not supposed to happen!
-				throw new InvalidOperationException("BlockSpace is not supposed to have a null Method.");
+			if (containingMember == null) // This is not supposed to happen!
+				throw new InvalidOperationException("BlockSpace.containingMember is not supposed to be null.");
 
 			// Note: this.Method may be a LocalMethod, but they do know
 			// how to return their containing class correctly.
-			return Method.GetContainingClass(out hasInstance);
+			return containingMember.GetContainingClass(out hasInstance);
 		}
 
 		public void SetLabel(string label)
@@ -1206,13 +1230,14 @@ namespace Osprey.Members
 			if (block == null)
 				throw new ArgumentNullException("block");
 			if (block == this)
-				throw new ArgumentException("I can't bloody well capture myself!");
+				throw new ArgumentException("I can't bloody well capture myself!", "block");
 
 			// If the block comes from another method, then every method up to (but not including) that method
 			// needs to capture the block as well.
-			if (block.Method != this.Method && this.Method is LocalMethod &&
-				((LocalMethod)this.Method).Function.Parent != block)
-				((LocalMethod)this.Method).Function.Parent.Capture(block);
+			var localMethod = containingMember as LocalMethod;
+			if (localMethod != null && block.containingMember != localMethod &&
+				localMethod.Function.Parent != block)
+				localMethod.Function.Parent.Capture(block);
 
 			if (capturedBlocks == null)
 				capturedBlocks = new HashSet<BlockSpace>();
@@ -1227,11 +1252,9 @@ namespace Osprey.Members
 		/// <returns>A lambda expression name.</returns>
 		internal string GetLambdaName(string nameHint)
 		{
-			var method = this.Method;
-			while (method is LocalMethod)
-				method = ((LocalMethod)method).Function.Parent.Method;
-
-			return string.Format("λ:{0}${1}", nameHint ?? "__", method.LambdaNameCounter++);
+			if (containingMember is Class)
+				return ((Class)containingMember).GetLambdaName(nameHint);
+			return ((Method)containingMember).GetLambdaName(nameHint);
 		}
 		/// <summary>
 		/// Gets a lambda parameter name that is guaranteed not to clash with
@@ -1240,11 +1263,9 @@ namespace Osprey.Members
 		/// <returns>A lambda parameter name.</returns>
 		internal string GetLambdaParam()
 		{
-			var method = this.Method;
-			while (method is LocalMethod)
-				method = ((LocalMethod)method).Function.Parent.Method;
-
-			return string.Format("λ:arg${0}", method.LambdaParamCounter++);
+			if (containingMember is Class)
+				return ((Class)containingMember).GetLambdaParam();
+			return ((Method)containingMember).GetLambdaParam();
 		}
 
 		internal ClosureClass GenerateClosureClass(Compiler compiler)
@@ -1259,27 +1280,14 @@ namespace Osprey.Members
 				foreach (var block in capturedBlocks)
 					block.GenerateClosureClass(compiler);
 
-			var method = this.Method;
-			while (method is LocalMethod)
-				method = ((LocalMethod)method).Function.Parent.Method;
+			bool _;
+			var @class = containingMember.GetContainingClass(out _);
+			var ns = containingMember.GetContainingNamespace();
 
-			var group = method.Group;
+			string namePrefix = @class != null ? @class.Name + "/" : "";
 
-			Namespace ns;
-			string namePrefix;
-			if (group.Parent.Kind == MemberKind.Namespace)
-			{
-				namePrefix = "";
-				ns = group.ParentAsNamespace;
-			}
-			else // class
-			{
-				namePrefix = group.ParentAsClass.Name + "/";
-				ns = group.ParentAsClass.Parent;
-			}
-
-			closure = new ClosureClass(GetClosureClassName(namePrefix, method, out BlockNumber), this, ns, compiler);
-			closure.SharedType = method.Group.ParentAsClass;
+			closure = new ClosureClass(GetClosureClassName(namePrefix, out BlockNumber), this, ns, compiler);
+			closure.SharedType = @class;
 			ClosureVariable = new Variable(null, (VariableDeclarator)null) { Parent = this };
 
 			ns.DeclareType(closure);
@@ -1349,7 +1357,7 @@ namespace Osprey.Members
 					target.IsAssignment = true;
 
 					Expression value;
-					if (block.Method == this.Method)
+					if (block.containingMember == this.containingMember)
 						// If the block is from the same method, then we just load its closure local
 						// and store it in the appropriate field.
 						value = new LocalVariableAccess(block.ClosureVariable, LocalAccessKind.ClosureLocal);
@@ -1422,11 +1430,18 @@ namespace Osprey.Members
 			return ctor.Method;
 		}
 
-		private static string GetClosureClassName(string prefix, Method method, out int blockNumber)
+		internal string GetClosureClassName(string namePrefix, out int blockNumber)
 		{
-			var groupIndex = method.Group.IndexOfOverload(method);
-			blockNumber = method.ClosureCounter++;
-			return string.Format("C:{0}{1}@{2}__{3}", prefix, method.Name.Replace('.', '#'), groupIndex, blockNumber);
+			if (containingMember is Class)
+				return ((Class)containingMember).GetClosureClassName(namePrefix, out blockNumber);
+			return ((Method)containingMember).GetClosureClassName(namePrefix, out blockNumber);
+		}
+
+		internal string GetGeneratorClassName(string namePrefix)
+		{
+			if (containingMember is Class)
+				return ((Class)containingMember).GetGeneratorClassName(namePrefix);
+			return ((Method)containingMember).GetGeneratorClassName(namePrefix);
 		}
 
 		public static BlockSpace FromStatement(Statement stmt, BlockSpace parent)
@@ -1687,8 +1702,8 @@ namespace Osprey.Members
 					// we need to mark that as CapturesThis as well, even if it does
 					// not capture anything else. This will allow it to be compiled to
 					// an instance method, ensuring it, too, has access to the 'this'.
-					if (Parent.Method is LocalMethod)
-						((LocalMethod)Parent.Method).Function.CapturesThis = true;
+					if (Parent.ContainingMember is LocalMethod)
+						((LocalMethod)Parent.ContainingMember).Function.CapturesThis = true;
 			}
 		}
 
@@ -1728,15 +1743,15 @@ namespace Osprey.Members
 			 * In this example, both baz and bar need to capture x; if bar did not
 			 * capture it, it would not be available in baz. baz also needs to capture y,
 			 * which bar does NOT need to capture, because it's declared in bar.
-			 * qux, on the other hand, if baz did not exist, would only cause bar to
+			 * if baz did not exist, on the other hand, qux would only cause bar to
 			 * capture y; or rather, to put it in a closure class. There would be no
 			 * need for bar to be marked HasCaptures.
 			 */
-			if (this.Parent.Method != variable.Parent.Method)
+			if (this.Parent.ContainingMember != variable.Parent.ContainingMember)
 			{
-				if (this.Parent.Method is LocalMethod)
+				if (this.Parent.ContainingMember is LocalMethod)
 				{
-					((LocalMethod)Parent.Method).Function.Capture(variable);
+					((LocalMethod)Parent.ContainingMember).Function.Capture(variable);
 					// Also capture the block that declares the variable:
 					Parent.Capture(variable.Parent);
 				}
@@ -1762,12 +1777,12 @@ namespace Osprey.Members
 
 			hasCaptures = true;
 
-			if (this.Parent.Method != function.Parent.Method)
+			if (this.Parent.ContainingMember != function.Parent.ContainingMember)
 			{
-				if (this.Parent.Method is LocalMethod &&
+				if (this.Parent.ContainingMember is LocalMethod &&
 					function.Parent != this.Method.Body) // cannot "capture" own child
 				{
-					((LocalMethod)Parent.Method).Function.Capture(function);
+					((LocalMethod)Parent.ContainingMember).Function.Capture(function);
 					// Also capture the block that declares the function:
 					Parent.Capture(function.Parent);
 				}
@@ -1855,19 +1870,54 @@ namespace Osprey.Members
 			return function.GetContainingNamespace();
 		}
 
+		internal override string GetLambdaName(string nameHint)
+		{
+			if (function.Parent == null)
+				// Lambda expression in field initializer
+				return ((Class)function.GlobalParent).GetLambdaName(nameHint);
+			return function.Parent.GetLambdaName(nameHint);
+		}
+
+		internal override string GetLambdaParam()
+		{
+			if (function.Parent == null)
+				// Lambda expression in field initializer
+				return ((Class)function.GlobalParent).GetLambdaParam();
+			return function.Parent.GetLambdaParam();
+		}
+
+		internal override string GetClosureClassName(string prefix, out int blockNumber)
+		{
+			if (function.Parent == null)
+				// Lambda expression in field initializer
+				return ((Class)function.GlobalParent).GetClosureClassName(prefix, out blockNumber);
+			return function.Parent.GetClosureClassName(prefix, out blockNumber);
+		}
+
+		internal override string GetGeneratorClassName(string prefix)
+		{
+			if (function.Parent == null)
+				// Lambda expression in field initializer
+				return ((Class)function.GlobalParent).GetGeneratorClassName(prefix);
+			return function.Parent.GetGeneratorClassName(prefix);
+		}
+
 		internal static string GetExtractedName(Method parentMethod, LocalMethod localMethod)
 		{
+			var localName = localMethod.Name;
 			if (parentMethod == localMethod)
 				// This is only the case for lambdas outside method bodies,
 				// e.g. in field initializers and the like.
-				return localMethod.Name;
+				return localName;
 
-			var groupIndex = parentMethod.Group != null ? parentMethod.Group.IndexOfOverload(parentMethod) : 0;
-			var result = string.Format("{0}@{1}{2}{3}",
+			var groupIndex = parentMethod.Group != null && parentMethod.Group.Count > 1 ?
+				"@" + parentMethod.Group.IndexOfOverload(parentMethod).ToStringInvariant() :
+				"";
+			var result = string.Format("{0}{1}{2}{3}",
 				parentMethod.Name, groupIndex,
-				localMethod.Name.StartsWith("λ:") ? "" : "ƒ:",
-				localMethod.Name);
-			if (!localMethod.Name.StartsWith("λ:"))
+				localName.StartsWith("λ:") || localName.StartsWith("λc:") ? "" : "ƒ:",
+				localName);
+			if (!localName.StartsWith("λ:") && !localName.StartsWith("λc:"))
 				result += "$" + parentMethod.LambdaNameCounter++;
 			return result;
 		}

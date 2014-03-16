@@ -77,7 +77,8 @@ namespace Osprey
 		private int? maxStack = null;
 
 		private bool useDebugSymbols;
-		private SourceLocation trailingLocation;
+		private bool locationUsed = true; // When currentLocation is null, this is always true
+		private SourceLocation currentLocation;
 
 		/// <summary>
 		/// Appends an instruction to the end of the method.
@@ -112,8 +113,11 @@ namespace Osprey
 			while (newTryMembers.Count > 0)
 				newTryMembers.Pop().BeginBlock(instr);
 
-			instr.Location = trailingLocation;
-			trailingLocation = null;
+			if (!locationUsed)
+			{
+				instr.Location = currentLocation;
+				locationUsed = true;
+			}
 
 			maxStack = null;
 		}
@@ -129,61 +133,92 @@ namespace Osprey
 				throw new ArgumentNullException("label");
 			trailingLabels.Add(label);
 		}
+
 		/// <summary>
-		/// Appends a source location to the end of the method. It
-		/// will be attached to the next instruction that is appended.
+		/// Pushes a source location onto the top of the source location stack.
 		/// </summary>
 		/// <param name="location">The source location to append to the method.</param>
 		/// <exception cref="ArgumentNullException"><paramref name="location"/> is null.</exception>
-		/// <exception cref="InvalidOperationException">The method already has a location waiting to be attached to an instruction.</exception>
 		/// <remarks>
+		/// The source location will be associated with any instructions that are appended until either
+		/// another location is pushed, or this location is popped.
+		/// 
 		/// If the program is being compiled without debug symbols, the source location is ignored.
-		/// Consider calling <see cref="AppendLocation"/> instead, as it avoids allocating a <see cref="SourceLocation"/>
-		/// if debug symbols are disabled.
 		/// </remarks>
-		public void Append(SourceLocation location)
+		public bool PushLocation(SourceLocation location)
 		{
 			if (location == null)
 				throw new ArgumentNullException("location");
 			if (!useDebugSymbols)
-				return;
+				return false;
 
-			AddSourceLocation(location);
+			PushSourceLocation(location);
+			return true;
 		}
-
 		/// <summary>
-		/// Appends a source location to the end of this method. It
-		/// will be attached to the next instruction that is appended.
+		/// Pushes a source location onto the top of the source location stack.
 		/// </summary>
 		/// <param name="document">The document that the source location refers to.</param>
 		/// <param name="startIndex">The first character index within the source file.</param>
 		/// <param name="endIndex">The last character index (exclusive) within the source file.</param>
 		/// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
-		public void AppendLocation(Document document, int startIndex, int endIndex)
+		/// <remarks>
+		/// The source location will be associated with any instructions that are appended until either
+		/// another location is pushed, or this location is popped.
+		/// 
+		/// If the program is being compiled without debug symbols, the source location is ignored.
+		/// </remarks>
+		public bool PushLocation(Document document, int startIndex, int endIndex)
 		{
 			if (document == null)
 				throw new ArgumentNullException("document");
 			if (!useDebugSymbols)
-				return;
+				return false;
 
-			AddSourceLocation(new SourceLocation(document, startIndex, endIndex));
+			PushSourceLocation(new SourceLocation(document, startIndex, endIndex));
+			return true;
 		}
-
-		public void AppendLocation(ParseNode node)
+		/// <summary>
+		/// Pushes source location from the specified node onto the top of the
+		/// source location stack. If the node's <see cref="ParseNode.Document"/>
+		/// field is null, the node is ignored.
+		/// </summary>
+		/// <param name="node">The <see cref="ParseNode"/> to extract source location data from.</param>
+		/// <remarks>
+		/// The source location will be associated with any instructions that are appended until either
+		/// another location is pushed, or this location is popped.
+		/// 
+		/// If the program is being compiled without debug symbols, the source location is ignored.
+		/// </remarks>
+		public bool PushLocation(ParseNode node)
 		{
 			if (node == null)
 				throw new ArgumentNullException("node");
 			if (!useDebugSymbols || node.Document == null)
-				return;
+				return false;
 
-			AddSourceLocation(new SourceLocation(node));
+			PushSourceLocation(new SourceLocation(node));
+			return true;
 		}
 
-		private void AddSourceLocation(SourceLocation location)
+		private void PushSourceLocation(SourceLocation location)
 		{
-			if (trailingLocation != null)
-				throw new InvalidOperationException("There is already a trailing source location in this method.");
-			trailingLocation = location;
+			location.Previous = currentLocation;
+			currentLocation = location;
+			locationUsed = false;
+		}
+
+		public void PopLocation()
+		{
+			if (!useDebugSymbols)
+				return;
+
+			if (currentLocation == null)
+				throw new InvalidOperationException("There source location stack is empty.");
+			var curLoc = currentLocation;
+			currentLocation = curLoc.Previous;
+			curLoc.Previous = null;
+			locationUsed = currentLocation == null;
 		}
 
 		/// <summary>

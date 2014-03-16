@@ -164,7 +164,8 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			if (!(context is BlockSpace))
+			var contextBlock = context as BlockSpace;
+			if (contextBlock == null || !(contextBlock.ContainingMember is Method))
 				throw new CompileTimeException(this, "'__get_argc' may only appear inside a method body.");
 
 			// __get_argc becomes constant if the containing method has no optional parameters and is not variadic.

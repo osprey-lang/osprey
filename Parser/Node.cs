@@ -626,7 +626,10 @@ namespace Osprey.Nodes
 				if (compiler.MethodsWithLocalFunctionsCount != localsBefore)
 				{
 					var _decl = decl;
-					compiler.AddLocalExtractor(() => _decl.Initializer = _decl.Initializer.TransformClosureLocals(null, false));
+					compiler.AddLocalExtractor(() =>
+					{
+						_decl.Initializer = _decl.Initializer.TransformClosureLocals(null, false);
+					});
 				}
 			}
 		}
@@ -748,6 +751,12 @@ namespace Osprey.Nodes
 			if (Body.Initializer == null)
 				Body.Initializer = new List<AssignmentExpression>();
 
+			// Note: for field initializers, we use the special class FieldInitializer,
+			// which updates its Value immediately before compilation, because it might
+			// change if the field initializer expression is or contains a lambda.
+			// FieldInitializer inherits from AssignmentExpression and only overrides
+			// the Compile method.
+
 			var index = 0;
 			if (!IsStatic)
 			{
@@ -763,9 +772,9 @@ namespace Osprey.Nodes
 					if (fieldParams.Contains(f))
 						continue;
 
-					var expr = new AssignmentExpression(
+					var expr = new FieldInitializer(
 						new InstanceMemberAccess(new ThisAccess(), @class, f) { IsAssignment = true },
-						field.Initializer
+						field
 					);
 					expr.IgnoreValue = true;
 					expr.At(field.Initializer);
@@ -776,9 +785,9 @@ namespace Osprey.Nodes
 			{
 				foreach (var field in fields)
 				{
-					var expr = new AssignmentExpression(
+					var expr = new FieldInitializer(
 						new StaticFieldAccess((Field)@class.GetMember(field.Name)) { IsAssignment = true },
-						field.Initializer
+						field
 					);
 					expr.IgnoreValue = true;
 					expr.At(field.Initializer);
@@ -1282,7 +1291,7 @@ namespace Osprey.Nodes
 		/// <summary>The body of the iterator.</summary>
 		public Block Body;
 
-		public Method DeclSpace { get { return Body.DeclSpace.Method; } }
+		internal Method DeclSpace { get { return Body.DeclSpace.Method; } }
 
 		public override string ToString(int indent)
 		{

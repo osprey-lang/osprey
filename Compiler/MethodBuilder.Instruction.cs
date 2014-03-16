@@ -1191,7 +1191,7 @@ namespace Osprey.Instructions
 
 		public override string ToString()
 		{
-			return "ldc.r " + value.ToString(CI.InvariantCulture);
+			return "ldc.r " + value.ToStringInvariant();
 		}
 	}
 

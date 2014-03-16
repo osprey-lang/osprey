@@ -187,11 +187,11 @@ namespace Osprey.Nodes
 					case ConstantValueType.Boolean:
 						return Value.BooleanValue ? "{const true}" : "{const false}";
 					case ConstantValueType.Int:
-						return "{const " + Value.IntValue.ToString(CI.InvariantCulture) + "}";
+						return "{const " + Value.IntValue.ToStringInvariant() + "}";
 					case ConstantValueType.UInt:
-						return "{const " + Value.UIntValue.ToString(CI.InvariantCulture) + "u}";
+						return "{const " + Value.UIntValue.ToStringInvariant() + "u}";
 					case ConstantValueType.Real:
-						return "{const " + Value.RealValue.ToString(CI.InvariantCulture) + "r}";
+						return "{const " + Value.RealValue.ToStringInvariant() + "r}";
 					case ConstantValueType.String:
 						return "{const \"" + Value.StringValue + "\"}";
 					case ConstantValueType.Char:
@@ -1267,7 +1267,7 @@ namespace Osprey.Nodes
 	}
 
 	// Simple assignments only; that is, one value to one storage location.
-	public sealed class AssignmentExpression : Expression
+	public class AssignmentExpression : Expression
 	{
 		public AssignmentExpression(Expression target, Expression value)
 		{
@@ -1382,6 +1382,29 @@ namespace Osprey.Nodes
 		}
 	}
 
+	// Field initializer (generated inside a constructor)
+	// This differs from AssignmentExpression only in that it updates
+	// the Value field immediately before compilation, since the field
+	// initializer expression can change if it contains or consists of
+	// a lambda expression.
+	internal class FieldInitializer : AssignmentExpression
+	{
+		public FieldInitializer(Expression target, VariableDeclarator declarator)
+			: base(target, declarator.Initializer)
+		{
+			this.declarator = declarator;
+		}
+
+		private VariableDeclarator declarator;
+
+		public override void Compile(Compiler compiler, MethodBuilder method)
+		{
+			// Update the value in case the declarator has changed
+			this.Value = declarator.Initializer;
+			base.Compile(compiler, method);
+		}
+	}
+
 	public sealed class SimpleNameExpression : Expression
 	{
 		public SimpleNameExpression(string name)
@@ -1428,7 +1451,7 @@ namespace Osprey.Nodes
 				case MemberKind.GlobalVariable:
 					{
 						var variable = (GlobalVariable)member;
-						if (block != null && block.Method != document.Compiler.MainMethod)
+						if (block != null && block.ContainingMember != document.Compiler.MainMethod)
 							variable.Capture();
 						result = new GlobalVariableAccess(variable);
 					}
@@ -1497,8 +1520,8 @@ namespace Osprey.Nodes
 							throw new InstanceMemberAccessException(this, prop);
 						}
 
-						if (block != null && block.Method is LocalMethod)
-							((LocalMethod)block.Method).Function.CapturesThis = true;
+						if (block != null && block.ContainingMember is LocalMethod)
+							((LocalMethod)block.ContainingMember).Function.CapturesThis = true;
 
 						var inner = new ThisAccess();
 						inner.ResolveNames(context, document, false, false);
@@ -1521,9 +1544,10 @@ namespace Osprey.Nodes
 						// but only if the current method is a local method. The actual trans-
 						// formation takes place elsewhere.
 						LocalAccessKind kind;
-						if (variable.Parent.Method != block.Method && block.Method is LocalMethod)
+						if (variable.Parent.ContainingMember != block.ContainingMember &&
+							block.ContainingMember is LocalMethod)
 						{
-							var function = ((LocalMethod)block.Method).Function;
+							var function = ((LocalMethod)block.ContainingMember).Function;
 							function.Capture(variable);
 							kind = function.Parent == variable.Parent ?
 								LocalAccessKind.CapturingSameScope : // the function is in the same block as the variable
@@ -1553,9 +1577,9 @@ namespace Osprey.Nodes
 							throw new CompileTimeException(this,
 								string.Format("The function '{0}' cannot be accessed before its declaration.", Name));
 
-						if (block.Method is LocalMethod)
+						if (block.ContainingMember is LocalMethod)
 						{
-							var currentFunction = ((LocalMethod)block.Method).Function;
+							var currentFunction = ((LocalMethod)block.ContainingMember).Function;
 							if (currentFunction != function) // recursive call
 							{
 								if (function.HasCaptures)
@@ -1719,6 +1743,8 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
+			// This is null when the local function is a lambda expression
+			// in a field initializer
 			var block = context as BlockSpace;
 
 			string funcName;
@@ -1744,7 +1770,7 @@ namespace Osprey.Nodes
 			};
 			var func = new LocalFunction(funcName, funcDecl, block ?? context);
 
-			if (block != null)
+			if (block != null && block.ContainingMember is Method)
 				block.DeclareLocalFunction(func);
 			else
 				document.Compiler.AddMethodWithLocalFunctions(func.Method);
@@ -1843,7 +1869,7 @@ namespace Osprey.Nodes
 			};
 			var func = new LocalFunction(funcName, funcDecl, block ?? context);
 
-			if (block != null)
+			if (block != null && block.ContainingMember is Method)
 				block.DeclareLocalFunction(func);
 			else
 				document.Compiler.AddMethodWithLocalFunctions(func.Method);
@@ -1921,6 +1947,111 @@ namespace Osprey.Nodes
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
 			throw new InvalidOperationException(LambdaExpression.UnmovedLambda);
+		}
+	}
+
+	public sealed class UseInExpression : Expression
+	{
+		public UseInExpression(List<VariableDeclarator> variables, Expression inner)
+		{
+			this.Variables = variables;
+			this.Inner = inner;
+		}
+
+		/// <summary>The variables declared for use in this expression.</summary>
+		private List<VariableDeclarator> Variables;
+		/// <summary>The expression following the 'in' keyword; the result expression.</summary>
+		private Expression Inner;
+
+		// The block that contains the variable declarations
+		private Block VariableBlock;
+
+		public override bool IsTypeKnown(Compiler compiler)
+		{
+			return Inner.IsTypeKnown(compiler);
+		}
+
+		public override Type GetKnownType(Compiler compiler)
+		{
+			return Inner.GetKnownType(compiler);
+		}
+
+		public override string ToString(int indent)
+		{
+			var sb = new StringBuilder("use ");
+
+			var needSep = false;
+			foreach (var decl in Variables)
+			{
+				if (needSep)
+					sb.Append(", ");
+				else
+					needSep = true;
+				sb.Append(decl.ToString(indent + 1));
+			}
+
+			sb.Append(" in ");
+			sb.Append(Inner.ToString(indent + 1));
+			return sb.ToString();
+		}
+
+		public override Expression FoldConstant()
+		{
+			foreach (var decl in Variables)
+				decl.FoldConstant(false);
+			Inner = Inner.FoldConstant();
+
+			return this;
+		}
+
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
+		{
+			// Note: Expression has no DeclareNames method, so we declare the names here instead.
+			// The context is guaranteed to be a BlockSpace (inside a member with a body or another
+			// use-in expression) or Class (inside a field initializer).
+			var parentBlock = context as BlockSpace;
+
+			var vars = Variables;
+			VariableBlock = new Block(
+				new SimpleLocalVariableDeclaration(false, vars)
+				{
+					StartIndex = vars[0].StartIndex,
+					EndIndex = vars[vars.Count - 1].EndIndex,
+					Document = this.Document
+				}
+			);
+			if (parentBlock == null) // top-level use-in in field initializer
+			{
+				bool _;
+				VariableBlock.DeclSpace = new BlockSpace(VariableBlock, context.GetContainingClass(out _));
+			}
+			VariableBlock.DeclareNames(parentBlock);
+
+			foreach (var decl in vars)
+				decl.ResolveNames(VariableBlock.DeclSpace, document);
+			Inner = Inner.ResolveNames(VariableBlock.DeclSpace, document);
+
+			return this;
+		}
+
+		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			var varBlock = VariableBlock.DeclSpace;
+			foreach (var decl in Variables)
+				decl.Initializer = decl.Initializer.TransformClosureLocals(varBlock, forGenerator);
+			Inner = Inner.TransformClosureLocals(varBlock, forGenerator);
+			return this;
+		}
+
+		public override void Compile(Compiler compiler, MethodBuilder method)
+		{
+			// Compile the implicit block first. This assigns all the variables,
+			// initializes closure classes, the whole shebang. It even leaves
+			// the stack empty for us.
+			VariableBlock.Compile(compiler, method);
+
+			// And now the resulting expression
+			Inner.Compile(compiler, method);
 		}
 	}
 
@@ -2292,8 +2423,9 @@ namespace Osprey.Nodes
 			}
 
 			var block = context as BlockSpace;
-			if (block != null && block.Method is LocalMethod)
-				((LocalMethod)block.Method).Function.CapturesThis = true;
+			var localMethod = block != null ? block.Method as LocalMethod : null;
+			if (block != null && localMethod != null)
+				localMethod.Function.CapturesThis = true;
 
 			return this;
 		}
@@ -2307,10 +2439,10 @@ namespace Osprey.Nodes
 			}
 			else
 			{
-				var method = currentBlock.Method;
-				if (method is LocalMethod)
+				var localMethod = currentBlock.Method as LocalMethod;
+				if (localMethod != null)
 				{
-					var localFunc = ((LocalMethod)method).Function;
+					var localFunc = ((LocalMethod)localMethod).Function;
 					if (localFunc.CompilationStrategy == LocalFunctionCompilationStrategy.ClosureMethod)
 					{
 						// We're inside a closure class, oh my god! We've already made sure
@@ -2351,13 +2483,18 @@ namespace Osprey.Nodes
 			bool hasInstance;
 			var @class = context.GetContainingClass(out hasInstance);
 			if (!hasInstance)
+			{
+				if (context.IsInFieldInitializer())
+					throw new CompileTimeException(this, "Cannot refer to 'base' in a field initializer.");
 				throw new CompileTimeException(this, "'base' can only be used in an instance method.");
+			}
 			if (@class.BaseType == null)
 				throw new CompileTimeException(this, "'base' cannot be used inside aves.Object.");
 
 			var block = context as BlockSpace;
-			if (block != null && block.Method is LocalMethod)
-				((LocalMethod)block.Method).Function.CapturesThis = true;
+			var localMethod = block != null ? block.Method as LocalMethod : null;
+			if (block != null && localMethod != null)
+				localMethod.Function.CapturesThis = true;
 
 			return this;
 		}
@@ -2371,10 +2508,10 @@ namespace Osprey.Nodes
 			}
 			else
 			{
-				var method = currentBlock.Method;
-				if (method is LocalMethod)
+				var localMethod = currentBlock.Method as LocalMethod;
+				if (localMethod != null)
 				{
-					var localFunc = ((LocalMethod)method).Function;
+					var localFunc = localMethod.Function;
 					if (localFunc.CompilationStrategy == LocalFunctionCompilationStrategy.ClosureMethod)
 					{
 						// We're inside a closure class, oh my god! We've already made sure
@@ -2432,7 +2569,7 @@ namespace Osprey.Nodes
 					{
 						var variable = (GlobalVariable)member;
 						var block = context as BlockSpace;
-						if (block != null && block.Method != document.Compiler.MainMethod)
+						if (block != null && block.ContainingMember != document.Compiler.MainMethod)
 							variable.Capture();
 						return new GlobalVariableAccess(variable).At(this);
 					}

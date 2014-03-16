@@ -353,9 +353,12 @@ namespace Osprey.Nodes
 			if (Initializer != null)
 				foreach (var expr in Initializer)
 				{
-					if (expr.Document != null)
-						method.AppendLocation(expr.Document, expr.StartIndex, expr.EndIndex);
+					var hasLoc = method.PushLocation(expr);
+
 					expr.Compile(compiler, method);
+
+					if (hasLoc)
+						method.PopLocation();
 				}
 
 			var iMax = Statements.Count - 1;
@@ -460,7 +463,7 @@ namespace Osprey.Nodes
 			foreach (var decl in Declarators)
 				if (decl.Initializer != null)
 				{
-					method.AppendLocation(decl.Initializer);
+					method.PushLocation(decl.Initializer);
 					if (IsGlobal && decl.Variable.IsCaptured)
 					{
 						decl.Initializer.Compile(compiler, method); // Evaluate expression
@@ -490,6 +493,7 @@ namespace Osprey.Nodes
 						if (!(value is ILocalResultExpression))
 							method.Append(new StoreLocal(variable));
 					}
+					method.PopLocation(); // decl.Initializer
 				}
 		}
 	}
@@ -651,9 +655,10 @@ namespace Osprey.Nodes
 				}
 			}
 
-			method.AppendLocation(Value);
+			method.PushLocation(Value);
 			Value.Compile(compiler, method);
 			compiler.Unpack(method, assigners);
+			method.PopLocation(); // Value
 		}
 	}
 
@@ -783,10 +788,14 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(Expression);
+			var hasLoc = method.PushLocation(Expression);
+
 			Expression.Compile(compiler, method);
 			if (!(Expression is AssignmentExpression))
 				method.Append(new SimpleInstruction(Opcode.Pop));
+
+			if (hasLoc)
+				method.PopLocation(); // Expression
 		}
 	}
 
@@ -983,7 +992,7 @@ namespace Osprey.Nodes
 			else
 			{
 				// The condition will always be compiled next
-				method.AppendLocation(Condition);
+				method.PushLocation(Condition);
 
 				var elseLabel = new Label("else");
 				var bodyBlock = (Block)Body;
@@ -999,10 +1008,13 @@ namespace Osprey.Nodes
 						out loopState);
 
 					Condition.CompileBoolean(compiler, isBreak ? loopState.BreakLabel : loopState.NextLabel, true, method);
+					method.PopLocation(); // Condition
+					// fall through for else (if any)
 				}
 				else
 				{
 					Condition.CompileBoolean(compiler, elseLabel, false, method); // Evaluate the condition
+					method.PopLocation(); // Condition
 
 					Body.Compile(compiler, method); // Evaluate the if body
 				}
@@ -1337,7 +1349,7 @@ namespace Osprey.Nodes
 
 			// Output order: condition, body, increment
 			{ // Loop condition
-				method.AppendLocation(this);
+				method.PushLocation(this);
 				method.Append(loopCond);
 
 				rangeState.LoadCounter(compiler, method); // Load the counter
@@ -1346,17 +1358,19 @@ namespace Osprey.Nodes
 				method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= high
 				method.Append(Branch.IfFalse(loopEnd)); // If false, branch to end
 				// If true, run loop body
+				method.PopLocation(); // this
 			}
 			{ // Loop body
 				Body.Compile(compiler, method);
 			}
 			{ // Loop increment
-				method.AppendLocation(this);
+				method.PushLocation(this);
 				method.Append(loopNext); // 'next' target
 
 				rangeState.Increment(compiler, method); // counter += step
 
 				method.Append(Branch.Always(loopCond)); // Jump to condition (to re-test the counter)
+				method.PopLocation(); // this
 			}
 			if (this.IsEndReachable)
 				method.Append(loopEnd); // end of loop; also 'break' target
@@ -1394,21 +1408,24 @@ namespace Osprey.Nodes
 			method.PushState(loopState); // Enter the loop
 
 			{ // Loop condition
-				method.AppendLocation(List); // May change this to something else
+				method.PushLocation(List); // May change this to something else
+
 				method.Append(loopCond); // 'next' target
 				iterState.LoadIterator(compiler, method); // Load iterator
 				method.Append(new CallMember(method.Module.GetStringId("moveNext"), 0)); // Call iterator.moveNext()
 				method.Append(Branch.IfFalse(loopEnd)); // If iterator.moveNext() is false, end the loop
 				// Otherwise, evaluate the loop body
+
+				method.PopLocation(); // List
 			}
 			{ // Loop body
-				method.AppendLocation(this);
+				method.PushLocation(this);
 				iterState.UpdateCurrent(compiler, method); // Update the current iteration variables, based on iterator.current
 
 				Body.Compile(compiler, method);
 
-				method.AppendLocation(this);
 				method.Append(Branch.Always(loopCond)); // Move to next value
+				method.PopLocation(); // this
 			}
 			if (this.IsEndReachable)
 				method.Append(loopEnd); // End of loop; also 'break' target
@@ -1453,12 +1470,13 @@ namespace Osprey.Nodes
 			var loopEnd = new Label("for-end");
 			var elseLabel = new Label("for-else");
 
-			method.AppendLocation(this);
+			method.PushLocation(this);
 			rangeState.LoadCounter(compiler, method); // Load the counter
 			rangeState.LoadHighValue(compiler, method); // Load high value
 			method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= high
 
 			method.Append(Branch.IfFalse(elseLabel)); // branch to else if not (counter <= high)
+			method.PopLocation(); // this
 
 			{ // Main body
 				var loopState = new LoopState(Label, loopNext, loopEnd);
@@ -1469,7 +1487,7 @@ namespace Osprey.Nodes
 					Body.Compile(compiler, method);
 				}
 				{ // Loop increment
-					method.AppendLocation(this);
+					method.PushLocation(this);
 					method.Append(loopNext);
 
 					rangeState.Increment(compiler, method);
@@ -1481,13 +1499,15 @@ namespace Osprey.Nodes
 					method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= high
 
 					method.Append(Branch.IfTrue(loopBody)); // Run another iteration if counter <= high
+					method.PopLocation(); // this
 				}
 				method.PopState(expected: loopState); // Exit the loop
 
 				if (this.IsEndReachable)
 				{
-					method.AppendLocation(this);
+					method.PushLocation(this);
 					method.Append(Branch.Always(loopEnd)); // Jump past the else
+					method.PopLocation(); // this
 				}
 
 				rangeState.Done();
@@ -1532,10 +1552,13 @@ namespace Osprey.Nodes
 			var loopEnd = new Label("for-end");
 			var elseLabel = new Label("for-else");
 
-			method.AppendLocation(List);
+			method.PushLocation(List);
+
 			iterState.LoadIterator(compiler, method); // Load iterator
 			method.Append(new CallMember(method.Module.GetStringId("moveNext"), 0)); // Call iterator.moveNext()
 			method.Append(Branch.IfFalse(elseLabel)); // Branch to else if false
+
+			method.PopLocation(); // List
 
 			{ // Main body
 				var loopState = new LoopState(Label, loopNext, loopEnd);
@@ -1544,26 +1567,29 @@ namespace Osprey.Nodes
 				{ // Body
 					method.Append(loopBody);
 
-					method.AppendLocation(this);
+					method.PushLocation(this);
 					iterState.UpdateCurrent(compiler, method); // Update iteration variables
+					method.PopLocation(); // this
 
 					Body.Compile(compiler, method);
 				}
 				{ // Loop increment
-					method.AppendLocation(List);
+					method.PushLocation(List);
 					method.Append(loopNext);
 
 					iterState.LoadIterator(compiler, method); // Load iterator
 					method.Append(new CallMember(method.Module.GetStringId("moveNext"), 0)); // Call iterLoc.moveNext()
 					method.Append(Branch.IfTrue(loopBody)); // Run another iteration if iterLoc.moveNext()
+					method.PopLocation(); // List
 				}
 
 				method.PopState(expected: loopState);
 
 				if (this.IsEndReachable)
 				{
-					method.AppendLocation(this);
+					method.PushLocation(this);
 					method.Append(Branch.Always(loopEnd)); // Jump past else
+					method.PopLocation(); // this
 				}
 			}
 
@@ -1592,7 +1618,7 @@ namespace Osprey.Nodes
 
 			public void Init(Compiler compiler, MethodBuilder method)
 			{
-				method.AppendLocation(Range.Low);
+				method.PushLocation(Range.Low);
 				if (Counter.IsCaptured && Counter.CaptureField.Parent is GeneratorClass)
 				{
 					method.Append(new LoadLocal(method.GetParameter(0)));
@@ -1605,10 +1631,11 @@ namespace Osprey.Nodes
 					Range.Low.Compile(compiler, method);
 					method.Append(new StoreLocal(CounterLoc));
 				}
+				method.PopLocation();
 
 				if (!Range.High.CanSafelyInline)
 				{
-					method.AppendLocation(Range.High);
+					method.PushLocation(Range.High);
 					if (HighField != null)
 					{
 						method.Append(new LoadLocal(method.GetParameter(0)));
@@ -1621,11 +1648,12 @@ namespace Osprey.Nodes
 						Range.High.Compile(compiler, method);
 						method.Append(new StoreLocal(HighLoc));
 					}
+					method.PopLocation();
 				}
 
 				if (!Range.Step.CanSafelyInline)
 				{
-					method.AppendLocation(Range.Step);
+					method.PushLocation(Range.Step);
 					if (StepField != null)
 					{
 						method.Append(new LoadLocal(method.GetParameter(0)));
@@ -1638,6 +1666,7 @@ namespace Osprey.Nodes
 						Range.Step.Compile(compiler, method);
 						method.Append(new StoreLocal(StepLoc));
 					}
+					method.PopLocation();
 				}
 			}
 
@@ -1741,7 +1770,7 @@ namespace Osprey.Nodes
 					}
 				}
 
-				method.AppendLocation(iterExpr);
+				method.PushLocation(iterExpr);
 				if (IterField != null)
 				{
 					method.Append(new LoadLocal(method.GetParameter(0)));
@@ -1756,6 +1785,7 @@ namespace Osprey.Nodes
 					method.Append(new SimpleInstruction(Opcode.Lditer));
 					method.Append(new StoreLocal(IterLoc));
 				}
+				method.PopLocation();
 			}
 
 			public void Done()
@@ -1890,18 +1920,20 @@ namespace Osprey.Nodes
 
 			if (!(Condition is ConstantExpression))
 			{
-				method.AppendLocation(this);
+				method.PushLocation(this);
 				method.Append(Branch.Always(loopCond)); // Branch to condition if non-constant
+				method.PopLocation();
 			}
 			{ // Body
 				method.Append(loopBody);
 				Body.Compile(compiler, method); // Evaluate the body
 			}
 			{ // Condition
-				method.AppendLocation(Condition);
+				method.PushLocation(Condition);
 				method.Append(loopCond);
 				Condition.CompileBoolean(compiler, loopBody, true, method);
 				// Fall through for false
+				method.PopLocation();
 			}
 			if (this.IsEndReachable)
 				method.Append(loopEnd);
@@ -1984,11 +2016,12 @@ namespace Osprey.Nodes
 
 			if (Condition != null && IsConditionReachable)
 			{ // Condition
-				method.AppendLocation(Condition);
+				method.PushLocation(Condition);
 				method.Append(loopCond);
 
 				Condition.CompileBoolean(compiler, loopStart, true, method);
 				// Fall through for false (negated: true)
+				method.PopLocation(); // Condition
 			}
 			if (this.IsEndReachable)
 				method.Append(loopEnd);
@@ -2417,7 +2450,7 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(this);
+			var hasLoc = method.PushLocation(this);
 
 			var inGenerator = stateField != null;
 
@@ -2457,6 +2490,9 @@ namespace Osprey.Nodes
 				ReturnValues[0].Compile(compiler, method);
 				method.Append(new SimpleInstruction(Opcode.Ret));
 			}
+
+			if (hasLoc)
+				method.PopLocation(); // this
 		}
 	}
 
@@ -2534,7 +2570,7 @@ namespace Osprey.Nodes
 
 			ParentMethod.Yields.Add(this); // Mark this yield as reachable
 
-			method.AppendLocation(this);
+			method.PushLocation(this);
 
 			method.Append(new LoadLocal(method.GetParameter(0))); // Load 'this'
 			ReturnValues[0].Compile(compiler, method); // Evaluate yield value
@@ -2551,6 +2587,8 @@ namespace Osprey.Nodes
 			method.Append(new SimpleInstruction(Opcode.Ret)); // Return true
 
 			method.Append(StateLabel); // Continue after this yield
+
+			method.PopLocation(); // this
 		}
 	}
 
@@ -2592,13 +2630,14 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(this);
+			method.PushLocation(this);
 			IterationStatement.LoopState loop;
 			IterationStatement.FindLoopState(method, Label, out loop);
 			if (IsLeave)
 				method.Append(Branch.Leave(loop.NextLabel));
 			else
 				method.Append(Branch.Always(loop.NextLabel));
+			method.PopLocation(); // this
 		}
 	}
 
@@ -2636,13 +2675,14 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(this);
+			method.PushLocation(this);
 			IterationStatement.LoopState loop;
 			IterationStatement.FindLoopState(method, Label, out loop);
 			if (IsLeave)
 				method.Append(Branch.Leave(loop.BreakLabel));
 			else
 				method.Append(Branch.Always(loop.BreakLabel));
+			method.PopLocation(); // this
 		}
 	}
 
@@ -2704,7 +2744,7 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(this);
+			method.PushLocation(this);
 			if (Value == null)
 				method.Append(new SimpleInstruction(Opcode.Rethrow));
 			else
@@ -2712,6 +2752,7 @@ namespace Osprey.Nodes
 				Value.Compile(compiler, method);
 				method.Append(new SimpleInstruction(Opcode.Throw));
 			}
+			method.PopLocation(); // this
 		}
 	}
 
@@ -2850,8 +2891,9 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(this);
+			method.PushLocation(this);
 			((AssignableExpression)Target).CompileCompoundAssignment(compiler, method, Value, Operator);
+			method.PopLocation();
 		}
 	}
 
@@ -2912,11 +2954,12 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(this);
+			method.PushLocation(this);
 			if (Values.Count == 1)
 				CompileOneToMany(compiler, method);
 			else
 				CompileManyToMany(compiler, method);
+			method.PopLocation();
 		}
 
 		private void CompileOneToMany(Compiler compiler, MethodBuilder method)
@@ -3130,7 +3173,7 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			method.AppendLocation(this);
+			method.PushLocation(this);
 			method.Append(new LoadLocal(method.GetParameter(0))); // Load 'this'
 
 			foreach (var arg in Arguments) // Evaluate each argument
@@ -3138,6 +3181,7 @@ namespace Osprey.Nodes
 
 			method.Append(new StaticCall(method.Module.GetMethodId(constructor), Arguments.Count)); // Call the base constructor
 			method.Append(new SimpleInstruction(Opcode.Pop));
+			method.PopLocation(); // this
 		}
 	}
 }

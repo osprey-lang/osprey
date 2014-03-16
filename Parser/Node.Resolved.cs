@@ -320,7 +320,7 @@ namespace Osprey.Nodes
 						 * several levels within the current method - is not possible.
 						 */
 						var group = Function.Method.Group;
-						if (Function.Parent.Method == currentBlock.Method)
+						if (Function.Parent.ContainingMember == currentBlock.ContainingMember)
 							// The function is declared inside this method.
 							// Load it from the appropriate closure local.
 							return new InstanceMemberAccess(

@@ -609,7 +609,7 @@ namespace Osprey
 						throw new ModuleLoadException(reader.FileName, "Could not find an overload for OperatorDef.");
 
 					var overload = new OperatorOverload((int)op, target, (ClassMemberMethod)method);
-					target.DeclareOperatorOverload(overload);
+					target.ImportOperatorOverload(overload);
 				}
 
 				if (reader.BaseStream.Position != posBefore + size)

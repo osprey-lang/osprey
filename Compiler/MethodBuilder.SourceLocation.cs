@@ -58,6 +58,8 @@ namespace Osprey
 		/// </summary>
 		public int BytecodeEndOffset { get { return endOffset; } }
 
+		internal SourceLocation Previous;
+
 		public int GetLineNumber(int tabSize, out int column)
 		{
 			return Token.GetLineNumber(document.FileSource, startIndex, tabSize, out column);

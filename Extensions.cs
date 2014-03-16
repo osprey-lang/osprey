@@ -223,5 +223,25 @@ namespace Osprey
 			{'\u2028', "\\u2028"}, // Line Separator
 			{'\u2029', "\\u2029"}, // Paragraph separator
 		};
+
+		public static string ToStringInvariant(this int value)
+		{
+			return value.ToString(CI.InvariantCulture);
+		}
+
+		public static string ToStringInvariant(this long value)
+		{
+			return value.ToString(CI.InvariantCulture);
+		}
+
+		public static string ToStringInvariant(this ulong value)
+		{
+			return value.ToString(CI.InvariantCulture);
+		}
+
+		public static string ToStringInvariant(this double value)
+		{
+			return value.ToString(CI.InvariantCulture);
+		}
 	}
 }
