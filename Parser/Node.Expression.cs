@@ -24,7 +24,11 @@ namespace Osprey.Nodes
 		{
 			get
 			{
-				return this is ThisAccess || // this is BaseAccess || // 'base' is not supposed to occur on its own
+				var lva = this as LocalVariableAccess;
+				if (lva != null)
+					return lva.Variable.CanSafelyInline;
+
+				return this is ThisAccess || // but not BaseAccess; 'base' is not supposed to occur on its own
 					this is ConstantExpression ||
 					this is StaticMethodAccess ||
 					this is GetArgumentCount;
@@ -3582,7 +3586,15 @@ namespace Osprey.Nodes
 		{
 			if (ImplicitBlock == null)
 			{
-				ImplicitBlock = new BlockSpace(new Block(), context as BlockSpace);
+				var contextBlock = context as BlockSpace;
+				if (contextBlock == null)
+				{
+					// List comprehension in field initializer
+					bool _;
+					ImplicitBlock = new BlockSpace(new Block(), context.GetContainingClass(out _));
+				}
+				else
+					ImplicitBlock = new BlockSpace(new Block(), contextBlock);
 				var additionalAccessStart = Expressions[0].StartIndex;
 				var additionalAccessEnd = Expressions[Expressions.Count - 1].EndIndex;
 				foreach (var iter in Parts)

@@ -433,7 +433,7 @@ namespace Osprey
 
 			// parse all use directives first
 			while (Accept(ref i, TokenType.Use))
-				document.Uses.Add(ParseUse(ref i));
+				document.Uses.Add(ParseUseDirective(ref i));
 
 			var fileNs = document.GlobalDeclarationSpace;
 
@@ -500,7 +500,7 @@ namespace Osprey
 			return new Version(major, minor, build, revision);
 		}
 
-		private UseDirective ParseUse(ref int i)
+		private UseDirective ParseUseDirective(ref int i)
 		{
 			int start = tok[i - 1].Index, end = tok[i - 1].EndIndex;
 
@@ -509,7 +509,7 @@ namespace Osprey
 				var token = tok[i];
 				i++;
 				Expect(ref i, TokenType.Semicolon);
-				return new UseScriptDirective(new StringLiteral((StringToken)token))
+				return new UseFileDirective(new StringLiteral((StringToken)token))
 				{
 					StartIndex = start,
 					EndIndex = end,

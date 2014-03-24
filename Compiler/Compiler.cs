@@ -784,10 +784,10 @@ namespace Osprey
 		private void ProcessImports(HashSet<string> newFiles, HashSet<string> modules, string docFile, Document doc)
 		{
 			foreach (var use in doc.Uses)
-				if (use is UseScriptDirective)
+				if (use is UseFileDirective)
 				{
 					// UseScriptDirective.Name is a StringLiteral, which inherits from ConstantExpression
-					var fileName = ((UseScriptDirective)use).Name.StringValue;
+					var fileName = ((UseFileDirective)use).Name.StringValue;
 
 					// Make the file name absolute, but resolve it relative to the document!
 					// If you have the following file structure:

@@ -93,9 +93,9 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class UseScriptDirective : UseDirective
+	public sealed class UseFileDirective : UseDirective
 	{
-		public UseScriptDirective(StringLiteral name)
+		public UseFileDirective(StringLiteral name)
 		{
 			if (name.Value.Type != ConstantValueType.String)
 				throw new ArgumentException("The script name must be a string literal.");

@@ -1559,6 +1559,35 @@ namespace Osprey.Members
 			get { return (Parameter)Node; }
 		}
 
+		public bool CanSafelyInline
+		{
+			get
+			{
+				var kind = varKind;
+				if (kind == VariableKind.IterationVariable ||
+					kind == VariableKind.WithVariable)
+					// These variables cannot be reassigned
+					return true;
+				if (kind == VariableKind.CatchVariable)
+					// Catch variables get assigned once by the catch block;
+					// they have AssignmentCount = 1 if never reassigned
+					return AssignmentCount == 1;
+				if (kind == VariableKind.Parameter)
+					// Parameters have AssignmentCount = 0 if never reassigned
+					return AssignmentCount == 0;
+
+				var decl = Node as VariableDeclarator;
+				if (decl != null)
+					// If the variable is only ever assigned to by
+					// its initializer, we can inline it
+					return decl.Initializer != null && AssignmentCount == 1;
+
+				// Other, more unusual scenarios are not worth
+				// bothering with, so we just return false here.
+				return false;
+			}
+		}
+
 		internal virtual void Capture()
 		{
 			if (isCaptured)
