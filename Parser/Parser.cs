@@ -504,42 +504,33 @@ namespace Osprey
 		{
 			int start = tok[i - 1].Index, end = tok[i - 1].EndIndex;
 
+			UseDirective result;
 			if (Accept(i, TokenType.String)) // use "<script name>";
 			{
 				var token = tok[i];
 				i++;
 				Expect(ref i, TokenType.Semicolon);
-				return new UseFileDirective(new StringLiteral((StringToken)token))
-				{
-					StartIndex = start,
-					EndIndex = end,
-					Document = document,
-				};
+				result = new UseFileDirective(new StringLiteral((StringToken)token));
 			}
 			else if (Accept(ref i, TokenType.Namespace)) // use namespace foo.bar.baz;
 			{
 				var name = ParseQualifiedName(ref i);
 				Expect(ref i, TokenType.Semicolon);
-				return new UseNamespaceDirective(name)
-				{
-					StartIndex = start,
-					EndIndex = end,
-					Document = document,
-				};
+				result = new UseNamespaceDirective(name);
 			}
 			else if (Accept(i, TokenType.Identifier)) // use foo.bar.baz;
 			{
 				var name = ParseQualifiedName(ref i);
 				Expect(ref i, TokenType.Semicolon);
-				return new UseModuleDirective(name)
-				{
-					StartIndex = start,
-					EndIndex = end,
-					Document = document,
-				};
+				result = new UseModuleDirective(name);
 			}
 			else
 				throw new ParseException(tok[i], "Expected identifier, string or 'namespace'.");
+
+			result.StartIndex = start;
+			result.EndIndex = end;
+			result.Document = document;
+			return result;
 		}
 
 		private MemberModifiers ParseModifiers(ref int i)
@@ -655,7 +646,7 @@ namespace Osprey
 
 					var ns = new NamespaceDeclaration(name) { Document = document };
 					if (Accept(i, TokenType.Semicolon))
-						throw new ParseException(tok[i], "The file namespace declaration is only allowed at the top of the script, after any use declarations.");
+						throw new ParseException(tok[i], "The file namespace declaration is only allowed at the beginning of the file, after any use declarations.");
 					else if (!Accept(i, TokenType.CurlyOpen))
 						throw new ParseException(tok[i], "Expected namespace body.");
 

@@ -77,14 +77,17 @@ namespace Osprey
 			return (Module.Operator)ReadByte();
 		}
 
-		public void SkipHeader()
+		public uint SkipHeader()
 		{
 			var magicNumber = ReadBytes(4);
 			for (var i = 0; i < 4; i++)
 				if (magicNumber[i] != Module.MagicNumber[i])
 					throw new ModuleLoadException(fileName, "Invalid magic number in file.");
 
+			// Module file format version
+			uint version = ReadUInt32();
 			Seek(Module.DataStart, SeekOrigin.Begin);
+			return version;
 		}
 
 		/// <summary>

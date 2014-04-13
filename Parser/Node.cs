@@ -183,6 +183,9 @@ namespace Osprey.Nodes
 		{
 			IsPublic = isPublic;
 			Function = func;
+			StartIndex = func.StartIndex;
+			EndIndex = func.EndIndex;
+			Document = func.Document;
 		}
 
 		/// <summary>Indicates whether the function has the modifier "public".</summary>

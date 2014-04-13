@@ -16,13 +16,14 @@ namespace Osprey
 	public sealed partial class Module
 	{
 		public Module(ModulePool pool, string name, Version version)
-			: this(pool, name, version, false)
+			: this(pool, name, version, MaxFileFormatVersion, false)
 		{ }
-		private Module(ModulePool pool, string name, Version version, bool imported)
+		private Module(ModulePool pool, string name, Version version, uint fileFormatVersion, bool imported)
 		{
 			this.pool = pool;
 			this.name = name;
 			this.version = version;
+			this.fileFormatVersion = fileFormatVersion;
 			this.imported = imported;
 
 			this.members = new MemberDefsAndRefs(imported);
@@ -56,6 +57,12 @@ namespace Osprey
 		/// </summary>
 		/// <remarks>The module that's being compiled has version 1.0.0.0 unless specified on the command line.</remarks>
 		public Version Version { get { return version; } }
+
+		private uint fileFormatVersion;
+		/// <summary>
+		/// Gets the file format version number used by this module.
+		/// </summary>
+		public uint FileFormatVersion { get { return fileFormatVersion; } }
 
 		private bool imported;
 		/// <summary>
@@ -387,13 +394,17 @@ namespace Osprey
 			return offset;
 		}
 
+		// Minimum supported file format version number (reading)
+		internal const uint MinFileFormatVersion = 0x00000100u;
+		// Maximum supported file format version number (reading and writing)
+		internal const uint MaxFileFormatVersion = 0x00000100u;
+
 		internal const uint MaskMask          = 0xff000000u;
 		internal const uint GlobalConstMask   = 0x02000000u;
 		internal const uint GlobalFuncDefMask = 0x04000000u;
 		internal const uint TypeDefMask       = 0x10000000u;
 		internal const uint FieldDefMask      = 0x12000000u;
 		internal const uint MethodDefMask     = 0x14000000u;
-		//internal const uint PropertyDefMask = 0x18000000u;
 		internal const uint StringMask        = 0x20000000u;
 		internal const uint ModuleRefMask     = 0x40000000u;
 		internal const uint GlobalFuncRefMask = 0x44000000u;

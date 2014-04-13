@@ -41,7 +41,12 @@ namespace Osprey
 			fileName = Path.GetFullPath(fileName);
 
 			var reader = new ModuleReader(File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.Read), Encoding.Unicode);
-			reader.SkipHeader();
+			var fileFormatVersion = reader.SkipHeader();
+			if (fileFormatVersion < MinFileFormatVersion ||
+				fileFormatVersion > MaxFileFormatVersion)
+				throw new ModuleLoadException(fileName,
+					string.Format("Unsupported module file version number (found {0:X4}, should be between {1:X4} and {2:X4}).",
+						fileFormatVersion, MinFileFormatVersion, MaxFileFormatVersion));
 
 			// First the module name and version
 			var modName = reader.ReadOvumString();
@@ -56,7 +61,7 @@ namespace Osprey
 			reader.Seek(/*sizeof(UTF-16 codon)*/ 2 * nativeLibStrlen, SeekOrigin.Current);
 
 			// We have enough information to create a Module object, and populate it with some basic data!
-			var output = new Module(pool, modName, modVersion, true);
+			var output = new Module(pool, modName, modVersion, fileFormatVersion, true);
 			pool.AddModule(output.name, output); // For detecting circular dependencies
 
 			// Skip typeCount, functionCount, constantCount, fieldCount, methodCount and methodStart

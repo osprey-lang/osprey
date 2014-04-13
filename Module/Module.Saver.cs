@@ -28,8 +28,8 @@ namespace Osprey
 			var writer = new ModuleWriter(target, Encoding.Unicode);
 
 			writer.Write(MagicNumber, 0, 4); // Magic number
-			for (var i = 0; i < DataStart - 4; i++) // Pad with zeroes until DataStart
-				writer.Write((byte)0);
+			writer.Write(fileFormatVersion); // File format version number
+			writer.Seek(DataStart, SeekOrigin.Begin); // Skip forward to DataStart
 
 			writer.Write(this.name); // Module name
 			writer.Write(this.version); // Module version
