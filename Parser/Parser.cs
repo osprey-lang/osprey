@@ -592,14 +592,14 @@ namespace Osprey
 				if (Accept(i, TokenType.Class) || i > 0 && tok[i - 1].Match(TokenType.Inheritable)) // class declaration
 				{
 					modifiers.ValidateForClass(tok[i]);
-					var @class = ParseClass(ref i, modifiers);
+					var @class = ParseClass(ref i, ref modifiers);
 					@class.DocString = startTok.Documentation;
 					target.Types.Add(@class);
 				}
 				else if (Accept(i, TokenType.Enum)) // enum declaration
 				{
 					modifiers.ValidateForEnum(tok[i]);
-					var @enum = ParseEnum(ref i, modifiers);
+					var @enum = ParseEnum(ref i, ref modifiers);
 					@enum.DocString = startTok.Documentation;
 					target.Types.Add(@enum);
 				}
@@ -674,7 +674,7 @@ namespace Osprey
 			}
 		}
 
-		private ClassDeclaration ParseClass(ref int i, MemberModifiers modifiers)
+		private ClassDeclaration ParseClass(ref int i, ref MemberModifiers modifiers)
 		{
 			Accept(ref i, TokenType.Class); // if modifiers.IsInheritable, class is optional
 
@@ -727,55 +727,7 @@ namespace Osprey
 				var modifiers = ParseModifiers(ref i);
 				if (Accept(i, TokenType.New))
 				{
-					var newTok = tok[i++];
-					modifiers.ValidateForConstructor(newTok);
-					Expect(ref i, TokenType.ParenOpen);
-
-					Splat splat;
-					var parameters = ParseConstructorParameters(ref i, out splat);
-
-					Expect(ref i, TokenType.ParenClose);
-
-					if (modifiers.IsStatic)
-					{
-						if (parameters.Count > 0)
-							throw new ParseException(parameters[0], tok.Source, "Static constructors cannot declare any parameters.");
-
-						// Note: ParseConstructorBody permits an optional 'new base(...);' as
-						// the first statement, so we can't use that here.
-						var body = ParseBlockOrExtern(ref i);
-						target.StaticConstructor = new ConstructorDeclaration(parameters, body)
-						{
-							StartIndex = newTok.Index,
-							EndIndex = newTok.EndIndex,
-							Document = document,
-							DocString = startTok.Documentation,
-						};
-					}
-					else
-					{
-						Block body;
-						ConstructorCall ctorCall = null;
-						if (Accept(i, TokenType.Semicolon))
-							body = new Block()
-							{
-								StartIndex = tok[i].Index,
-								EndIndex = tok[i++].EndIndex,
-								Document = document,
-							};
-						else
-							// Permits 'new base(...);' as first statement
-							body = ParseConstructorBody(ref i, out ctorCall);
-
-						target.Constructors.Add(new ConstructorDeclaration(modifiers.Access, parameters, splat, body)
-						{
-							ConstructorCall = ctorCall,
-							StartIndex = newTok.Index,
-							EndIndex = newTok.EndIndex,
-							Document = document,
-							DocString = startTok.Documentation,
-						});
-					}
+					ParseConstructorDeclaration(ref i, target, startTok, ref modifiers);
 				}
 				else if (Accept(i, TokenType.Const, TokenType.Var)) // field (maybe even a constant one)
 				{
@@ -799,7 +751,7 @@ namespace Osprey
 				else if (Accept(i, TokenType.Function)) // method
 				{
 					i++;
-					var method = ParseMethod(ref i, modifiers);
+					var method = ParseMethod(ref i, ref modifiers);
 					method.DocString = startTok.Documentation;
 					target.Methods.Add(method);
 				}
@@ -809,9 +761,9 @@ namespace Osprey
 
 					PropertyAccessorDeclaration decl;
 					if (Accept(i, TokenType.This))
-						decl = ParseIndexer(ref i, isSetter, modifiers);
+						decl = ParseIndexer(ref i, isSetter, ref modifiers);
 					else
-						decl = ParseProperty(ref i, isSetter, modifiers);
+						decl = ParseProperty(ref i, isSetter, ref modifiers);
 
 					decl.DocString = startTok.Documentation;
 					target.Properties.Add(decl);
@@ -855,7 +807,7 @@ namespace Osprey
 					{
 						if (modifiers.IsStatic)
 							throw new ParseException(tok[i], "This member cannot be declared static.");
-						var method = ParseMethod(ref i, modifiers);
+						var method = ParseMethod(ref i, ref modifiers);
 						method.DocString = startTok.Documentation;
 						target.Methods.Add(method);
 					}
@@ -865,7 +817,7 @@ namespace Osprey
 						// If the next token is a ParenOpen, it's a method.
 						if (Accept(i + 1, TokenType.ParenOpen))
 						{
-							var method = ParseMethod(ref i, modifiers);
+							var method = ParseMethod(ref i, ref modifiers);
 							method.DocString = startTok.Documentation;
 							target.Methods.Add(method);
 						}
@@ -888,7 +840,7 @@ namespace Osprey
 					// }
 					// Note that the name of the method could still be 'this', because it
 					// might be an invocator.
-					var method = ParseMethod(ref i, modifiers);
+					var method = ParseMethod(ref i, ref modifiers);
 					method.DocString = startTok.Documentation;
 					target.Methods.Add(method);
 				}
@@ -904,25 +856,82 @@ namespace Osprey
 			}
 		}
 
-		private List<ConstructorParam> ParseConstructorParameters(ref int i, out Splat splat)
+		private void ParseConstructorDeclaration(ref int i, ClassDeclaration target, Token startTok, ref MemberModifiers modifiers)
 		{
-			var output = new List<ConstructorParam>();
-			splat = Splat.None;
+			var newTok = tok[i++];
+			modifiers.ValidateForConstructor(newTok);
+			Expect(ref i, TokenType.ParenOpen);
+
+			var parameters = ParseConstructorParameters(ref i);
+
+			Expect(ref i, TokenType.ParenClose);
+
+			if (modifiers.IsStatic)
+			{
+				if (parameters.Parameters.Count > 0)
+					throw new ParseException(parameters.Parameters[0], tok.Source, "Static constructors cannot declare any parameters.");
+
+				// Note: ParseConstructorBody permits an optional 'new base(...);' as
+				// the first statement, so we can't use that here.
+				var body = ParseBlockOrExtern(ref i);
+				target.StaticConstructor = new ConstructorDeclaration(parameters.Parameters, body)
+				{
+					StartIndex = newTok.Index,
+					EndIndex = newTok.EndIndex,
+					Document = document,
+					DocString = startTok.Documentation,
+				};
+			}
+			else
+			{
+				Block body;
+				ConstructorCall ctorCall = null;
+				if (Accept(i, TokenType.Semicolon))
+					body = new Block()
+					{
+						StartIndex = tok[i].Index,
+						EndIndex = tok[i++].EndIndex,
+						Document = document,
+					};
+				else
+					// Permits 'new base(...);' as first statement
+					body = ParseConstructorBody(ref i, out ctorCall);
+
+				target.Constructors.Add(new ConstructorDeclaration(modifiers.Access, parameters.Parameters, parameters.Splat, body)
+				{
+					ConstructorCall = ctorCall,
+					StartIndex = newTok.Index,
+					EndIndex = newTok.EndIndex,
+					Document = document,
+					DocString = startTok.Documentation,
+				});
+			}
+		}
+
+		private ParameterInfo<ConstructorParam> ParseConstructorParameters(ref int i)
+		{
+			var output = new ParameterInfo<ConstructorParam>(new List<ConstructorParam>());
+			output.Splat = Splat.None;
 
 			if (Accept(i, TokenType.ParenClose))
 				return output;
 
 			if (Accept(ref i, TokenType.Splat))
-				splat = Splat.Beginning;
+				output.Splat = Splat.Beginning;
 
 			var optionalSeen = false;
+			bool isByRef;
 			do
 			{
+				isByRef = Accept(ref i, TokenType.Ref);
+				output.HasRefParams |= isByRef;
 				var thisPrefix = Accept(ref i, TokenType.This);
 
 				Token nameTok;
 				if (thisPrefix) // this.<name> parameter
 				{
+					if (isByRef)
+						throw new ParseException(tok[i], "A 'this' parameter cannot be passed by reference.");
 					Expect(ref i, TokenType.Dot);
 					nameTok = Expect(ref i, TokenType.Identifier);
 				}
@@ -931,25 +940,31 @@ namespace Osprey
 				else
 					throw new ParseException(tok[i], "Expected identifier or 'this'.");
 
+				if (isByRef && output.Splat == Splat.Beginning && output.Parameters.Count == 0)
+					throw new ParseException(nameTok, CannotPassVariadicParamByRef);
+
 				if (Accept(i, TokenType.Assign)) // optional parameter
 				{
-					if (splat != Splat.None)
-						throw new ParseException(tok[i], "Optional parameters cannot be combined with a splat.");
+					if (output.Splat != Splat.None)
+						throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+					if (isByRef)
+						throw new ParseException(tok[i], CannotPassOptionalParamByRef);
 					i++;
+
 					var value = ParseExpression(ref i);
 					// As in ParseParameterList, the default value expression is validated later.
-					output.Add(new ConstructorParam(nameTok.Value, thisPrefix, value)
+					output.Parameters.Add(new ConstructorParam(nameTok.Value, thisPrefix, value)
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
 						Document = document,
 					});
-					optionalSeen = true;
+					output.HasOptionalParams = optionalSeen = true;
 				}
 				else if (optionalSeen)
-					throw new ParseException(tok[i - 1], "Required parameters must come before optional parameters.");
+					throw new ParseException(nameTok, RequiredParamAfterOptional);
 				else
-					output.Add(new ConstructorParam(nameTok.Value, thisPrefix, null)
+					output.Parameters.Add(new ConstructorParam(nameTok.Value, thisPrefix, isByRef)
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
@@ -960,11 +975,13 @@ namespace Osprey
 			if (Accept(i, TokenType.Splat))
 			{
 				if (optionalSeen)
-					throw new ParseException(tok[i], "Splats cannot be combined with optional parameters.");
-				else if (splat != Splat.None)
-					throw new ParseException(tok[i], "There can only be one splat per parameter list, and it must be at the very beginning or the very end of the list.");
+					throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+				if (isByRef)
+					throw new ParseException(tok[i], CannotPassVariadicParamByRef);
+				if (output.Splat != Splat.None)
+					throw new ParseException(tok[i], MoreThanOneVariadicParam);
 				i++;
-				splat = Splat.End;
+				output.Splat = Splat.End;
 			}
 
 			return output;
@@ -1037,7 +1054,7 @@ namespace Osprey
 			};
 		}
 
-		private MethodDeclaration ParseMethod(ref int i, MemberModifiers modifiers)
+		private MethodDeclaration ParseMethod(ref int i, ref MemberModifiers modifiers)
 		{
 			if (!Accept(i, TokenType.Identifier, TokenType.This))
 				throw new ParseException(tok[i], "Expected identifier or 'this'.");
@@ -1077,7 +1094,7 @@ namespace Osprey
 				};
 		}
 
-		private PropertyAccessorDeclaration ParseProperty(ref int i, bool isSetter, MemberModifiers modifiers)
+		private PropertyAccessorDeclaration ParseProperty(ref int i, bool isSetter, ref MemberModifiers modifiers)
 		{
 			var nameTok = Expect(ref i, TokenType.Identifier);
 			modifiers.ValidateForMethodOrProperty(nameTok);
@@ -1112,15 +1129,17 @@ namespace Osprey
 			};
 		}
 
-		private IndexerAccessorDeclaration ParseIndexer(ref int i, bool isSetter, MemberModifiers modifiers)
+		private IndexerAccessorDeclaration ParseIndexer(ref int i, bool isSetter, ref MemberModifiers modifiers)
 		{
 			var startTok = Expect(ref i, TokenType.This);
 			modifiers.ValidateForIndexer(startTok);
 			Expect(ref i, TokenType.SquareOpen);
 
 			var parameters = ParseParameterList(ref i, null, false, TokenType.SquareClose);
-			if (parameters.HasOptionalParams || parameters.Splat != Splat.None)
-				throw new ParseException(startTok, "Indexers may not have optional parameters or splats ('...').");
+			if (parameters.HasOptionalParams ||
+				parameters.HasRefParams ||
+				parameters.Splat != Splat.None)
+				throw new ParseException(startTok, "Indexers cannot have any optional, variadic or pass-by-reference parameters.");
 
 			Expect(ref i, TokenType.SquareClose);
 
@@ -1179,10 +1198,11 @@ namespace Osprey
 			Expect(ref i, TokenType.ParenOpen); // opening parenthesis no matter what
 
 			var parameters = ParseParameterList(ref i, null, false);
-			if (parameters.Splat != Splat.None)
-				throw new ParseException(tok[opTokenIndex], "Operator overloads cannot have any '...' terms in the parameter list.");
-			if (parameters.HasOptionalParams)
-				throw new ParseException(tok[opTokenIndex], "Operator overloads cannot have any optional parameters.");
+			if (parameters.HasOptionalParams ||
+				parameters.HasRefParams ||
+				parameters.Splat != Splat.None)
+				throw new ParseException(tok[opTokenIndex],
+					"Operator overloads cannot have any optional, variadic or pass-by-reference parameters.");
 
 			Expect(ref i, TokenType.ParenClose); // ahem
 
@@ -1242,7 +1262,7 @@ namespace Osprey
 			}
 		}
 
-		private EnumDeclaration ParseEnum(ref int i, MemberModifiers modifiers)
+		private EnumDeclaration ParseEnum(ref int i, ref MemberModifiers modifiers)
 		{
 			Expect(ref i, TokenType.Enum);
 
@@ -1376,13 +1396,13 @@ namespace Osprey
 			return new QualifiedName(idents) { StartIndex = start, EndIndex = tok[i - 1].EndIndex, Document = document };
 		}
 
-		private ParameterInfo ParseParameterList(ref int i, List<Parameter> parameters = null,
+		private ParameterInfo<Parameter> ParseParameterList(ref int i, List<Parameter> parameters = null,
 			bool allowEmpty = true, TokenType end = TokenType.ParenClose)
 		{
 			if (parameters == null)
 				parameters = new List<Parameter>();
 
-			var output = new ParameterInfo(parameters);
+			var output = new ParameterInfo<Parameter>(parameters);
 
 			if (Accept(i, end))
 			{
@@ -1396,37 +1416,43 @@ namespace Osprey
 				output.Splat = Splat.Beginning;
 
 			var optionalSeen = false;
+			bool isByRef;
 			do
 			{
-				Expect(i, TokenType.Identifier);
-				var name = tok[i].Value;
-				var startParam = tok[i++].Index;
+				isByRef = Accept(ref i, TokenType.Ref);
+				output.HasRefParams |= isByRef;
+				var nameTok = Expect(ref i, TokenType.Identifier);
+
+				if (isByRef && output.Splat == Splat.Beginning && parameters.Count == 0)
+					throw new ParseException(nameTok, CannotPassVariadicParamByRef); 
 
 				if (Accept(i, TokenType.Assign)) // optional parameter/argument
 				{
 					if (output.Splat != Splat.None)
-						throw new ParseException(tok[i], "Optional parameters cannot be combined with a splat.");
+						throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+					if (isByRef)
+						throw new ParseException(tok[i], CannotPassOptionalParamByRef);
 					i++;
-					// Technically, literals are expressions. And besides, using
-					// ParseExpression() lets me generate better error messages.
+
 					var value = ParseExpression(ref i);
 					// The expression is validated at a later stage of parsing,
-					// since it needs to be a constant expression.
-					parameters.Add(new Parameter(name, value)
+					// since it needs to be a constant expression, or an empty
+					// list/hash expression.
+					parameters.Add(new Parameter(nameTok.Value, value)
 					{
-						StartIndex = startParam,
+						StartIndex = nameTok.Index,
 						EndIndex = value.EndIndex,
 						Document = document
 					});
 					output.HasOptionalParams = optionalSeen = true;
 				}
 				else if (optionalSeen)
-					throw new ParseException(tok[i - 1], "All required parameters must come before optional parameters.");
+					throw new ParseException(tok[i - 1], RequiredParamAfterOptional);
 				else
-					parameters.Add(new Parameter(name, null)
+					parameters.Add(new Parameter(nameTok.Value, isByRef)
 					{
-						StartIndex = startParam,
-						EndIndex = tok[i - 1].EndIndex,
+						StartIndex = nameTok.Index,
+						EndIndex = nameTok.EndIndex,
 						Document = document,
 					});
 			} while (Accept(ref i, TokenType.Comma));
@@ -1434,9 +1460,11 @@ namespace Osprey
 			if (Accept(i, TokenType.Splat))
 			{
 				if (optionalSeen)
-					throw new ParseException(tok[i], "Splats cannot be combined with optional parameters.");
-				else if (output.Splat != Splat.None)
-					throw new ParseException(tok[i], "There can only be one splat per parameter list, and it must be at the very beginning or the very end of the list.");
+					throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+				if (isByRef)
+					throw new ParseException(tok[i], CannotPassVariadicParamByRef);
+				if (output.Splat != Splat.None)
+					throw new ParseException(tok[i], MoreThanOneVariadicParam);
 				output.Splat = Splat.End;
 				i++;
 			}
@@ -1927,12 +1955,13 @@ namespace Osprey
 			i += 2;
 			Expect(ref i, TokenType.ParenOpen);
 
-			var args = ParseArgumentList(ref i);
+			bool hasRefArgs;
+			var args = ParseArgumentList(ref i, out hasRefArgs);
 
 			Expect(ref i, TokenType.ParenClose);
 			Expect(ref i, TokenType.Semicolon);
 
-			return new ConstructorCall(args, isBaseCall) { StartIndex = start, EndIndex = end, Document = document };
+			return new ConstructorCall(args, hasRefArgs, isBaseCall) { StartIndex = start, EndIndex = end, Document = document };
 		}
 
 		private Statement ParseExpressionStatement(ref int i)
@@ -2389,8 +2418,7 @@ namespace Osprey
 		private Expression ParsePrimaryExpr(ref int i)
 		{
 			var left = ParseStandalonePrimaryExpr(ref i);
-			while (Accept(i, TokenType.Dot, TokenType.ParenOpen, TokenType.SquareOpen, 
-				TokenType.SafeAccess, TokenType.ParenOpenSafe, TokenType.SquareOpenSafe))
+			while (Accept(i, primaryExprTokens))
 			{
 				var type = tok[i].Type;
 				if (type == TokenType.Dot) // member access or expr.iter
@@ -2422,11 +2450,12 @@ namespace Osprey
 				else if (type == TokenType.ParenOpen)
 				{
 					i++;
-					var args = ParseArgumentList(ref i);
+					bool hasRefArgs;
+					var args = ParseArgumentList(ref i, out hasRefArgs);
 					Expect(i, TokenType.ParenClose);
 					if (left is MemberAccess)
 						((MemberAccess)left).IsInvocation = true;
-					left = new InvocationExpression(left, args)
+					left = new InvocationExpression(left, args, hasRefArgs)
 						.At(left.StartIndex, tok[i++].EndIndex, document);
 				}
 				else // tok[i].Type == TokenType.SquareOpen
@@ -2435,7 +2464,8 @@ namespace Osprey
 						throw new ParseException(tok[i], "'base' cannot be indexed into.");
 					i++;
 
-					var args = ParseArgumentList(ref i, false, TokenType.SquareClose);
+					bool _;
+					var args = ParseArgumentList(ref i, out _, allowEmpty: false, allowRefs: false, closing: TokenType.SquareClose);
 
 					Expect(i, TokenType.SquareClose);
 
@@ -2471,13 +2501,15 @@ namespace Osprey
 				}
 				else if (type == TokenType.ParenOpen || type == TokenType.ParenOpenSafe)
 				{
-					var args = ParseArgumentList(ref i);
+					bool _;
+					var args = ParseArgumentList(ref i, out _);
 					Expect(ref i, TokenType.ParenClose);
 					safeNode = new SafeInvocation(args, type == TokenType.ParenOpenSafe);
 				}
 				else // type == TokenType.SquareOpen || type == TokenType.SquareOpenSafe
 				{
-					var args = ParseArgumentList(ref i, false, TokenType.SquareClose);
+					bool _;
+					var args = ParseArgumentList(ref i, out _, allowEmpty: false, allowRefs: false, closing: TokenType.SquareClose);
 					Expect(ref i, TokenType.SquareClose);
 					safeNode = new SafeIndexerAccess(args, type == TokenType.SquareOpenSafe);
 				}
@@ -2623,29 +2655,45 @@ namespace Osprey
 
 			Expect(ref i, TokenType.ParenOpen);
 
-			var args = ParseArgumentList(ref i);
+			bool hasRefArgs;
+			var args = ParseArgumentList(ref i, out hasRefArgs);
 
 			Expect(i, TokenType.ParenClose);
 
-			return new ObjectCreationExpression(type, args)
+			return new ObjectCreationExpression(type, args, hasRefArgs)
 				.At(start, tok[i++].EndIndex, document);
 		}
 
-		private List<Expression> ParseArgumentList(ref int i, bool allowEmpty = true, TokenType closing = TokenType.ParenClose)
+		private List<Expression> ParseArgumentList(ref int i, out bool hasRefs,
+			bool allowEmpty = true, bool allowRefs = true,
+			TokenType closing = TokenType.ParenClose)
 		{
+			hasRefs = false;
 			var args = new List<Expression>();
 
 			if (Accept(i, closing)) // no expressions :(
 			{
-				if (allowEmpty)
-					return args;
-				else
+				if (!allowEmpty)
 					throw new ParseException(tok[i], "At least one argument is needed.");
+				return args;
 			}
 
 			do
 			{
-				args.Add(ParseExpression(ref i));
+				if (allowRefs && Accept(i, TokenType.Ref))
+				{
+					var start = tok[i++].Index;
+					var inner = ParsePrimaryExpr(ref i);
+					args.Add(new RefExpression(inner)
+					{
+						StartIndex = start,
+						EndIndex = inner.EndIndex,
+						Document = document
+					});
+					hasRefs = true;
+				}
+				else
+					args.Add(ParseExpression(ref i));
 			} while (Accept(ref i, TokenType.Comma) && !Accept(i, closing));
 
 			return args;
@@ -2771,6 +2819,11 @@ namespace Osprey
 					{
 						StartIndex = tok[i].Index,
 					};
+				else if (Accept(i, TokenType.Character))
+					key = new CharacterLiteral((CharToken)tok[i])
+					{
+						StartIndex = tok[i].Index,
+					};
 				else if (Accept(i, TokenType.ParenOpen)) // parenthesised expression as key
 				{
 					var startParen = tok[i++].Index;
@@ -2781,7 +2834,7 @@ namespace Osprey
 					key.StartIndex = startParen;
 				}
 				else
-					throw new ParseException(tok[i], "The hash key must be an identifier, string, integer or parenthesized expression.");
+					throw new ParseException(tok[i], "The hash key must be an identifier, string, integer, character or parenthesized expression.");
 
 				key.EndIndex = tok[i++].EndIndex;
 				key.Document = document;
@@ -2831,7 +2884,7 @@ namespace Osprey
 			else if (Accept(i, TokenType.ParenOpen))
 			{
 				i++;
-				ParameterInfo paramInfo = ParseParameterList(ref i, parameters);
+				var paramInfo = ParseParameterList(ref i, parameters);
 
 				Expect(ref i, TokenType.ParenClose);
 
@@ -2920,6 +2973,17 @@ namespace Osprey
 
 		#endregion
 
+		private const string CannotMixOptionalAndVariadicParams =
+			"Cannot use optional parameters and a variadic parameter in the same parameter list.";
+		private const string RequiredParamAfterOptional =
+			"All required parameters must come before the optional parameters.";
+		private const string CannotPassOptionalParamByRef =
+			"An optional parameter cannot be passed by reference.";
+		private const string CannotPassVariadicParamByRef =
+			"A variadic parameter cannot be passed by reference.";
+		private const string MoreThanOneVariadicParam =
+			"There can only be one variadic parameter, and it must be at the very first or the very last parameter.";
+
 		public static Document Parse(string input, ParseFlags flags)
 		{
 			if (input == null)
@@ -2976,20 +3040,29 @@ namespace Osprey
 			TokenType.Less, TokenType.LessEqual, TokenType.Greater, TokenType.GreaterEqual, TokenType.Compare
 		};
 
+		private static readonly TokenType[] primaryExprTokens =
+		{
+			TokenType.Dot, TokenType.ParenOpen, TokenType.SquareOpen, 
+			TokenType.SafeAccess, TokenType.ParenOpenSafe, TokenType.SquareOpenSafe
+		};
+
 		/// <summary>
 		/// Contains information about a parameter list.
 		/// </summary>
-		private struct ParameterInfo
+		private struct ParameterInfo<T> where T : Parameter
 		{
-			public ParameterInfo(List<Parameter> parameters)
+			public ParameterInfo(List<T> parameters)
 			{
 				Parameters = parameters;
 				Splat = Splat.None;
 				HasOptionalParams = false;
+				HasRefParams = false;
 			}
-			public List<Parameter> Parameters;
+
+			public List<T> Parameters;
 			public Splat Splat;
 			public bool HasOptionalParams;
+			public bool HasRefParams;
 		}
 
 		private struct MemberModifiers

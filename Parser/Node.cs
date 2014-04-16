@@ -710,7 +710,7 @@ namespace Osprey.Nodes
 				if (!(Body is ExternBody) && ConstructorCall == null &&
 					@class.BaseType != null)
 				{
-					ConstructorCall = new ConstructorCall(new List<Expression>(), true)
+					ConstructorCall = new ConstructorCall(new List<Expression>(), false, true)
 						{
 							StartIndex = this.StartIndex,
 							EndIndex = this.EndIndex,
@@ -802,6 +802,11 @@ namespace Osprey.Nodes
 
 	public sealed class ConstructorParam : Parameter
 	{
+		public ConstructorParam(string name, bool hasThisPrefix, bool isByRef)
+			: base(name, isByRef)
+		{
+			HasThisPrefix = hasThisPrefix;
+		}
 		public ConstructorParam(string name, bool hasThisPrefix, Expression defaultValue)
 			: base(name, defaultValue)
 		{
@@ -818,7 +823,17 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			return (HasThisPrefix ? "this." : "") + base.ToString(indent);
+			string result = Name;
+			if (IsByRef)
+				result = "ref " + result;
+			else
+			{
+				if (HasThisPrefix)
+					result = "this." + result;
+				if (DefaultValue != null)
+					result += " = " + DefaultValue.ToString(indent + 1);
+			}
+			return result;
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
@@ -943,13 +958,22 @@ namespace Osprey.Nodes
 
 	public class Parameter : ParseNode
 	{
+		public Parameter(string name, bool isByRef)
+		{
+			Name = name;
+			IsByRef = isByRef;
+			DefaultValue = null;
+		}
 		public Parameter(string name, Expression defaultValue)
 		{
 			Name = name;
+			IsByRef = false;
 			DefaultValue = defaultValue;
 		}
 		/// <summary>The name of the parameter.</summary>
 		public string Name;
+		/// <summary>Whether the parameter is passed by reference ("ref ...").</summary>
+		public bool IsByRef;
 		/// <summary>The default value of the parameter, or null if the parameter is required.</summary>
 		public Expression DefaultValue = null;
 
@@ -960,6 +984,8 @@ namespace Osprey.Nodes
 		{
 			if (DefaultValue != null)
 				return Name + " = " + DefaultValue.ToString(indent + 1);
+			else if (IsByRef)
+				return "ref " + Name;
 			else
 				return Name;
 		}

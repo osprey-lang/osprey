@@ -1317,7 +1317,7 @@ namespace Osprey.Members
 				var closureLocalAccess = new LocalVariableAccess(ClosureVariable, LocalAccessKind.ClosureLocal);
 				closureLocalAccess.IsAssignment = true;
 
-				var newExpr = new ObjectCreationExpression(null, new List<Expression>()) { Constructor = ctorMethod };
+				var newExpr = new ObjectCreationExpression(null, new List<Expression>(), false) { Constructor = ctorMethod };
 				init.Add(new AssignmentExpression(closureLocalAccess, newExpr)
 					{
 						IgnoreValue = true,
@@ -1588,13 +1588,15 @@ namespace Osprey.Members
 			}
 		}
 
-		internal virtual void Capture()
+		internal virtual void Capture(ParseNode errorNode)
 		{
 			if (isCaptured)
 				return;
 
 			if (Parent == null)
 				throw new InvalidOperationException("The local variable does not belong to a block and cannot be captured.");
+			if (VariableKind == VariableKind.Parameter && ParamNode.IsByRef)
+				throw new CompileTimeException(errorNode, "Cannot capture a pass-by-reference parameter.");
 
 			isCaptured = true;
 		}
@@ -1745,10 +1747,10 @@ namespace Osprey.Members
 		/// Captures a variable.
 		/// </summary>
 		/// <param name="variable">The variable to capture</param>
-		internal void Capture(Variable variable)
+		internal void Capture(Variable variable, ParseNode errorNode)
 		{
 			hasCaptures = true;
-			variable.Capture();
+			variable.Capture(errorNode);
 
 			/* If the variable is in the same method as this function, then any outer
 			 * local functions do NOT need to capture it. If it is not, then it must
@@ -1780,7 +1782,7 @@ namespace Osprey.Members
 			{
 				if (this.Parent.ContainingMember is LocalMethod)
 				{
-					((LocalMethod)Parent.ContainingMember).Function.Capture(variable);
+					((LocalMethod)Parent.ContainingMember).Function.Capture(variable, errorNode);
 					// Also capture the block that declares the variable:
 					Parent.Capture(variable.Parent);
 				}
@@ -1970,9 +1972,9 @@ namespace Osprey.Members
 
 		private Document document;
 
-		internal override void Capture()
+		internal override void Capture(ParseNode errorNode)
 		{
-			base.Capture();
+			base.Capture(errorNode);
 			document.Compiler.AddGlobalVariable(document, this);
 		}
 	}

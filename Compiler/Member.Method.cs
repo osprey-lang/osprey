@@ -253,6 +253,8 @@ namespace Osprey.Members
 		/// <summary>Gets the group to which the method belongs.</summary>
 		public MethodGroup Group { get; internal set; }
 
+		public override string FullName { get { return Group.FullName; } }
+
 		/// <summary>Gets the module that declares the method.</summary>
 		public Module Module { get; internal set; }
 
@@ -267,6 +269,8 @@ namespace Osprey.Members
 		public MemberFlags Flags { get { return flags; } internal set { flags = value; } }
 
 		internal Parameter[] Parameters;
+
+		internal bool HasRefParams { get { return Parameters != null && Parameters.Any(p => p.IsByRef); } }
 
 		internal Method OverriddenBaseMethod;
 
@@ -387,6 +391,65 @@ namespace Osprey.Members
 				Yields = new List<YieldStatement>();
 
 			Yields.Add(value);
+		}
+
+		internal void VerifyArgumentRefness(List<Expression> args)
+		{
+			if (Signature.Splat == Splat.Beginning)
+			{
+				// Parameters that get packed into a list must be by value
+				var ia = 0; // Argument index
+				while (ia < args.Count - Signature.ParameterCount + 1)
+				{
+					if (args[ia] is RefExpression)
+						ErrorWrongRefness(ia, args[ia], false);
+					ia++;
+				}
+
+				// But required parameters may be by reference
+				var ip = 1; // Parameter index (param 0 is the variadic param)
+				while (ia < args.Count)
+				{
+					if ((args[ia] is RefExpression) != Parameters[ip].IsByRef)
+						ErrorWrongRefness(ia, args[ia], Parameters[ip].IsByRef);
+					ia++;
+					ip++;
+				}
+			}
+			else if (Signature.Splat == Splat.End)
+			{
+				var i = 0;
+				// Required parameters may be by reference
+				while (i < Signature.ParameterCount - 1)
+				{
+					if ((args[i] is RefExpression) != Parameters[i].IsByRef)
+						ErrorWrongRefness(i, args[i], Parameters[i].IsByRef);
+					i++;
+				}
+				// But not the parameters that get packed into a list
+				while (i < args.Count)
+				{
+					if (args[i] is RefExpression)
+						ErrorWrongRefness(i, args[i], false);
+					i++;
+				}
+			}
+			else
+			{
+				// Skip missing arguments; if we've found this overload
+				// through normal overload resolution, then those arguments
+				// must be optional (and optional params are never by ref).
+				var max = Math.Min(args.Count, Signature.ParameterCount);
+				for (var i = 0; i < max; i++)
+					if ((args[i] is RefExpression) != Parameters[i].IsByRef)
+						ErrorWrongRefness(i, args[i], Parameters[i].IsByRef);
+			}
+		}
+
+		private void ErrorWrongRefness(int argIndex, Expression arg, bool shouldBeRef)
+		{
+			throw new CompileTimeException(arg, string.Format("Argument {0} to '{1}' must be passed by {2}.",
+				argIndex + 1, this.FullName, shouldBeRef ? "reference" : "value"));
 		}
 
 		internal virtual void Compile(Compiler compiler)
@@ -634,7 +697,7 @@ namespace Osprey.Members
 				var body = new List<Statement>();
 				body.Add(new ExpressionStatement(new AssignmentExpression(
 					new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing) { IsAssignment = true },
-					new ObjectCreationExpression(null, new List<Expression>()) { Constructor = ctor }
+					new ObjectCreationExpression(null, new List<Expression>(), false) { Constructor = ctor }
 				) { IgnoreValue = true }));
 
 				if (hasThisField)
@@ -662,7 +725,7 @@ namespace Osprey.Members
 			{
 				block = new Block(new List<Statement>
 				{
-					new ReturnStatement(new ObjectCreationExpression(null, new List<Expression>()) { Constructor = ctor })
+					new ReturnStatement(new ObjectCreationExpression(null, new List<Expression>(), false) { Constructor = ctor })
 				});
 			}
 

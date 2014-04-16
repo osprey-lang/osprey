@@ -432,7 +432,10 @@ namespace Osprey
 
 				writer.Write((ushort)overload.Signature.ParameterCount); // paramCount
 				for (var i = 0; i < overload.Signature.ParameterCount; i++) // paramNames
+				{
 					writer.Write(GetStringId(overload.Parameters[i].DeclaredName));
+					writer.WriteFlags(overload.Parameters[i].IsByRef ? ParamFlags.ByRef : 0);
+				}
 
 				if ((flags & OverloadFlags.ShortHeader) == 0)
 					WriteOverloadHeader(writer, overload);

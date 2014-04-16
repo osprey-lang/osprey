@@ -89,6 +89,11 @@ namespace Osprey
 			Write((uint)value);
 		}
 
+		public void WriteFlags(Module.ParamFlags value)
+		{
+			Write((ushort)value);
+		}
+
 		public void WriteFlags(Module.ConstantFlags value)
 		{
 			Write((uint)value);

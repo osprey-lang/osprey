@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Osprey.Members;
 using Osprey.Nodes;
@@ -98,6 +99,14 @@ namespace Osprey
 			} while (context !=	null);
 
 			return false;
+		}
+
+		public static bool HasRefArguments(this IEnumerable<Expression> collection)
+		{
+			if (collection == null)
+				throw new ArgumentNullException("collection");
+
+			return collection.Any(expr => expr is RefExpression);
 		}
 
 		private static void CopyBytesInternal<T>(T[] array, byte[] bytes, int offset)

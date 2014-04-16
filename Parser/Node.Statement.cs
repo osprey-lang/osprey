@@ -278,7 +278,7 @@ namespace Osprey.Nodes
 						// creates the generator instance can assign the parameter value to the
 						// field inside the generator class.
 						genClass.DeclareVariableField(variable);
-						variable.Capture();
+						variable.Capture(this);
 					}
 				}
 
@@ -300,7 +300,7 @@ namespace Osprey.Nodes
 				{
 					var field = genClass.DeclareAnonField(DeclSpace);
 					DeclSpace.ClosureVariable.CaptureField = field;
-					DeclSpace.ClosureVariable.Capture();
+					DeclSpace.ClosureVariable.Capture(this);
 
 					// Rather than transform the entire initializer, we let it remain mostly
 					// the way it already is, including the bit where it initializes the closure
@@ -3110,14 +3110,17 @@ namespace Osprey.Nodes
 
 	public sealed class ConstructorCall : Statement
 	{
-		public ConstructorCall(List<Expression> arguments, bool isBaseCtor)
+		public ConstructorCall(List<Expression> arguments, bool hasRefArgs, bool isBaseCtor)
 		{
 			Arguments = arguments;
+			HasRefArgs = hasRefArgs;
 			IsBaseConstructor = isBaseCtor;
 		}
 
 		/// <summary>The arguments passed into the constructor.</summary>
 		public List<Expression> Arguments;
+
+		public bool HasRefArgs;
 
 		public bool IsBaseConstructor;
 
@@ -3153,6 +3156,9 @@ namespace Osprey.Nodes
 			if (ctor == null)
 				throw new CompileTimeException(this, string.Format("Could not find a constructor for '{0}' that takes {1} arguments.",
 					ctorClass.FullName, Arguments.Count));
+
+			if (HasRefArgs || ctor.HasRefParams)
+				ctor.VerifyArgumentRefness(Arguments);
 
 			// Constructor calls are only allowed at the very beginning of a constructor,
 			// hence 'context' really should be a constructor Method's BlockSpace here.

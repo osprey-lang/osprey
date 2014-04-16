@@ -119,7 +119,7 @@ namespace Osprey
 			SkipWhitespace(ref i);
 
 			if (IsEOF(i))
-				return eof = new Token(source, null, TokenType.EOF, i);
+				return eof = new Token(source, TokenType.EOF, i, i);
 
 			var ch = source[i];
 			if (ch == '/' && !IsEOF(i + 1) && (source[i + 1] == '/' || source[i + 1] == '*'))
@@ -540,7 +540,8 @@ namespace Osprey
 
 			var ident = source.Substring(startIndex, i - startIndex);
 			TokenType type;
-			if (!IdentToKeyword.TryGetValue(ident, out type))
+			if (ident.Length > LongestKeywordLength ||
+				!IdentToKeyword.TryGetValue(ident, out type))
 			{
 				type = TokenType.Identifier;
 				if (NormalizeIdentifiers)
@@ -554,81 +555,190 @@ namespace Osprey
 		{
 			var startIndex = i;
 
+			TokenType type;
 			char ch = source[i++];
 			switch (ch)
 			{
 				// always single: { } [ ] ( ) , ; ~ @
-				case '{': case '}':
-				case '[': case ']':
-				case '(': case ')':
-				case ',': case ';':
-				case '~': case '@':
+				case '{':
+					type = TokenType.CurlyOpen;
+					break;
+				case '}':
+					type = TokenType.CurlyClose;
+					break;
+				case '[':
+					type = TokenType.SquareOpen;
+					break;
+				case ']':
+					type = TokenType.SquareClose;
+					break;
+				case '(':
+					type = TokenType.ParenOpen;
+					break;
+				case ')':
+					type = TokenType.ParenClose;
+					break;
+				case ',':
+					type = TokenType.Comma;
+					break;
+				case ';':
+					type = TokenType.Semicolon;
+					break;
+				case '~':
+					type = TokenType.Tilde;
+					break;
+				case '@':
+					type = TokenType.At;
 					break; // So simple!
 				// other combinations:
 				// .  ...  <=>  <<?=?  >>?=?  **?=?
 				// ::=?  :  ->?  ==?  !=  \?[?!.]?
 				case '.':
+					type = TokenType.Dot;
 					if (!IsEOF(i + 1) && source[i] == '.' && source[i + 1] == '.')
+					{
+						type = TokenType.Splat;
 						i += 2;
+					}
 					break;
 				case '<':
+					type = TokenType.Less;
 					if (!IsEOF(i + 1) && source[i] == '=' && source[i + 1] == '>')
+					{
+						type = TokenType.Compare;
 						i += 2;
+					}
 					else
 					{
 						if (!IsEOF(i) && source[i] == '<')
+						{
+							type = TokenType.ShiftLeft;
 							i++;
-						goto case '='; // may be followed by =
+							AcceptEquals(ref i, ref type, TokenType.ShiftLeftAssign);
+						}
+						else
+							AcceptEquals(ref i, ref type, TokenType.LessEqual);
 					}
 					break;
 				case '>':
+					type = TokenType.Greater;
 					if (!IsEOF(i) && source[i] == '>')
+					{
+						type = TokenType.ShiftRight;
 						i++;
-					goto case '='; // may be followed by =
+						AcceptEquals(ref i, ref type, TokenType.ShiftRightAssign);
+					}
+					else
+						AcceptEquals(ref i, ref type, TokenType.GreaterEqual);
+					break;
 				case '*':
+					type = TokenType.Multiply;
 					if (!IsEOF(i) && source[i] == '*')
+					{
+						type = TokenType.Power;
 						i++;
-					goto case '='; // may be followed by =
+						AcceptEquals(ref i, ref type, TokenType.PowerAssign);
+					}
+					else
+						AcceptEquals(ref i, ref type, TokenType.MulAssign);
+					break;
 				case ':':
+					type = TokenType.Colon;
 					if (!IsEOF(i) && source[i] == ':')
 					{
+						type = TokenType.Concatenation;
 						i++;
-						goto case '='; // may be followed by =
+						AcceptEquals(ref i, ref type, TokenType.ConcatAssign);
 					}
 					break;
 				case '-':
+					type = TokenType.Minus;
 					if (!IsEOF(i) && source[i] == '>') // ->
+					{
+						type = TokenType.FuncApplication;
 						i++;
+					}
 					else
-						goto case '='; // may be followed by =
+						AcceptEquals(ref i, ref type, TokenType.MinusAssign);
 					break;
 				// optionally followed by an '=': + | / % & ^ # $ =
-				case '+': case '|':
-				case '/': case '%': case '&':
+				case '+':
+					type = TokenType.Plus;
+					AcceptEquals(ref i, ref type, TokenType.PlusAssign);
+					break;
+				case '|':
+					type = TokenType.Pipe;
+					AcceptEquals(ref i, ref type, TokenType.PipeAssign);
+					break;
+				case '/':
+					type = TokenType.Divide;
+					AcceptEquals(ref i, ref type, TokenType.DivAssign);
+					break;
+				case '%':
+					type = TokenType.Mod;
+					AcceptEquals(ref i, ref type, TokenType.ModAssign);
+					break;
+				case '&':
+					type = TokenType.Ampersand;
+					AcceptEquals(ref i, ref type, TokenType.AmpAssign);
+					break;
 				case '^':
-				case '#': case '$':
+					type = TokenType.Caret;
+					AcceptEquals(ref i, ref type, TokenType.CaretAssign);
+					break;
+				case '#':
+					type = TokenType.Hash;
+					AcceptEquals(ref i, ref type, TokenType.HashAssign);
+					break;
+				case '$':
+					type = TokenType.Dollar;
+					AcceptEquals(ref i, ref type, TokenType.DollarAssign);
+					break;
 				case '=':
+					type = TokenType.Assign;
 					if (!IsEOF(i) && source[i] == '=')
+					{
+						type = TokenType.DoubleEqual;
 						i++;
+					}
 					break;
 				case '!':
 					if (IsEOF(i) || source[i] != '=')
 						goto default; // must be followed by =
+					type = TokenType.NotEqual;
 					i++; // skip =
 					break;
 				case '?':
-					char next = IsEOF(i) ? '\0' : source[i];
-					if (next == '.' || next == '(' || next == '[' ||
-						next == '?' || next == '!')
-						i++;
+					type = TokenType.Question;
+					if (!IsEOF(i))
+					{
+						switch (source[i++])
+						{
+							case '.': type = TokenType.SafeAccess; break;
+							case '(': type = TokenType.ParenOpenSafe; break;
+							case '[': type = TokenType.SquareOpenSafe; break;
+							case '?': type = TokenType.NullCoalescing; break;
+							case '!': type = TokenType.NullOr; break;
+							default: i--; break; // Nope, back up
+						}
+					}
 					break;
 				default:
 					throw new ParseException(GetErrorToken(startIndex, 1),
 						string.Format("Invalid character: {0} (U+{1:X4}).", ch, (int)ch));
 			}
 
-			var punct = source.Substring(startIndex, i - startIndex);
-			return new Token(source, punct, PunctToType[punct], startIndex);
+			//var punct = source.Substring(startIndex, i - startIndex);
+			return new Token(source, type, startIndex, i);
+		}
+
+		private void AcceptEquals(ref int i, ref TokenType tokenType, TokenType equalsType)
+		{
+			if (!IsEOF(i) && source[i] == '=')
+			{
+				tokenType = equalsType;
+				i++;
+			}
 		}
 
 		private void SkipWhitespace(ref int i)
@@ -836,6 +946,8 @@ namespace Osprey
 
 		internal static readonly Dictionary<TokenType, string> KeywordToString;
 		internal static readonly Dictionary<TokenType, string> PunctToString;
+
+		private const int LongestKeywordLength = 11; // inheritable/overridable
 
 		#endregion
 	}

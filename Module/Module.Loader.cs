@@ -457,8 +457,12 @@ namespace Osprey
 				int paramCount = reader.ReadUInt16();
 				var parameters = new Parameter[paramCount];
 				for (var p = 0; p < paramCount; p++)
-					parameters[p] = new Parameter(module.members.Strings[reader.ReadUInt32()],
-						defaultValue: null);
+				{
+					var paramName = module.members.Strings[reader.ReadUInt32()];
+					var paramFlags = reader.ReadParamFlags();
+					parameters[p] = new Parameter(paramName,
+						(paramFlags & ParamFlags.ByRef) == ParamFlags.ByRef);
+				}
 
 				ushort optionalParamCount;
 				if ((flags & OverloadFlags.ShortHeader) == OverloadFlags.ShortHeader)

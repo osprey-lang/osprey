@@ -644,16 +644,19 @@ namespace Osprey
 					unchecked
 					{
 						hash ^= obj[i];
-						hash ^= 7 * obj[i + 1];
-						hash ^= 13 * obj[i + 2];
-						hash ^= 23 * obj[i + 3];
+						hash ^= 7 * obj[i + 1] << 8;
+						hash ^= 13 * obj[i + 2] << 16;
+						hash ^= 23 * obj[i + 3] << 24;
 					}
 					i += 4;
 				}
 
 				while (i < obj.Length)
 				{
-					hash ^= obj[i] << (3 * i % 4);
+					unchecked
+					{
+						hash ^= obj[i] << (3 * i % 4);
+					}
 					i++;
 				}
 
@@ -711,6 +714,12 @@ namespace Osprey
 			ShortHeader = 0x08,
 			Virtual = 0x10,
 			Abstract = 0x20,
+		}
+
+		[Flags]
+		public enum ParamFlags : ushort
+		{
+			ByRef = 0x01,
 		}
 
 		[Flags]

@@ -67,6 +67,11 @@ namespace Osprey
 			return (Module.OverloadFlags)ReadUInt32();
 		}
 
+		public Module.ParamFlags ReadParamFlags()
+		{
+			return (Module.ParamFlags)ReadUInt16();
+		}
+
 		public Module.ConstantFlags ReadConstantFlags()
 		{
 			return (Module.ConstantFlags)ReadUInt32();

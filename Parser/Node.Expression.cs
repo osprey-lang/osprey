@@ -299,6 +299,108 @@ namespace Osprey.Nodes
 		public abstract void CompileParallelAssignment(Compiler compiler, MethodBuilder method, LocalVariable[] locals);
 	}
 
+	public sealed class RefExpression : Expression
+	{
+		public RefExpression(Expression inner)
+		{
+			Inner = inner;
+		}
+
+		/// <summary>The expression that this expression takes a reference to.</summary>
+		public Expression Inner;
+
+		public override string ToString(int indent)
+		{
+			return "ref " + Inner.ToString(indent);
+		}
+
+		public override Expression FoldConstant()
+		{
+			Inner = Inner.FoldConstant();
+			return this;
+		}
+
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
+		{
+			Inner = Inner.ResolveNames(context, document, false, false);
+
+			if (Inner is LocalVariableAccess)
+			{
+				var access = (LocalVariableAccess)Inner;
+				if (access.Variable.VariableKind == VariableKind.IterationVariable ||
+					access.Variable.VariableKind == VariableKind.WithVariable)
+					throw new CompileTimeException(Inner, "An iteration variable or with variable cannot be passed by reference.");
+				// Passing a variable by ref also counts as assigning to it
+				access.Variable.AssignmentCount++;
+			}
+			else
+			{
+				var instMemAccess = Inner as InstanceMemberAccess;
+				if ((instMemAccess == null || instMemAccess.Member.Kind != MemberKind.Field) &&
+					!(Inner is StaticFieldAccess) &&
+					!(Inner is MemberAccess) &&
+					!(Inner is GlobalVariableAccess))
+					throw new CompileTimeException(Inner,
+						"A ref argument must be a variable, instance field, static field, or member access.");
+			}
+
+			return this;
+		}
+
+		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			Inner = Inner.TransformClosureLocals(currentBlock, forGenerator);
+			return this;
+		}
+
+		public override void Compile(Compiler compiler, MethodBuilder method)
+		{
+			if (Inner is LocalVariableAccess)
+			{
+				var variable = ((LocalVariableAccess)Inner).Variable;
+
+				var local = variable.IsParameter ? method.GetParameter(variable.Name) : method.GetLocal(variable.Name);
+				method.Append(new LoadLocalReference(local));
+			}
+			else if (Inner is InstanceMemberAccess)
+			{
+				var access = (InstanceMemberAccess)Inner;
+				var field = (Field)access.Member;
+
+				access.Inner.Compile(compiler, method);
+				method.Append(LoadFieldReference.Create(method.Module, field));
+			}
+			else if (Inner is StaticFieldAccess)
+			{
+				var field = ((StaticFieldAccess)Inner).Field;
+				method.Append(LoadFieldReference.Create(method.Module, field));
+			}
+			else if (Inner is MemberAccess)
+			{
+				var access = (MemberAccess)Inner;
+
+				access.Inner.Compile(compiler, method);
+				method.Append(new LoadMemberReference(method.Module.GetStringId(access.Member)));
+			}
+			else if (Inner is GlobalVariableAccess)
+			{
+				var variable = ((GlobalVariableAccess)Inner).Variable;
+
+				if (!variable.IsCaptured)
+					method.Append(new LoadLocalReference(method.GetLocal(variable.Name)));
+				else
+					method.Append(LoadFieldReference.Create(method.Module, variable.CaptureField));
+			}
+			else
+				throw new InvalidOperationException();
+		}
+
+		public override void CompileBoolean(Compiler compiler, Label falseLabel, bool negated, MethodBuilder method)
+		{
+			throw new InvalidOperationException("Ref expressions should never occur outside an argument list.");
+		}
+	}
+
 	public class BinaryOperatorExpression : Expression
 	{
 		public BinaryOperatorExpression(Expression left, Expression right, BinaryOperator op)
@@ -1456,7 +1558,7 @@ namespace Osprey.Nodes
 					{
 						var variable = (GlobalVariable)member;
 						if (block != null && block.ContainingMember != document.Compiler.MainMethod)
-							variable.Capture();
+							variable.Capture(this);
 						result = new GlobalVariableAccess(variable);
 					}
 					break;
@@ -1552,7 +1654,7 @@ namespace Osprey.Nodes
 							block.ContainingMember is LocalMethod)
 						{
 							var function = ((LocalMethod)block.ContainingMember).Function;
-							function.Capture(variable);
+							function.Capture(variable, this);
 							kind = function.Parent == variable.Parent ?
 								LocalAccessKind.CapturingSameScope : // the function is in the same block as the variable
 								LocalAccessKind.CapturingOtherScope; // the function and the variable are in different blocks
@@ -2574,7 +2676,7 @@ namespace Osprey.Nodes
 						var variable = (GlobalVariable)member;
 						var block = context as BlockSpace;
 						if (block != null && block.ContainingMember != document.Compiler.MainMethod)
-							variable.Capture();
+							variable.Capture(this);
 						return new GlobalVariableAccess(variable).At(this);
 					}
 				case MemberKind.Class:
@@ -2790,9 +2892,13 @@ namespace Osprey.Nodes
 	public sealed class ObjectCreationExpression : Expression
 	{
 		public ObjectCreationExpression(TypeName type, List<Expression> arguments)
+			: this(type, arguments, arguments.HasRefArguments())
+		{ }
+		public ObjectCreationExpression(TypeName type, List<Expression> arguments, bool hasRefArgs)
 		{
 			Type = type;
 			Arguments = arguments;
+			HasRefArgs = hasRefArgs;
 		}
 
 		/// <summary>The type that is being created.</summary>
@@ -2800,6 +2906,8 @@ namespace Osprey.Nodes
 
 		/// <summary>The arguments passed to the constructor.</summary>
 		public List<Expression> Arguments;
+
+		public bool HasRefArgs;
 
 		internal Method Constructor;
 
@@ -2834,6 +2942,9 @@ namespace Osprey.Nodes
 
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
+
+			if (HasRefArgs || Constructor.HasRefParams)
+				Constructor.VerifyArgumentRefness(Arguments);
 
 			return this;
 		}
@@ -3131,9 +3242,13 @@ namespace Osprey.Nodes
 	public sealed class InvocationExpression : Expression
 	{
 		public InvocationExpression(Expression inner, List<Expression> args)
+			: this(inner, args, args.HasRefArguments())
+		{ }
+		public InvocationExpression(Expression inner, List<Expression> args, bool hasRefArgs)
 		{
 			Inner = inner;
 			Arguments = args;
+			HasRefArgs = hasRefArgs;
 		}
 
 		/// <summary>The expression that is being invoked.</summary>
@@ -3141,6 +3256,9 @@ namespace Osprey.Nodes
 
 		/// <summary>The argument passed to the function.</summary>
 		public List<Expression> Arguments;
+
+		/// <summary>Whether the invocation uses ref arguments.</summary>
+		public bool HasRefArgs;
 
 		public override string ToString(int indent)
 		{
@@ -3177,6 +3295,8 @@ namespace Osprey.Nodes
 						throw new CompileTimeException(Inner,
 							string.Format("The method '{0}.{1}' is abstract and cannot be called through 'base'.",
 								method.ParentAsClass.FullName, method.Name));
+					if (HasRefArgs || overload.HasRefParams)
+						overload.VerifyArgumentRefness(Arguments);
 				}
 			}
 			else if (Inner is StaticMethodAccess)
@@ -3186,13 +3306,18 @@ namespace Osprey.Nodes
 				if (overload == null)
 					throw new CompileTimeException(Inner, string.Format("The method '{0}' does not take {1} arguments.",
 						access.Method.FullName, Arguments.Count));
+				if (HasRefArgs || overload.HasRefParams)
+					overload.VerifyArgumentRefness(Arguments);
 			}
 			else if (Inner is LocalFunctionAccess)
 			{
 				var access = (LocalFunctionAccess)Inner;
-				if (!access.Function.Method.Accepts(Arguments.Count))
+				var method = access.Function.Method;
+				if (!method.Accepts(Arguments.Count))
 					throw new CompileTimeException(Inner, string.Format("The local function '{0}' does not take {1} arguments.",
 						access.Function.Name, Arguments.Count));
+				if (HasRefArgs || method.HasRefParams)
+					method.VerifyArgumentRefness(Arguments);
 			}
 			else if (Inner.IsTypeKnown(document.Compiler))
 			{
@@ -3230,6 +3355,9 @@ namespace Osprey.Nodes
 				if (invocator == null)
 					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator that takes {1} arguments.",
 						instType.FullName, Arguments.Count));
+
+				if (HasRefArgs || invocator.HasRefParams)
+					invocator.VerifyArgumentRefness(Arguments);
 
 				Inner = new InstanceMemberAccess(Inner, ((MethodGroup)invocators).ParentAsClass, invocators);
 			}

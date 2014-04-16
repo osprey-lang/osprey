@@ -17,15 +17,40 @@ namespace Osprey
 		/// <param name="value">The token's string value.</param>
 		/// <param name="type">The type of the token.</param>
 		/// <param name="index">The index in the source script at which the token appears.</param>
-		/// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+		/// <exception cref="ArgumentNullException">
+		/// <paramref name="source"/> is null.
+		/// -or-
+		/// <paramref name="value"/> is null.</exception>
 		public Token(string source, string value, TokenType type, int index)
 		{
 			if (source == null)
 				throw new ArgumentNullException("source");
+			if (value == null)
+				throw new ArgumentNullException("value");
 			this.source = source;
 			this.value = value;
 			this.type = type;
 			this.index = index;
+			this.endIndex = index + value.Length;
+		}
+		/// <summary>
+		/// Initializes a new <see cref="Token"/> with the specified source, type, index and end index.
+		/// The string value of the token is initialized only on demand.
+		/// </summary>
+		/// <param name="source">The source file that the token comes from.</param>
+		/// <param name="type">The type of the token.</param>
+		/// <param name="index">The index in the source script at which the token appears.</param>
+		/// <param name="endIndex">The last index (exclusive) of the token in the source file.</param>
+		/// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+		public Token(string source, TokenType type, int index, int endIndex)
+		{
+			if (source == null)
+				throw new ArgumentNullException("source");
+			this.source = source;
+			this.value = null;
+			this.type = type;
+			this.index = index;
+			this.endIndex = endIndex;
 		}
 
 		private string source;
@@ -38,7 +63,15 @@ namespace Osprey
 		/// <summary>
 		/// Gets the value of the token.
 		/// </summary>
-		public string Value { get { return value; } }
+		public string Value
+		{
+			get
+			{
+				if (value == null)
+					value = source.Substring(index, endIndex - index);
+				return value;
+			}
+		}
 
 		private TokenType type;
 		/// <summary>
@@ -52,10 +85,11 @@ namespace Osprey
 		/// </summary>
 		public int Index { get { return index; } }
 
+		private int endIndex;
 		/// <summary>
 		/// Gets the index in the source code script immediately following the token.
 		/// </summary>
-		public int EndIndex { get { return index + value.Length; } }
+		public int EndIndex { get { return endIndex; } }
 
 		internal string documentation;
 		/// <summary>

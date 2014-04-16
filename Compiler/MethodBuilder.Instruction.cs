@@ -66,9 +66,9 @@ namespace Osprey.Instructions
 		public abstract StackChange StackChange { get; }
 
 		/// <summary>
-		/// Gets the size of the instruction, in bytes.
+		/// Gets the size of the instruction in bytes, including the opcode.
 		/// </summary>
-		/// <returns>The size of the instruction, in bytes.</returns>
+		/// <returns>The size of the instruction in bytes, including the opcode.</returns>
 		public abstract int GetSize();
 
 		/// <summary>
@@ -258,6 +258,14 @@ namespace Osprey.Instructions
 		Leave_s = 0x7c,
 		Leave = 0x7d,
 		Endfinally = 0x7e,
+		// References
+		Ldmemref = 0x81,
+		Ldparamref_s = 0x82,
+		Ldparamref = 0x83,
+		Ldlocref_s = 0x84,
+		Ldlocref = 0x85,
+		Ldfldref = 0x86,
+		Ldsfldref = 0x87,
 	}
 
 	public struct StackChange
@@ -2135,6 +2143,168 @@ namespace Osprey.Instructions
 			if (Parent != null)
 				return string.Format("ldsfn {0:X8} [{1}]", method, Parent.Module.GetMethod(method).FullName);
 			return string.Format("ldsfn {0:X8}", method);
+		}
+	}
+
+	public sealed class LoadLocalReference : Instruction
+	{
+		public LoadLocalReference(LocalVariable local)
+		{
+			if (local == null)
+				throw new ArgumentNullException("local");
+
+			this.local = local;
+		}
+
+		private LocalVariable local;
+
+		public LocalVariable Local { get { return local; } }
+
+		public bool IsParameter { get { return local.IsParam; } }
+
+		public override StackChange StackChange { get { return StackChange.AddOne; } }
+
+		public override int GetSize()
+		{
+			if (local.Index <= byte.MaxValue)
+				return 2;
+			return 3;
+		}
+
+		public override byte[] GetBytes()
+		{
+			var isShort = local.Index <= byte.MaxValue;
+			var output = new byte[isShort ? 2 : 3];
+			output[0] = local.IsParam ?
+				isShort ? LdparamShort : LdparamLong :
+				isShort ? LdlocShort : LdlocLong;
+
+			if (isShort)
+				output[1] = (byte)local.Index;
+			else
+			{
+				output[1] = (byte)(local.Index & 0x00ff);
+				output[2] = (byte)((local.Index & 0xff00) >> 8);
+			}
+
+			return output;
+		}
+
+		public override string ToString()
+		{
+			var sb = new StringBuilder(10);
+
+			sb.Append(local.IsParam ? "ldparamref" : "ldlocref");
+
+			if (local.Index <= byte.MaxValue)
+				sb.Append(".s ");
+			else
+				sb.Append(' ');
+
+			sb.Append(local.Index);
+
+			if (local.Name != null)
+			{
+				sb.Append(" [");
+				sb.Append(local.Name);
+				sb.Append(']');
+			}
+
+			return sb.ToString();
+		}
+
+		private const byte LdparamShort = (byte)Opcode.Ldparamref_s;
+		private const byte LdparamLong = (byte)Opcode.Ldparamref;
+
+		private const byte LdlocShort = (byte)Opcode.Ldlocref_s;
+		private const byte LdlocLong = (byte)Opcode.Ldlocref;
+	}
+
+	public sealed class LoadFieldReference : Instruction
+	{
+		private LoadFieldReference(uint field, bool isStatic)
+		{
+			this.field = field;
+			this.isStatic = isStatic;
+		}
+
+		private uint field;
+
+		public uint Field { get { return field; } }
+
+		private bool isStatic;
+
+		public bool IsStatic { get { return isStatic; } }
+
+		public override StackChange StackChange { get { return isStatic ? new StackChange(0, 1) : new StackChange(1, 1); } }
+
+		public override int GetSize()
+		{
+			return 1 + 4;
+		}
+
+		public override byte[] GetBytes()
+		{
+			var output = new byte[5];
+			output[0] = (byte)(isStatic ? Opcode.Ldsfldref : Opcode.Ldfldref);
+			output.CopyBytes(field, 1);
+			return output;
+		}
+
+		public override string ToString()
+		{
+			if (Parent != null)
+			{
+				if (isStatic)
+					return string.Format("ldsfldref {0:X8} [{1}]", field, Parent.Module.GetField(field).FullName);
+				else
+					return string.Format("ldfldref {0:X8} [{1}]", field, Parent.Module.GetField(field).FullName);
+			}
+			if (isStatic)
+				return string.Format("ldsfldref {0:X8}", field);
+			else
+				return string.Format("ldfldref {0:X8}", field);
+		}
+
+		public static LoadFieldReference Create(Module module, Field field)
+		{
+			return new LoadFieldReference(module.GetFieldId(field), field.IsStatic);
+		}
+	}
+
+	public sealed class LoadMemberReference : Instruction
+	{
+		public LoadMemberReference(uint name)
+		{
+			this.name = name;
+		}
+
+		private uint name;
+		/// <summary>
+		/// Gets the string ID of the name of the member to load a reference to.
+		/// </summary>
+		public uint Name { get { return name; } }
+
+		public override StackChange StackChange { get { return new StackChange(1, 1); } }
+
+		public override int GetSize()
+		{
+			return 1 + 4;
+		}
+
+		public override byte[] GetBytes()
+		{
+			var output = new byte[5];
+			output[0] = (byte)Opcode.Ldmemref;
+			output.CopyBytes(name, 1);
+			return output;
+		}
+
+		public override string ToString()
+		{
+			if (Parent != null)
+				return string.Format("ldmemref {0:X8} [{1}]", name, Parent.Module.Members.Strings[name]);
+			return string.Format("ldmemref {0:X8}", name);
 		}
 	}
 }
