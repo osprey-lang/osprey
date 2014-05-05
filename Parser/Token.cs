@@ -164,18 +164,15 @@ namespace Osprey
 
 		public override string ToString()
 		{
-			if ((type & TokenType.Punctuation) == TokenType.Punctuation)
-				return string.Format("'{0}' ({1})", value, System.Enum.GetName(typeof(TokenType), type) ?? "unknown");
-			else if (type == TokenType.Identifier)
-				return string.Format("identifier '{0}'", value);
-			else if ((type & TokenType.Literal) == TokenType.Literal)
-				return string.Format("literal ({0})", value);
-			else if ((type & TokenType.Keyword) == TokenType.Keyword)
-				return string.Format("keyword '{0}'", value);
-			else if (type == TokenType.EOF)
+			if (type == TokenType.Identifier)
+				return string.Format("identifier '{0}'", Value);
+			if ((type & TokenType.Literal) == TokenType.Literal)
+				return string.Format("literal ({0})", Value);
+			if ((type & TokenType.Keyword) == TokenType.Keyword)
+				return string.Format("keyword '{0}'", Value);
+			if (type == TokenType.EOF)
 				return "end of file";
-			else
-				return string.Format("'{0}' ({1})", value, System.Enum.GetName(typeof(TokenType), type) ?? "unknown");
+			return string.Format("'{0}' ({1})", Value, System.Enum.GetName(typeof(TokenType), type) ?? "unknown");
 		}
 	}
 
@@ -358,7 +355,7 @@ namespace Osprey
 		Xor = 47 | Keyword | LambdaOperator,
 		/// <summary>yield</summary>
 		Yield = 48 | Keyword,
-		/// <summary>ref (unused)</summary>
+		/// <summary>ref</summary>
 		Ref = 49 | Keyword,
 		/// <summary>with</summary>
 		With = 50 | Keyword,
