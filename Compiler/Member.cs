@@ -651,12 +651,12 @@ namespace Osprey.Members
 
 		internal string GetLambdaParam()
 		{
-			return "λns:arg$";
+			return "λns$arg$";
 		}
 
 		internal string GetLambdaName(string nameHint)
 		{
-			return string.Format("<λns>{0}${1}", nameHint ?? "__", lambdaNameCounter++);
+			return string.Format("λns${0}!{1}", nameHint ?? "__", lambdaNameCounter++);
 		}
 
 		IDeclarationSpace IDeclarationSpace.Parent { get { return parent; } }
@@ -1101,6 +1101,27 @@ namespace Osprey.Members
 			// Note: this.Method may be a LocalMethod, but they do know
 			// how to return their containing class correctly.
 			return containingMember.GetContainingClass(out hasInstance);
+		}
+
+		/// <summary>
+		/// Determines whether the specified block is nested within this block.
+		/// </summary>
+		/// <param name="other">The block to test against.</param>
+		/// <returns>True if <paramref name="other"/> is nested within this block; otherwise, false.</returns>
+		/// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+		public bool Contains(BlockSpace other)
+		{
+			if (other == null)
+				throw new ArgumentNullException("other");
+
+			do
+			{
+				if (other == this)
+					return true;
+				other = other.Up;
+			} while (other != null);
+
+			return false;
 		}
 
 		public void SetLabel(string label)
@@ -1738,6 +1759,13 @@ namespace Osprey.Members
 			}
 		}
 
+		/// <summary>
+		/// The most deeply nested block that the function captures variables from.
+		/// The extracted function ends up in the closure class of that block, instead
+		/// of the actual parent block of the function.
+		/// </summary>
+		internal BlockSpace DeepestCapturedBlock;
+
 		public LocalFunctionCompilationStrategy CompilationStrategy { get; internal set; }
 
 		private IDeclarationSpace globalParent;
@@ -1751,6 +1779,9 @@ namespace Osprey.Members
 		{
 			hasCaptures = true;
 			variable.Capture(errorNode);
+			var varBlock = variable.Parent;
+			if (DeepestCapturedBlock == null || DeepestCapturedBlock.Contains(varBlock))
+				DeepestCapturedBlock = varBlock;
 
 			/* If the variable is in the same method as this function, then any outer
 			 * local functions do NOT need to capture it. If it is not, then it must
@@ -1778,13 +1809,13 @@ namespace Osprey.Members
 			 * capture y; or rather, to put it in a closure class. There would be no
 			 * need for bar to be marked HasCaptures.
 			 */
-			if (this.Parent.ContainingMember != variable.Parent.ContainingMember)
+			if (Parent.ContainingMember != varBlock.ContainingMember)
 			{
-				if (this.Parent.ContainingMember is LocalMethod)
+				if (Parent.ContainingMember is LocalMethod)
 				{
 					((LocalMethod)Parent.ContainingMember).Function.Capture(variable, errorNode);
 					// Also capture the block that declares the variable:
-					Parent.Capture(variable.Parent);
+					Parent.Capture(varBlock);
 				}
 			}
 			else
@@ -1793,8 +1824,8 @@ namespace Osprey.Members
 				// If this local function is declared in a different scope than the variable,
 				// then the scope of this closure class must capture the scope of the variable.
 
-				if (this.Parent != variable.Parent)
-					this.Parent.Capture(variable.Parent);
+				if (Parent != varBlock)
+					Parent.Capture(varBlock);
 			}
 		}
 		/// <summary>
@@ -1942,14 +1973,14 @@ namespace Osprey.Members
 				return localName;
 
 			var groupIndex = parentMethod.Group != null && parentMethod.Group.Count > 1 ?
-				"@" + parentMethod.Group.IndexOfOverload(parentMethod).ToStringInvariant() :
+				"!" + parentMethod.Group.IndexOfOverload(parentMethod).ToStringInvariant() :
 				"";
-			var result = string.Format("{0}{1}{2}{3}",
-				parentMethod.Name, groupIndex,
-				localName.StartsWith("λ:") || localName.StartsWith("λc:") ? "" : "ƒ:",
+			var result = string.Concat(parentMethod.Name,
+				groupIndex,
+				localName.StartsWith("λ$") || localName.StartsWith("λc$") ? "" : "ƒ$",
 				localName);
-			if (!localName.StartsWith("λ:") && !localName.StartsWith("λc:"))
-				result += "$" + parentMethod.LambdaNameCounter++;
+			if (!localName.StartsWith("λ$") && !localName.StartsWith("λc$"))
+				result += "__" + parentMethod.LambdaNameCounter++;
 			return result;
 		}
 	}

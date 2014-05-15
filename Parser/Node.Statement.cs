@@ -33,7 +33,7 @@ namespace Osprey.Nodes
 		/// <summary>
 		/// Performs constant folding on the statement.
 		/// </summary>
-		public virtual void FoldConstant() { }
+		public abstract void FoldConstant();
 
 		/// <summary>
 		/// Performs name resolution on the statement.
@@ -41,13 +41,13 @@ namespace Osprey.Nodes
 		/// <param name="context">The context in which to resolve names.</param>
 		/// <param name="document">The file namespace in which to resolve global variables.</param>
 		/// <param name="reachable">Indicates whether the statement is reachable.</param>
-		public virtual void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable) { }
+		public abstract void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable);
 
-		public virtual void DeclareNames(BlockSpace parent) { }
+		public abstract void DeclareNames(BlockSpace parent);
 
-		public virtual void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator) { }
+		public abstract void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator);
 
-		public virtual void Compile(Compiler compiler, MethodBuilder method) { }
+		public abstract void Compile(Compiler compiler, MethodBuilder method);
 	}
 
 	public sealed class EmptyStatement : Statement
@@ -63,6 +63,16 @@ namespace Osprey.Nodes
 		{
 			return new string('\t', indent) + ";";
 		}
+
+		public override void FoldConstant() { }
+
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable) { }
+
+		public override void DeclareNames(BlockSpace parent) { }
+
+		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator) { }
+
+		public override void Compile(Compiler compiler, MethodBuilder method) { }
 	}
 
 	public class Block : Statement
@@ -320,17 +330,23 @@ namespace Osprey.Nodes
 					//        yield @= x;
 					//    }
 					// the parameter x is copied like this:
-					//    i(x): x -> I.'var:x'
-					//    I.moveNext(): I.'var:x' -> C.'var:x'
+					//    i(x): x -> I.'$x'
+					//    I.moveNext(): I.'$x' -> C.'$x'
 					// where I is the iterator class and C is the closure class.
+					//
+					// We need to do something similar to closure variables, which are stored
+					// in fields on the iterator class.
 					if (hasLocalVarAccess)
 						for (var i = 0; i < Initializer.Count - 1; i++)
 						{
 							var expr = Initializer[i];
-							if (expr.Value is LocalVariableAccess)
+							var access = expr.Value as LocalVariableAccess;
+							if (access != null)
 							{
-								var variable = ((LocalVariableAccess)expr.Value).Variable;
-								if (variable.IsParameter || variable.VariableKind == VariableKind.IterationVariable)
+								var variable = access.Variable;
+								if (variable.IsParameter ||
+									variable.VariableKind == VariableKind.IterationVariable ||
+									access.AccessKind == LocalAccessKind.ClosureLocal)
 									expr.Value = new InstanceMemberAccess(new ThisAccess(), genClass, variable.CaptureField);
 							}
 						}
@@ -471,12 +487,23 @@ namespace Osprey.Nodes
 					}
 					else if (decl.Variable.IsCaptured)
 					{
-						var block = decl.Variable.Parent;
 						// Assign to the closure field
 						if (decl.Variable.CaptureField.Parent is GeneratorClass)
 							method.Append(new LoadLocal(method.GetParameter(0)));
 						else
-							method.Append(new LoadLocal(block.ClosureLocal)); // Load closure local
+						{
+							var block = decl.Variable.Parent;
+							if (block.ClosureVariable.IsCaptured &&
+								block.ClosureVariable.CaptureField.Parent is GeneratorClass)
+							{
+								// Load closure variable through 'this'
+								method.Append(new LoadLocal(method.GetParameter(0)));
+								method.Append(LoadField.Create(method.Module, block.ClosureVariable.CaptureField));
+							}
+							else
+								method.Append(new LoadLocal(block.ClosureLocal)); // Load closure local
+						}
+
 						decl.Initializer.Compile(compiler, method); // Evaluate expression
 						method.Append(StoreField.Create(method.Module, decl.Variable.CaptureField)); // Store value in field
 					}
@@ -494,6 +521,11 @@ namespace Osprey.Nodes
 							method.Append(new StoreLocal(variable));
 					}
 					method.PopLocation(); // decl.Initializer
+				}
+				else if (!decl.Variable.IsCaptured)
+				{
+					method.Append(LoadConstant.Null());
+					method.Append(new StoreLocal(method.GetLocal(decl.Name)));
 				}
 		}
 	}
@@ -535,7 +567,7 @@ namespace Osprey.Nodes
 				// If you have something like
 				//    var myLambda = @(a, b) { a.method(b); };
 				// then the lambda expression will be compiled to a method named
-				//    λ:myLambda${1}
+				//    λ$myLambda!{1}
 				// where {1} is replaced with an internal counter.
 				// It is thought that this might aid in debugging.
 				if (Initializer is LambdaExpression)
@@ -638,7 +670,18 @@ namespace Osprey.Nodes
 							if (variable.CaptureField.Parent is GeneratorClass)
 								_method.Append(new LoadLocal(_method.GetParameter(0)));
 							else
-								_method.Append(new LoadLocal(variable.Parent.ClosureLocal));
+							{
+								var block = variable.Parent;
+								if (block.ClosureVariable.IsCaptured &&
+									block.ClosureVariable.CaptureField.Parent is GeneratorClass)
+								{
+									// Load closure variable through 'this'
+									_method.Append(new LoadLocal(_method.GetParameter(0)));
+									_method.Append(LoadField.Create(_method.Module, block.ClosureVariable.CaptureField));
+								}
+								else
+									_method.Append(new LoadLocal(block.ClosureLocal));
+							}
 						}
 						else // Store the value in the capture field
 							_method.Append(StoreField.Create(_method.Module, variable.CaptureField));
@@ -780,6 +823,8 @@ namespace Osprey.Nodes
 		{
 			Expression = Expression.ResolveNames(context, document, false, false);
 		}
+
+		public override void DeclareNames(BlockSpace parent) { }
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
@@ -2439,6 +2484,8 @@ namespace Osprey.Nodes
 				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
 		}
 
+		public override void DeclareNames(BlockSpace parent) { }
+
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			for (var i = 0; i < ReturnValues.Count; i++)
@@ -2551,6 +2598,8 @@ namespace Osprey.Nodes
 				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
 		}
 
+		public override void DeclareNames(BlockSpace parent) { }
+
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			for (var i = 0; i < ReturnValues.Count; i++)
@@ -2612,6 +2661,8 @@ namespace Osprey.Nodes
 			return new string('\t', indent) + (Label == null ? "next;" : "next " + Label + ";");
 		}
 
+		public override void FoldConstant() { }
+
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			// Verify that there is a loop to refer to.
@@ -2627,6 +2678,10 @@ namespace Osprey.Nodes
 					loop.NextCount++;
 			}
 		}
+
+		public override void DeclareNames(BlockSpace parent) { }
+
+		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator) { }
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
@@ -2661,6 +2716,8 @@ namespace Osprey.Nodes
 			return new string('\t', indent) + (Label == null ? "break;" : "break " + Label + ";");
 		}
 
+		public override void FoldConstant() { }
+
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			if (context is BlockSpace)
@@ -2672,6 +2729,10 @@ namespace Osprey.Nodes
 					loop.BreakCount++;
 			}
 		}
+
+		public override void DeclareNames(BlockSpace parent) { }
+
+		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator) { }
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
@@ -2735,6 +2796,8 @@ namespace Osprey.Nodes
 						"If the expression in a throw statement has a known type, that type must be or derive from aves.Error.");
 			}
 		}
+
+		public override void DeclareNames(BlockSpace parent) { }
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
@@ -2883,6 +2946,8 @@ namespace Osprey.Nodes
 			Value = Value.ResolveNames(context, document, false, false);
 		}
 
+		public override void DeclareNames(BlockSpace parent) { }
+
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			Target = Target.TransformClosureLocals(currentBlock, forGenerator);
@@ -2942,6 +3007,8 @@ namespace Osprey.Nodes
 				throw new CompileTimeException(Values[0],
 					"The value in a parallel assignment must be of type aves.List.");
 		}
+
+		public override void DeclareNames(BlockSpace parent) { }
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
@@ -3170,6 +3237,8 @@ namespace Osprey.Nodes
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 		}
+
+		public override void DeclareNames(BlockSpace parent) { }
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{

@@ -1382,8 +1382,9 @@ namespace Osprey
 				localMethod.Access = AccessLevel.Public; // not hidd'n, technically speakin'
 				localMethod.IsStatic = false;
 
-				// If the function captures variables, then we need to create a closure class for the containing block.
-				var closure = function.Parent.GenerateClosureClass(this);
+				// If the function captures variables, then we need to create a closure class for
+				// the deepest nested block from which the function captures variables.
+				var closure = function.DeepestCapturedBlock.GenerateClosureClass(this);
 				// Although the closure class initializer adds fields for all captured variables, it does NOT
 				// declare local functions as methods, so we must do that explicitly.
 				closure.DeclareFunctionMethod(function);

@@ -1194,24 +1194,24 @@ namespace Osprey.Members
 
 		internal string GetLambdaParam()
 		{
-			return "λc:arg$";
+			return "λc$arg$";
 		}
 
 		internal string GetLambdaName(string nameHint)
 		{
-			return string.Format("λc:{0}${1}", nameHint ?? "__", lambdaNameCounter++);
+			return string.Format("λc${0}!{1}", nameHint ?? "__", lambdaNameCounter++);
 		}
 
 		internal string GetClosureClassName(string prefix, out int blockNumber)
 		{
 			blockNumber = closureClassCounter++;
-			return string.Format("C:{0}{1}${2}", prefix, "__", blockNumber.ToStringInvariant());
+			return string.Format("C${0}{1}!{2}", prefix, "__", blockNumber.ToStringInvariant());
 		}
 
 		internal string GetGeneratorClassName(string prefix)
 		{
 			var classNumber = closureClassCounter++;
-			return string.Format("I:{0}{1}${2}", prefix, "__", classNumber.ToStringInvariant());
+			return string.Format("I${0}{1}!{2}", prefix, "__", classNumber.ToStringInvariant());
 		}
 
 		private enum ClassState
@@ -1898,7 +1898,7 @@ namespace Osprey.Members
 
 		internal static string GetFieldName(Variable variable)
 		{
-			return string.Format("var:{0}", variable.Name);
+			return "$" + variable.Name;
 		}
 
 		internal static string GetFieldName(BlockSpace block)
@@ -1908,10 +1908,10 @@ namespace Osprey.Members
 
 		private static string GetMethodName(LocalFunction function)
 		{
-			if (function.Name.StartsWith("λ:") || function.Name.StartsWith("λc:")) // captured lambda
+			if (function.Name.StartsWith("λ$") || function.Name.StartsWith("λc$")) // captured lambda
 				return function.Name;
 			else
-				return string.Format("ƒ:{0}", function.Name);
+				return string.Format("ƒ${0}", function.Name);
 		}
 
 		internal const string ThisFieldName = "<>this";

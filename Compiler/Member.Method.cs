@@ -734,14 +734,14 @@ namespace Osprey.Members
 
 		internal virtual string GetLambdaName(string nameHint)
 		{
-			return string.Format("λ:{0}${1}",
+			return string.Format("λ${0}!{1}",
 				nameHint ?? "__",
 				LambdaNameCounter++.ToStringInvariant());
 		}
 
 		internal virtual string GetLambdaParam()
 		{
-			return string.Format("λ:arg${0}",
+			return string.Format("λ$arg${0}",
 				LambdaParamCounter++.ToStringInvariant());
 		}
 
@@ -749,21 +749,26 @@ namespace Osprey.Members
 		{
 			var overloadIndex = Group.Count == 1 ?
 				"" :
-				"@" + Group.IndexOfOverload(this).ToStringInvariant();
+				"!" + Group.IndexOfOverload(this).ToStringInvariant();
 			blockNumber = ClosureCounter++;
-			return string.Format("C:{0}{1}{2}__{3}", prefix,
+			return string.Format("C${0}{1}{2}__{3}",
+				prefix,
 				Name.Replace('.', '#'),
-				overloadIndex, blockNumber.ToStringInvariant());
+				overloadIndex,
+				blockNumber.ToStringInvariant());
 		}
 
 		internal virtual string GetGeneratorClassName(string prefix)
 		{
 			var overloadIndex = Group.Count == 1 ?
 				"" :
-				"@" + Group.IndexOfOverload(this).ToStringInvariant();
+				"!" + Group.IndexOfOverload(this).ToStringInvariant();
 			var classNumber = ClosureCounter++;
-			return string.Format("I:{0}{1}{2}__{3}", prefix, Name.Replace('.', '#'),
-				overloadIndex, classNumber.ToStringInvariant());
+			return string.Format("I${0}{1}{2}__{3}",
+				prefix,
+				Name.Replace('.', '#'),
+				overloadIndex,
+				classNumber.ToStringInvariant());
 		}
 
 		internal class CompiledMethodData

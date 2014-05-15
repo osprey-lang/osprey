@@ -12,10 +12,21 @@ namespace Osprey.Nodes
 {
 	public sealed class LocalVariableAccess : AssignableExpression
 	{
+		public LocalVariableAccess(Variable variable, BlockSpace accessFrom)
+		{
+			if (accessFrom == null)
+				throw new ArgumentNullException("accessFrom");
+
+			Variable = variable;
+			this.accessFrom = accessFrom;
+
+			// Assume the variable is being read, until IsAssignment is set to true.
+			variable.ReadCount++;
+		}
 		public LocalVariableAccess(Variable variable, LocalAccessKind kind)
 		{
 			Variable = variable;
-			AccessKind = kind;
+			accessKind = kind;
 
 			// Assume the variable is being read, until IsAssignment is set to true.
 			variable.ReadCount++;
@@ -24,8 +35,29 @@ namespace Osprey.Nodes
 		/// <summary>The variable that this expression accesses.</summary>
 		public readonly Variable Variable;
 
+		private BlockSpace accessFrom;
+		private LocalAccessKind accessKind;
 		/// <summary>The kind of access this node represents.</summary>
-		public readonly LocalAccessKind AccessKind;
+		public LocalAccessKind AccessKind
+		{
+			get
+			{
+				if (accessFrom == null)
+					return accessKind;
+
+				if (Variable.Parent.ContainingMember != accessFrom.ContainingMember)
+				{
+					// If the variable is in a different method than the method it's being
+					// accessed from, then the variable is accessed by capturing
+					var function = ((LocalMethod)accessFrom.ContainingMember).Function;
+					return Variable.Parent == function.DeepestCapturedBlock ||
+						Variable.Parent == function.Parent ?
+						LocalAccessKind.CapturingSameScope : // the function is in the same block as the variable
+						LocalAccessKind.CapturingOtherScope; // the function and the variable are in different blocks
+				}
+				return LocalAccessKind.NonCapturing;
+			}
+		}
 
 		public override bool IsAssignment
 		{
@@ -117,7 +149,7 @@ namespace Osprey.Nodes
 							var varBlock = Variable.Parent;
 
 							// Load block field in current closure class
-							var currentClosure = ((LocalMethod)currentBlock.Method).Function.Parent.ClosureClass;
+							var currentClosure = ((LocalMethod)currentBlock.Method).Function.DeepestCapturedBlock.ClosureClass;
 							var inner = new InstanceMemberAccess(new ThisAccess(), currentClosure,
 								currentClosure.DeclareBlockField(varBlock));
 
@@ -318,20 +350,27 @@ namespace Osprey.Nodes
 						 *       
 						 * Note that the opposite of case 3 - referring to a function nested
 						 * several levels within the current method - is not possible.
+						 * 
+						 * Also note that the compiler optimizes compilation of local functions
+						 * such that a local function is put in the closure class of the most
+						 * deeply nested block it captures variables from. We must use the field
+						 * Function.DeepestCapturedBlock as if that were the parent block of the
+						 * function.
 						 */
+						var funcBlock = Function.DeepestCapturedBlock;
 						var group = Function.Method.Group;
-						if (Function.Parent.ContainingMember == currentBlock.ContainingMember)
+						if (funcBlock.ContainingMember == currentBlock.ContainingMember)
 							// The function is declared inside this method.
 							// Load it from the appropriate closure local.
 							return new InstanceMemberAccess(
-								new LocalVariableAccess(Function.Parent.ClosureVariable, LocalAccessKind.ClosureLocal),
-								Function.Parent.ClosureClass, group
+								new LocalVariableAccess(funcBlock.ClosureVariable, LocalAccessKind.ClosureLocal),
+								funcBlock.ClosureClass, group
 							);
 
 						var currentMethod = currentBlock.Method as LocalMethod;
 
-						var functionClosure = Function.Parent.ClosureClass;
-						if (currentMethod.Function.Parent == Function.Parent)
+						var functionClosure = funcBlock.ClosureClass;
+						if (currentMethod.Function.Parent == funcBlock)
 							// The function is declared in the same scope as the current method;
 							// they therefore belong to the same closure class. Load from 'this'.
 							return new InstanceMemberAccess(new ThisAccess(), functionClosure, group);
@@ -341,7 +380,7 @@ namespace Osprey.Nodes
 						// the captured scope of the declaring block!
 						var closure = currentMethod.Function.Parent.ClosureClass;
 						var inner = new InstanceMemberAccess(new ThisAccess(),
-							closure, closure.GetBlockField(Function.Parent));
+							closure, closure.GetBlockField(funcBlock));
 						return new InstanceMemberAccess(inner, functionClosure, group);
 					}
 				case LocalFunctionCompilationStrategy.InstanceMethod:

@@ -1649,20 +1649,14 @@ namespace Osprey.Nodes
 						// If the variable comes from another method, then we must capture it,
 						// but only if the current method is a local method. The actual trans-
 						// formation takes place elsewhere.
-						LocalAccessKind kind;
 						if (variable.Parent.ContainingMember != block.ContainingMember &&
 							block.ContainingMember is LocalMethod)
 						{
 							var function = ((LocalMethod)block.ContainingMember).Function;
 							function.Capture(variable, this);
-							kind = function.Parent == variable.Parent ?
-								LocalAccessKind.CapturingSameScope : // the function is in the same block as the variable
-								LocalAccessKind.CapturingOtherScope; // the function and the variable are in different blocks
 						}
-						else
-							kind = LocalAccessKind.NonCapturing;
 
-						result = new LocalVariableAccess(variable, kind);
+						result = new LocalVariableAccess(variable, block);
 					}
 					break;
 				case MemberKind.LocalConstant:
