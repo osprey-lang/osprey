@@ -2653,15 +2653,74 @@ namespace Osprey
 			try { type = ParseTypeName(ref i); }
 			catch (ParseException e) { throw new ParseException(e.Token, "Expected type name", e); }
 
-			Expect(ref i, TokenType.ParenOpen);
+			bool hasRefArgs = false;
+			List<Expression> args;
+			bool requireInitializer = false;
+			if (Accept(ref i, TokenType.ParenOpen))
+			{
+				args = ParseArgumentList(ref i, out hasRefArgs);
 
-			bool hasRefArgs;
-			var args = ParseArgumentList(ref i, out hasRefArgs);
+				Expect(ref i, TokenType.ParenClose);
+			}
+			else
+			{
+				args = new List<Expression>();
+				requireInitializer = true;
+			}
 
-			Expect(i, TokenType.ParenClose);
+			ObjectInitializer initializer = null;
+			if (Accept(i, TokenType.With))
+				initializer = ParseObjectInitializer(ref i);
+			else if (requireInitializer)
+				throw new ParseException(tok[i], "An object initializer is required if there are no arguments to the constructor.");
 
 			return new ObjectCreationExpression(type, args, hasRefArgs)
-				.At(start, tok[i++].EndIndex, document);
+				{ Initializer = initializer }
+				.At(start, tok[i - 1].EndIndex, document);
+		}
+
+		private ObjectInitializer ParseObjectInitializer(ref int i)
+		{
+			var start = Expect(ref i, TokenType.With).Index;
+			Expect(ref i, TokenType.CurlyOpen);
+
+			var members = new List<MemberInitializer>();
+			if (Accept(ref i, TokenType.CurlyClose))
+				return new ObjectInitializer(members)
+					{
+						StartIndex = start,
+						EndIndex = tok[i - 1].EndIndex,
+						Document = document,
+					};
+
+			var memberNames = new HashSet<string>();
+			do
+			{
+				var nameTok = Expect(ref i, TokenType.Identifier);
+				if (!memberNames.Add(nameTok.Value))
+					throw new ParseException(nameTok,
+						string.Format("There is already an initializer for the member '{0}'.", nameTok.Value));
+
+				Expect(ref i, TokenType.Colon);
+
+				var value = ParseExpression(ref i);
+
+				members.Add(new MemberInitializer(nameTok.Value, value)
+					{
+						StartIndex = nameTok.Index,
+						EndIndex = value.EndIndex,
+						Document = document,
+					});
+			} while (Accept(ref i, TokenType.Comma) && !Accept(i, TokenType.CurlyClose));
+
+			Expect(ref i, TokenType.CurlyClose);
+
+			return new ObjectInitializer(members)
+				{
+					StartIndex = start,
+					EndIndex = tok[i - 1].EndIndex,
+					Document = document,
+				};
 		}
 
 		private List<Expression> ParseArgumentList(ref int i, out bool hasRefs,

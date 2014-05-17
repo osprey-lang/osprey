@@ -1459,6 +1459,11 @@ namespace Osprey.Instructions
 
 	public sealed class StaticCall : Instruction
 	{
+		/// <summary>
+		/// Initializes a new <see cref="StaticCall"/> instance.
+		/// </summary>
+		/// <param name="method">The method that the instruction calls.</param>
+		/// <param name="argCount">The number of arguments passed to the method, not including the instance (if any).</param>
 		public StaticCall(uint method, int argCount)
 		{
 			this.method = method;

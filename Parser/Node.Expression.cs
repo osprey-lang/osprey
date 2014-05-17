@@ -2903,6 +2903,9 @@ namespace Osprey.Nodes
 
 		public bool HasRefArgs;
 
+		/// <summary>The object initializer, or null if it is absent.</summary>
+		public ObjectInitializer Initializer;
+
 		internal Method Constructor;
 
 		public override bool IsTypeKnown(Compiler compiler) { return true; }
@@ -2924,6 +2927,9 @@ namespace Osprey.Nodes
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].FoldConstant();
 
+			if (Initializer != null)
+				Initializer.FoldConstant();
+
 			return this;
 		}
 
@@ -2940,6 +2946,9 @@ namespace Osprey.Nodes
 			if (HasRefArgs || Constructor.HasRefParams)
 				Constructor.VerifyArgumentRefness(Arguments);
 
+			if (Initializer != null)
+				Initializer.ResolveNames(context, document, (Class)type);
+
 			return this;
 		}
 
@@ -2947,6 +2956,10 @@ namespace Osprey.Nodes
 		{
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
+
+			if (Initializer != null)
+				Initializer.TransformClosureLocals(currentBlock, forGenerator);
+
 			return this;
 		}
 
@@ -2957,6 +2970,147 @@ namespace Osprey.Nodes
 
 			var type = Type != null ? Type.Type : Constructor.Group.ParentAsClass;
 			method.Append(new NewObject(method.Module.GetTypeId(type), Arguments.Count));
+
+			if (Initializer != null)
+				Initializer.Compile(compiler, method);
+		}
+	}
+
+	public sealed class ObjectInitializer : ParseNode
+	{
+		public ObjectInitializer(List<MemberInitializer> members)
+		{
+			Members = members;
+		}
+
+		public List<MemberInitializer> Members;
+
+		public override string ToString(int indent)
+		{
+			if (Members.Count == 0)
+				return "with { }";
+
+			return "with { " + Members.JoinString(", ", indent + 1) + " }";
+		}
+
+		public void FoldConstant()
+		{
+			foreach (var init in Members)
+				init.FoldConstant();
+		}
+
+		public void ResolveNames(IDeclarationSpace context, FileNamespace document, Class objectType)
+		{
+			foreach (var init in Members)
+				init.ResolveNames(context, document, objectType);
+		}
+
+		public void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			foreach (var init in Members)
+				init.TransformClosureLocals(currentBlock, forGenerator);
+		}
+
+		public void Compile(Compiler compiler, MethodBuilder method)
+		{
+			// Instance is on the stack
+			var instLoc = method.GetAnonymousLocal();
+
+			method.Append(new StoreLocal(instLoc)); // Store the instance in the local
+
+			foreach (var init in Members)
+			{
+				method.Append(new LoadLocal(instLoc)); // Load instance
+				init.Compile(compiler, method); // Compile initializer
+			}
+
+			method.Append(new LoadLocal(instLoc)); // Load instance as result
+			instLoc.Done();
+		}
+	}
+
+	public sealed class MemberInitializer : ParseNode
+	{
+		public MemberInitializer(string name, Expression value)
+		{
+			Name = name;
+			Value = value;
+		}
+
+		/// <summary>The name of the member that is being initialized.</summary>
+		private string Name;
+
+		/// <summary>The value that the member is initialized to.</summary>
+		private Expression Value;
+
+		private ClassMember Member;
+
+		public override string ToString(int indent)
+		{
+			return Name + ": " + Value.ToString(indent + 1);
+		}
+
+		public void FoldConstant()
+		{
+			Value = Value.FoldConstant();
+		}
+
+		public void ResolveNames(IDeclarationSpace context, FileNamespace document, Class objectType)
+		{
+			Value = Value.ResolveNames(context, document, false, false);
+
+			bool _;
+			NamedMember inaccessibleMember;
+			var namedMember = objectType.GetMember(Name,
+				instType: objectType,
+				fromType: context.GetContainingClass(out _),
+				inaccessibleMember: out inaccessibleMember);
+
+			if (namedMember == null)
+			{
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(this,
+						string.Format("The member '{0}.{1}' is not accessible from this context.",
+							objectType.FullName, Name));
+
+				throw new UndefinedNameException(this, Name,
+					string.Format("The type '{0}' does not contain a definition for '{1}'.",
+						objectType.FullName, Name));
+			}
+
+			var member = namedMember as ClassMember;
+
+			// The member must be an instance member, and it must be either a field or a writable property.
+			// The null test is because MethodGroup does not inherit from ClassMember.
+			if (member == null || member.IsStatic ||
+				member.Kind != MemberKind.Field &&
+				(member.Kind != MemberKind.Property || ((Property)member).Setter == null))
+				throw new CompileTimeException(this,
+					"The member name must refer to an instance field or writable instance property.");
+
+			Member = member;
+		}
+
+		public void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			Value = Value.TransformClosureLocals(currentBlock, forGenerator);
+		}
+
+		public void Compile(Compiler compiler, MethodBuilder method)
+		{
+			// Instance is on the stack
+
+			Value.Compile(compiler, method); // First evaluate the expression
+
+			if (Member.Kind == MemberKind.Field)
+				// Store value in field
+				method.Append(StoreField.Create(method.Module, (Field)Member));
+			else
+			{
+				// Must be a writable instance property, so call the property setter
+				method.Append(new StaticCall(((Property)Member).SetterId, 1));
+				method.Append(new SimpleInstruction(Opcode.Pop));
+			}
 		}
 	}
 
