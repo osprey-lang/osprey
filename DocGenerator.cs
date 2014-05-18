@@ -94,7 +94,7 @@ namespace Osprey
 			JsonObject result = new JsonObject();
 			if (type.DocString != null)
 			{
-				var doc = ParseDocString(type.DocString, type.Type, document, type.Type);
+				var doc = ParseDocString(type.DocString.Value, type.Type, document, type.Type);
 				if (doc.IsValidForType)
 					doc.ToJson(result);
 				else
@@ -124,7 +124,7 @@ namespace Osprey
 					if (field.DocString != null)
 					{
 						var member = @enum.Type.GetMember(field.Name);
-						var doc = ParseDocString(field.DocString, @enum.Type, document, member);
+						var doc = ParseDocString(field.DocString.Value, @enum.Type, document, member);
 						if (doc.IsValidForField)
 						{
 							if (fieldDocs == null)
@@ -155,7 +155,7 @@ namespace Osprey
 					{
 						var firstDecl = field.Declarators[0];
 						var member = context.GetMember(firstDecl.Name);
-						var doc = ParseDocString(field.DocString, context, document, member);
+						var doc = ParseDocString(field.DocString.Value, context, document, member);
 
 						if (doc.IsValidForField)
 						{
@@ -173,7 +173,7 @@ namespace Osprey
 					{
 						var firstDecl = field.Declarators[0];
 						var constant = context.GetMember(firstDecl.Name);
-						var doc = ParseDocString(field.DocString, context, document, constant);
+						var doc = ParseDocString(field.DocString.Value, context, document, constant);
 						if (doc.IsValidForField)
 						{
 							if (fieldDocs == null)
@@ -217,19 +217,19 @@ namespace Osprey
 				foreach (var method in @class.Methods)
 					if (method.DocString != null)
 						addMethodDoc(method.DeclSpace,
-							ParseDocString(method.DocString, context, document, method.DeclSpace.Group),
+							ParseDocString(method.DocString.Value, context, document, method.DeclSpace.Group),
 							method.Parameters, document.Compiler);
 
 				foreach (var ctor in @class.Constructors)
 					if (ctor.DocString != null)
 						addMethodDoc(ctor.DeclSpace,
-							ParseDocString(ctor.DocString, context, document, ctor.DeclSpace.Group),
+							ParseDocString(ctor.DocString.Value, context, document, ctor.DeclSpace.Group),
 							ctor.Parameters, document.Compiler);
 
 				foreach (var op in @class.Operators)
 					if (op.DocString != null)
 						addMethodDoc(op.DeclSpace,
-							ParseDocString(op.DocString, context, document, op.DeclSpace.Group),
+							ParseDocString(op.DocString.Value, context, document, op.DeclSpace.Group),
 							op.DeclSpace.Parameters, document.Compiler);
 
 				if (methodDocs != null)
@@ -251,7 +251,7 @@ namespace Osprey
 						else
 							propDocs[prop.Name] = propDocObj = new JsonObject();
 
-						propDocObj[prop.IsSetter ? "set" : "get"] = ParseDocString(prop.DocString,
+						propDocObj[prop.IsSetter ? "set" : "get"] = ParseDocString(prop.DocString.Value,
 							context, document, prop.DeclSpace.Group).ToJson();
 					}
 					// TODO: indexers
@@ -267,7 +267,7 @@ namespace Osprey
 			if (function.DocString == null)
 				return null;
 
-			var doc = ParseDocString(function.DocString, function.DeclSpace, document, function.DeclSpace);
+			var doc = ParseDocString(function.DocString.Value, function.DeclSpace, document, function.DeclSpace);
 			if (!VerifyParameters(function.DeclSpace.Group.FullName,
 				doc, function.Function.Parameters, document.Compiler))
 				return null;
@@ -287,7 +287,7 @@ namespace Osprey
 
 			var firstDecl = constant.Declaration.Declarators[0];
 			var globalConst = constant.Constants[0];
-			var doc = ParseDocString(constant.DocString, globalConst.Parent, document, globalConst);
+			var doc = ParseDocString(constant.DocString.Value, globalConst.Parent, document, globalConst);
 
 			if (!doc.IsValidForField)
 			{

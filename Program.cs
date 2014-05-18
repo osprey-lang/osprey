@@ -13,8 +13,10 @@ namespace Osprey
 	{
 		public static int Main(string[] args)
 		{
-			try { Console.OutputEncoding = Encoding.UTF8; } catch { }
-			try { Console.InputEncoding = Encoding.UTF8; } catch { }
+			try { Console.OutputEncoding = Encoding.UTF8; }
+			catch { }
+			try { Console.InputEncoding = Encoding.UTF8; }
+			catch { }
 
 			CompilerOptions compilerOptions;
 			ProgramOptions programOptions;
@@ -77,8 +79,7 @@ namespace Osprey
 				if (!programOptions.SilenceErrors)
 				{
 					err.Write("[error {0}] Parse error: ",
-						new MessageLocation(e.FileName, e.GetFileSource(),
-							e.Index, e.EndIndex).ToString(1));
+						new MessageLocation(e.SourceFile, e.Index, e.EndIndex).ToString(1));
 
 					Console.ForegroundColor = ConsoleColor.Red;
 					err.Write(e.Message);
@@ -184,24 +185,24 @@ namespace Osprey
 			var length = e.Token != null ?
 				e.Token.Value.Length :
 				e.Node.EndIndex - e.Node.StartIndex;
-			PrintErrorLocation(e.FileName, e.GetFileSource(), e.Index, length, errorStream);
+			PrintErrorLocation(e.SourceFile, e.Index, length, errorStream);
 		}
 
 		private static void PrintErrorLocation(CompileTimeException e, TextWriter errorStream)
 		{
-			PrintErrorLocation(e.Document.FileName, e.Document.FileSource,
+			PrintErrorLocation(e.Document.SourceFile,
 				e.Node.StartIndex, e.Node.EndIndex - e.Node.StartIndex,
 				errorStream);
 		}
 
-		private static void PrintErrorLocation(string fileName, string fileSource, int charIndex, int length, TextWriter err)
+		private static void PrintErrorLocation(SourceFile file, int charIndex, int length, TextWriter err)
 		{
 			int column;
-			var lineNumber = Token.GetLineNumber(fileSource, charIndex, 1, out column);
-			err.WriteLine("At line {0}, character {1}, in {2}:", lineNumber, column, fileName);
+			var lineNumber = file.GetLineNumber(charIndex, 1, out column);
+			err.WriteLine("At line {0}, character {1}, in {2}:", lineNumber, column, file.FileName);
 
 			int startIndex;
-			var context = FindContext(fileSource, charIndex, length, out startIndex);
+			var context = FindContext(file.Source, charIndex, length, out startIndex);
 
 			charIndex -= startIndex;
 			if (charIndex > 0)

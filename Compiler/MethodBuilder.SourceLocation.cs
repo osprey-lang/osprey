@@ -16,25 +16,25 @@ namespace Osprey
 			if (node.Document == null)
 				throw new ArgumentException("The node must belong to a document.", "node");
 
-			this.document = node.Document;
+			this.file = node.Document.SourceFile;
 			this.startIndex = node.StartIndex;
 			this.endIndex = node.EndIndex;
 		}
-		public SourceLocation(Document document, int startIndex, int endIndex)
+		public SourceLocation(SourceFile file, int startIndex, int endIndex)
 		{
-			if (document == null)
-				throw new ArgumentNullException("document");
+			if (file == null)
+				throw new ArgumentNullException("file");
 
-			this.document = document;
+			this.file = file;
 			this.startIndex = startIndex;
 			this.endIndex = endIndex;
 		}
 
-		private Document document;
+		private SourceFile file;
 		/// <summary>
 		/// Gets the document containing the source location.
 		/// </summary>
-		public Document Document { get { return document; } }
+		public SourceFile File { get { return file; } }
 
 		private int startIndex, endIndex;
 		/// <summary>
@@ -62,7 +62,7 @@ namespace Osprey
 
 		public int GetLineNumber(int tabSize, out int column)
 		{
-			return Token.GetLineNumber(document.FileSource, startIndex, tabSize, out column);
+			return file.GetLineNumber(startIndex, tabSize, out column);
 		}
 
 		public override string ToString()
@@ -73,7 +73,7 @@ namespace Osprey
 			var length = endIndex - startIndex;
 
 			return string.Format("\"{0}\":{1}:{2}+{3}",
-				document.FileName, lineNumber, column, length);
+				file.FileName, lineNumber, column, length);
 		}
 	}
 }

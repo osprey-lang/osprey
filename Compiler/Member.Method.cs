@@ -486,7 +486,7 @@ namespace Osprey.Members
 					// Hence, we can safely make the following retnull instruction belong to that
 					// curly brace. Note that the main method has a node with a null document.
 					if (bodyNode.Document != null)
-						mb.PushLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
+						mb.PushLocation(bodyNode.Document.SourceFile, bodyNode.EndIndex, bodyNode.EndIndex + 1);
 					mb.Append(new SimpleInstruction(Opcode.Retnull));
 					if (bodyNode.Document != null)
 						mb.PopLocation();
@@ -578,7 +578,7 @@ namespace Osprey.Members
 			var bodyNode = Body.Node;
 			// During generator setup, the cursor is at the "{" of the body
 			// Note: it is impossible to have a generator block without curlies.
-			builder.PushLocation(bodyNode.Document, bodyNode.StartIndex, bodyNode.StartIndex + 1);
+			builder.PushLocation(bodyNode.Document.SourceFile, bodyNode.StartIndex, bodyNode.StartIndex + 1);
 
 			builder.Append(new LoadLocal(builder.GetParameter(0))); // Load this
 			builder.Append(LoadField.Create(builder.Module, stateField)); // Load this.'<>state'
@@ -601,7 +601,7 @@ namespace Osprey.Members
 			if (canEnd)
 			{
 				// The last step appears to be at the closing "}" of the body
-				builder.PushLocation(bodyNode.Document, bodyNode.EndIndex, bodyNode.EndIndex + 1);
+				builder.PushLocation(bodyNode.Document.SourceFile, bodyNode.EndIndex, bodyNode.EndIndex + 1);
 
 				if (bodyNode.IsEndReachable)
 				{

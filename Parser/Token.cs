@@ -21,7 +21,7 @@ namespace Osprey
 		/// <paramref name="source"/> is null.
 		/// -or-
 		/// <paramref name="value"/> is null.</exception>
-		public Token(string source, string value, TokenType type, int index)
+		public Token(SourceFile source, string value, TokenType type, int index)
 		{
 			if (source == null)
 				throw new ArgumentNullException("source");
@@ -42,7 +42,7 @@ namespace Osprey
 		/// <param name="index">The index in the source script at which the token appears.</param>
 		/// <param name="endIndex">The last index (exclusive) of the token in the source file.</param>
 		/// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
-		public Token(string source, TokenType type, int index, int endIndex)
+		public Token(SourceFile source, TokenType type, int index, int endIndex)
 		{
 			if (source == null)
 				throw new ArgumentNullException("source");
@@ -53,11 +53,11 @@ namespace Osprey
 			this.endIndex = endIndex;
 		}
 
-		private string source;
+		private SourceFile source;
 		/// <summary>
 		/// Gets the text of the source file that the token comes from.
 		/// </summary>
-		public string Source { get { return source; } }
+		public SourceFile Source { get { return source; } }
 
 		private string value;
 		/// <summary>
@@ -68,7 +68,7 @@ namespace Osprey
 			get
 			{
 				if (value == null)
-					value = source.Substring(index, endIndex - index);
+					value = source.Source.Substring(index, endIndex - index);
 				return value;
 			}
 		}
@@ -91,12 +91,12 @@ namespace Osprey
 		/// </summary>
 		public int EndIndex { get { return endIndex; } }
 
-		internal string documentation;
+		internal Token documentation;
 		/// <summary>
 		/// Gets the contents of the documentation comment immediately preceding this token,
 		/// or null if there is none.
 		/// </summary>
-		public string Documentation { get { return documentation; } }
+		public Token Documentation { get { return documentation; } }
 
 		/// <summary>
 		/// Returns the line number (1-based) and column (1-based) the token appears at.
@@ -106,42 +106,7 @@ namespace Osprey
 		/// <returns>The line number at which the token appears.</returns>
 		public int GetLineNumber(int tabSize, out int column)
 		{
-			return GetLineNumber(source, index, tabSize, out column);
-		}
-
-		/// <summary>
-		/// Calculates the 1-based line number and 1-based column of an index within a source file.
-		/// </summary>
-		/// <param name="source">The contents of the source file.</param>
-		/// <param name="index">The index of the character.</param>
-		/// <param name="tabSize">The visual size of a tab character. Pass 1 to treat tabs as single characters.</param>
-		/// <param name="column">(Out) The column of the character.</param>
-		/// <returns>The line number of the character at the specified index.</returns>
-		internal static int GetLineNumber(string source, int index, int tabSize, out int column)
-		{
-			int line = 1;
-			int col = 0;
-
-			for (var i = 0; i < index; i++)
-			{
-				char ch = source[i];
-				if (ch == '\r' || ch == '\n' || ch == '\u0085' ||
-					ch == '\u2028' || ch == '\u2029')
-				{
-					col = 0;
-					line++;
-					// \r\n counts as a single unit
-					if (i + 1 < index && ch == '\r' && source[i + 1] == '\n')
-						i++;
-				}
-				else if (ch == '\t')
-					col += tabSize - col % tabSize;
-				else
-					col++;
-			}
-
-			column = col + 1;
-			return line;
+			return source.GetLineNumber(index, tabSize, out column);
 		}
 
 		/// <summary>
@@ -183,8 +148,8 @@ namespace Osprey
 	/// </summary>
 	public class StringToken : Token
 	{
-		public StringToken(string source, string value, string literalValue, int index)
-			: base(source, value, TokenType.String, index)
+		public StringToken(SourceFile source, string literalValue, int index, int endIndex)
+			: base(source, TokenType.String, index, endIndex)
 		{
 			this.literalValue = literalValue;
 		}
@@ -198,8 +163,8 @@ namespace Osprey
 
 	public class CharToken : Token
 	{
-		public CharToken(string source, string value, int codepoint, int index)
-			: base(source, value, TokenType.Character, index)
+		public CharToken(SourceFile source, int codepoint, int index, int endIndex)
+			: base(source, TokenType.Character, index, endIndex)
 		{
 			this.codepoint = codepoint;
 		}

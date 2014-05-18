@@ -8,19 +8,12 @@ namespace Osprey
 {
 	public class ParseException : Exception
 	{
-		// These two constructors have been removed, because we always always always
-		// want to make sure there's an (accurate!) error location reported.
-		// public ParseException(string message)
-		// public ParseException(string message, Exception innerException)
-
 		public ParseException(Token offender)
 			: this(offender, offender.Type == TokenType.EOF ? "Unexpected end of file" : "Unexpected token " + offender.ToString(), null)
 		{ }
 		public ParseException(Token offender, string message)
 			: this(offender, message, null)
-		{
-			this.token = offender;
-		}
+		{ }
 		public ParseException(Token offender, string message, Exception innerException)
 			: base(message, innerException)
 		{
@@ -29,18 +22,18 @@ namespace Osprey
 			this.token = offender;
 		}
 
-		public ParseException(ParseNode offender, string source, string message)
-			: this(offender, source, message, null)
+		public ParseException(ParseNode offender, string message)
+			: this(offender, message, null)
 		{ }
-		public ParseException(ParseNode offender, string source, string message, Exception innerException)
+		public ParseException(ParseNode offender, string message, Exception innerException)
 			: base(message, innerException)
 		{
 			if (offender == null)
 				throw new ArgumentNullException("offender");
-			if (source == null)
-				throw new ArgumentNullException("source");
+			if (offender.Document.SourceFile == null)
+				throw new ArgumentException("The node must belong to a document with a source file.");
+
 			this.node = offender;
-			this.source = source;
 		}
 
 		private Token token = null;
@@ -54,8 +47,6 @@ namespace Osprey
 		/// Gets the offending node, or null if there was none.
 		/// </summary>
 		public ParseNode Node { get { return node; } }
-
-		private string source; // Very private.
 
 		/// <summary>
 		/// Gets the index at which the exception occurred in the source file, or -1 if it cannot be determined.
@@ -83,7 +74,15 @@ namespace Osprey
 		/// <summary>
 		/// Gets the name of the file in which the parse exception occurred.
 		/// </summary>
-		public string FileName { get; internal set; }
+		public SourceFile SourceFile
+		{
+			get
+			{
+				if (token != null)
+					return token.Source;
+				return node.Document.SourceFile;
+			}
+		}
 
 		public override string ToString()
 		{
@@ -106,20 +105,7 @@ namespace Osprey
 		/// <returns>The line number at which the token appears.</returns>
 		public int GetLineNumber(int tabSize, out int column)
 		{
-			if (token != null)
-				return token.GetLineNumber(tabSize, out column);
-			if (node != null)
-				return Token.GetLineNumber(source, node.StartIndex, tabSize, out column);
-
-			column = -1;
-			return -1;
-		}
-
-		public string GetFileSource()
-		{
-			if (token != null)
-				return token.Source;
-			return source;
+			return SourceFile.GetLineNumber(this.Index, tabSize, out column);
 		}
 
 		internal ParseException Extend(string newMessage)
@@ -127,7 +113,7 @@ namespace Osprey
 			if (token != null)
 				return new ParseException(token, newMessage, this);
 			// node must be non-null
-			return new ParseException(node, source, newMessage, this);
+			return new ParseException(node, newMessage, this);
 		}
 	}
 }

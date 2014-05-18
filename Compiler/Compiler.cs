@@ -635,18 +635,30 @@ namespace Osprey
 
 			compileTimer.Stop();
 
+			// Step 12: Save the output module. Once we've done this, we're all done!
+			// Saving a module requires a lot of seeking back and forth, because certain
+			// structures in the file format need to be prefixed with their size, which
+			// usually cannot be calculated without actually emitting data. Seeking appears
+			// to be relatively slow, so we write to a memory stream first, then write
+			// the resulting buffer to the file in one go.
+			// The vast majority of modules are small, and .NET can deal with large byte
+			// arrays with no difficulty.
 			var emitTimer = new Stopwatch();
 			long bytesWritten;
-			using (var stream = File.Open(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
+			using (var stream = new MemoryStream(65536))
 			{
-				// Step 12: Save the output module. Once we've done this, we're all done! Holy carp.
 				emitTimer.Start();
 
 				outputModule.Save(stream);
 
-				emitTimer.Stop();
-
 				bytesWritten = stream.Position;
+
+				// CopyTo reads from the current position, so reset first!
+				stream.Position = 0;
+				using (var fileStream = File.Open(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
+					stream.CopyTo(fileStream);
+
+				emitTimer.Stop();
 			}
 
 			Notice("Compilation finished at " + DateTime.Now);
@@ -682,42 +694,30 @@ namespace Osprey
 			while (newFiles.Count > 0)
 			{
 				var newNewFiles = new HashSet<string>();
-				foreach (var file in newFiles)
+				foreach (var fileName in newFiles)
 				{
 					Document doc;
-					if (sourceFiles.TryGetValue(file, out doc) && doc != null)
+					if (sourceFiles.TryGetValue(fileName, out doc) && doc != null)
 						continue;
 
-					byte[] fileHash;
-					var fileText = ReadFileAndHash(file, out fileHash);
+					var sourceFile = ReadFileAndHash(fileName);
 
-					try
-					{
-						doc = Parser.Parse(fileText, ParserOptions);
+					doc = Parser.Parse(sourceFile, ParserOptions);
 
-						if (doc.Version != null)
-						{
-							if (foundVersion != null && foundVersion != doc.Version)
-								throw new ParseException(doc, fileText,
-									string.Format("Version number mismatch; found version {0} in '{1}'.", foundVersion, versionFile));
-							foundVersion = doc.Version;
-							versionFile = file;
-						}
-					}
-					catch (ParseException e)
+					if (doc.Version != null)
 					{
-						e.FileName = file;
-						throw; // rethrow it!
+						if (foundVersion != null && foundVersion != doc.Version)
+							throw new ParseException(doc,
+								string.Format("Version number mismatch; found version {0} in '{1}'.", foundVersion, versionFile));
+						foundVersion = doc.Version;
+						versionFile = fileName;
 					}
 
-					doc.FileName = file;
-					doc.FileSource = fileText;
-					doc.FileHash = fileHash;
 					doc.Compiler = this;
 
-					sourceFiles[file] = doc; // Add first, to avoid self-dependency issues
+					sourceFiles[fileName] = doc; // Add first, to avoid self-dependency issues
 					documents.Add(doc);
-					ProcessImports(newNewFiles, importedModules, file, doc);
+					ProcessImports(newNewFiles, importedModules, fileName, doc);
 				}
 				newFiles = newNewFiles;
 			}
@@ -754,9 +754,9 @@ namespace Osprey
 			}
 		}
 
-		private string ReadFileAndHash(string fileName, out byte[] hash)
+		private SourceFile ReadFileAndHash(string fileName)
 		{
-			hash = null;
+			byte[] hash = null;
 
 			string fileText;
 			if (UseDebugSymbols)
@@ -778,7 +778,7 @@ namespace Osprey
 			else
 				fileText = File.ReadAllText(fileName);
 
-			return fileText;
+			return new SourceFile(fileName, fileText) { FileHash = hash };
 		}
 
 		private void ProcessImports(HashSet<string> newFiles, HashSet<string> modules, string docFile, Document doc)
@@ -786,7 +786,6 @@ namespace Osprey
 			foreach (var use in doc.Uses)
 				if (use is UseFileDirective)
 				{
-					// UseScriptDirective.Name is a StringLiteral, which inherits from ConstantExpression
 					var fileName = ((UseFileDirective)use).Name.StringValue;
 
 					// Make the file name absolute, but resolve it relative to the document!
@@ -806,7 +805,7 @@ namespace Osprey
 					//     use "b.osp";
 					//   b.osp:
 					//     use "a.osp";
-					if (realFile == doc.FileName)
+					if (realFile == doc.SourceFile.FileName)
 						throw new CompileTimeException(use, "A source file may not include itself.");
 					if (!sourceFiles.ContainsKey(realFile))
 					{
@@ -1598,11 +1597,11 @@ namespace Osprey
 		{
 			Notice("[debug] Writing debug symbols...", CompilerVerbosity.Verbose);
 
-			var documentToIndex = new Dictionary<Document, int>(documents.Count);
+			var fileToIndex = new Dictionary<SourceFile, int>(documents.Count);
 			for (var i = 0; i < documents.Count; i++)
-				documentToIndex.Add(documents[i], i);
+				fileToIndex.Add(documents[i].SourceFile, i);
 
-			using (var outStream = File.Create(targetPath))
+			using (var outStream = new MemoryStream(65536))
 			using (var writer = new ModuleWriter(outStream, Encoding.Unicode))
 			{
 				writer.Write(DebugSymbolsMagicNumber); // magicNumber
@@ -1613,19 +1612,23 @@ namespace Osprey
 				writer.BeginCollection(documents.Count);
 				foreach (var doc in documents)
 				{
-					writer.Write(doc.FileName); // fileName
-					writer.Write(doc.FileHash); // hash
+					writer.Write(doc.SourceFile.FileName); // fileName
+					writer.Write(doc.SourceFile.FileHash); // hash
 				}
 				writer.EndCollection();
 
 				// Debug symbols!
-				WriteDebugSymbols(writer, documentToIndex);
+				WriteDebugSymbols(writer, fileToIndex);
+
+				outStream.Position = 0;
+				using (var outFileStream = File.Create(targetPath))
+					outStream.CopyTo(outFileStream);
 			}
 
 			Notice("[debug] Finished writing debug symbols.", CompilerVerbosity.Verbose);
 		}
 
-		private void WriteDebugSymbols(ModuleWriter writer, Dictionary<Document, int> documentToIndex)
+		private void WriteDebugSymbols(ModuleWriter writer, Dictionary<SourceFile, int> fileToIndex)
 		{
 			// We don't know yet just how many methods there will be with debug symbols.
 			long sizePos = writer.BaseStream.Position;
@@ -1645,7 +1648,7 @@ namespace Osprey
 				if (group.Any(hasSymbols))
 				{
 					length++;
-					WriteMethodDebugSymbols(writer, documentToIndex, group, ref totalOverloadsWithSymbols);
+					WriteMethodDebugSymbols(writer, fileToIndex, group, ref totalOverloadsWithSymbols);
 				}
 			}
 
@@ -1661,7 +1664,7 @@ namespace Osprey
 		}
 
 		private void WriteMethodDebugSymbols(ModuleWriter writer,
-			Dictionary<Document, int> documentToIndex, MethodGroup group,
+			Dictionary<SourceFile, int> fileToIndex, MethodGroup group,
 			ref int totalOverloadsWithSymbols)
 		{
 			Notice(CompilerVerbosity.ExtraVerbose,
@@ -1689,7 +1692,7 @@ namespace Osprey
 					var d = debug[i];
 					writer.Write(d.BytecodeStartOffset); // startOffset
 					writer.Write(d.BytecodeEndOffset);   // endOffset
-					writer.Write(documentToIndex[d.Document]); // sourceFile
+					writer.Write(fileToIndex[d.File]); // sourceFile
 
 					int column;
 					var lineNumber = d.GetLineNumber(1, out column);
@@ -2124,25 +2127,28 @@ namespace Osprey
 
 	public struct MessageLocation
 	{
-		public MessageLocation(string fileName, string sourceText, int startIndex, int endIndex)
+		public MessageLocation(SourceFile sourceFile, int startIndex, int endIndex)
 		{
-			this.fileName = fileName;
-			this.sourceText = sourceText;
+			this.sourceFile = sourceFile;
 			this.startIndex = startIndex;
 			this.endIndex = endIndex;
 		}
 
-		private string fileName;
+		private SourceFile sourceFile;
+		/// <summary>
+		/// Gets the file that the message comes from.
+		/// </summary>
+		public SourceFile SourceFile { get { return SourceFile; } }
+
 		/// <summary>
 		/// Gets the name of the file which the message location is inside of.
 		/// </summary>
-		public string FileName { get { return fileName; } }
+		public string FileName { get { return sourceFile.FileName; } }
 
-		private string sourceText;
 		/// <summary>
 		/// Gets the text contents of the file that the message location is inside of.
 		/// </summary>
-		public string SourceText { get { return sourceText; } }
+		public string SourceText { get { return sourceFile.Source; } }
 
 		private int startIndex, endIndex;
 		/// <summary>
@@ -2165,7 +2171,7 @@ namespace Osprey
 		/// <returns>The line number at which the message location begins.</returns>
 		public int GetLineNumber(int tabSize, out int column)
 		{
-			return Token.GetLineNumber(sourceText, startIndex, tabSize, out column);
+			return sourceFile.GetLineNumber(startIndex, tabSize, out column);
 		}
 
 		public override string ToString()
@@ -2181,7 +2187,7 @@ namespace Osprey
 			var length = endIndex - startIndex;
 
 			return string.Format("\"{0}\":{1}:{2}+{3}",
-				fileName,
+				FileName,
 				line.ToStringInvariant(),
 				column.ToStringInvariant(),
 				length.ToStringInvariant());
@@ -2192,8 +2198,8 @@ namespace Osprey
 			if (node == null)
 				throw new ArgumentNullException("node");
 
-			return new MessageLocation(node.Document.FileName,
-				node.Document.FileSource, node.StartIndex, node.EndIndex);
+			return new MessageLocation(node.Document.SourceFile,
+				node.StartIndex, node.EndIndex);
 		}
 	}
 }

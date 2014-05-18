@@ -11,26 +11,14 @@ namespace Osprey
 	/// </summary>
 	public class CompileTimeException : Exception
 	{
-		private CompileTimeException()
-			: this("An error occurred during compilation.")
-		{ }
-
 		public CompileTimeException(ParseNode node)
 			: this(node, "An error occurred during compilation.", null)
-		{ }
-
-		private CompileTimeException(string message)
-			: this(null, message, null)
 		{ }
 
 		public CompileTimeException(ParseNode node, string message)
 			: this(node, message, null)
 		{ }
-
-		private CompileTimeException(string message, Exception innerException)
-			: this(null, message, innerException)
-		{ }
-
+		
 		public CompileTimeException(ParseNode node, string message, Exception innerException)
 			: base(message, innerException)
 		{

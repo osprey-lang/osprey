@@ -390,8 +390,7 @@ namespace Osprey.Nodes
 						var next = Statements[i + 1];
 						compiler.Warning("Unreachable code detected.",
 							CompilerVerbosity.NotVerbose,
-							new MessageLocation(next.Document.FileName,
-								next.Document.FileSource,
+							new MessageLocation(next.Document.SourceFile,
 								next.StartIndex, next.EndIndex));
 					}
 					break;

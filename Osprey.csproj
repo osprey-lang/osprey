@@ -99,6 +99,7 @@
     <Compile Include="Compiler\Signature.cs" />
     <Compile Include="Parser\Token.cs" />
     <Compile Include="Parser\Tokenizer.cs" />
+    <Compile Include="SourceFile.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="osprey.ico" />

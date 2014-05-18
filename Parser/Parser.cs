@@ -8,11 +8,18 @@ namespace Osprey
 {
 	public sealed class Parser
 	{
-		private Parser(string input, ParseFlags flags)
+		private Parser(SourceFile file, ParseFlags flags)
 		{
 			var tokFlags = (flags & ParseFlags.NormalizeIdentifiers) == ParseFlags.NormalizeIdentifiers ?
 				TokenizerFlags.NormalizeIdentifiers : TokenizerFlags.None;
-			this.tok = new Tokenizer(input, tokFlags);
+			this.tok = new Tokenizer(file, tokFlags);
+			this.flags = flags;
+		}
+		private Parser(string source, ParseFlags flags)
+		{
+			var tokFlags = (flags & ParseFlags.NormalizeIdentifiers) == ParseFlags.NormalizeIdentifiers ?
+				TokenizerFlags.NormalizeIdentifiers : TokenizerFlags.None;
+			this.tok = new Tokenizer(source, tokFlags);
 			this.flags = flags;
 		}
 
@@ -322,19 +329,13 @@ namespace Osprey
 						}
 						catch (DivideByZeroException e)
 						{
-							var errorToken = new Token(tok.Source,
-								tok.Source.Substring(left.StartIndex, right.EndIndex - left.StartIndex),
-								TokenType.Invalid, left.StartIndex);
-							throw new ParseException(errorToken,
-								"The expression cannot be evaluated because it results in a division by zero.",
+							throw new ParseException(tok.GetErrorToken(left.StartIndex, right.EndIndex - left.StartIndex),
+								"The expression cannot be evaluated because it involves dividing by zero.",
 								e);
 						}
 						catch (OverflowException e)
 						{
-							var errorToken = new Token(tok.Source,
-								tok.Source.Substring(left.StartIndex, right.EndIndex - left.StartIndex),
-								TokenType.Invalid, left.StartIndex);
-							throw new ParseException(errorToken,
+							throw new ParseException(tok.GetErrorToken(left.StartIndex, right.EndIndex - left.StartIndex),
 								"The expression cannot be evaluated because it results in an arithmetic overflow.",
 								e);
 						}
@@ -404,10 +405,7 @@ namespace Osprey
 						}
 						catch (OverflowException e)
 						{
-							var errorToken = new Token(tok.Source,
-								tok.Source.Substring(start, operand.EndIndex - start),
-								TokenType.Invalid, start);
-							throw new ParseException(errorToken,
+							throw new ParseException(tok.GetErrorToken(start, operand.EndIndex - start),
 								"The expression cannot be evaluated because it results in an arithmetic overflow.",
 								e);
 						}
@@ -424,7 +422,7 @@ namespace Osprey
 
 		private Document ParseDocument()
 		{
-			document = new Document();
+			document = new Document(tok.File);
 
 			var i = 0;
 
@@ -622,7 +620,7 @@ namespace Osprey
 					var decl = ParseLocalVariableDeclaration(ref i);
 
 					if (!(decl is SimpleLocalVariableDeclaration) || !((SimpleLocalVariableDeclaration)decl).IsConst)
-						throw new ParseException(decl, tok.Source,
+						throw new ParseException(decl,
 							"Internal error: global constant declaration should be a simple declaration and marked IsConst.");
 
 					var simpleDecl = (SimpleLocalVariableDeclaration)decl;
@@ -869,7 +867,7 @@ namespace Osprey
 			if (modifiers.IsStatic)
 			{
 				if (parameters.Parameters.Count > 0)
-					throw new ParseException(parameters.Parameters[0], tok.Source, "Static constructors cannot declare any parameters.");
+					throw new ParseException(parameters.Parameters[0], "Static constructors cannot declare any parameters.");
 
 				// Note: ParseConstructorBody permits an optional 'new base(...);' as
 				// the first statement, so we can't use that here.
@@ -1478,7 +1476,7 @@ namespace Osprey
 		{
 			var stmt = ParseStatementInner(ref i);
 			if (!allowCtorCall && stmt is ConstructorCall)
-				throw new ParseException(stmt, tok.Source, "A constructor call is only allowed as the first statment in a constructor.");
+				throw new ParseException(stmt, "A constructor call is only allowed as the first statment in a constructor.");
 			return stmt;
 		}
 
@@ -1653,7 +1651,7 @@ namespace Osprey
 			{
 				var stmt = ParseStatement(ref i);
 				if (stmt is LocalDeclaration)
-					throw new ParseException(stmt, tok.Source, "Embedded statement cannot be a declaration.");
+					throw new ParseException(stmt, "Embedded statement cannot be a declaration.");
 				if (!SimplifiedTree)
 					return new EmbeddedStatement(stmt) { Document = document };
 
@@ -1684,7 +1682,7 @@ namespace Osprey
 
 			var body = ParseStatement(ref i);
 			if (body is LocalDeclaration)
-				throw new ParseException(body, tok.Source, "Embedded statement cannot be a declaration.");
+				throw new ParseException(body, "Embedded statement cannot be a declaration.");
 			// Force the embedded statement into a block
 			if (SimplifiedTree)
 			{
@@ -2004,7 +2002,7 @@ namespace Osprey
 			if (!(expr is BinaryOperatorExpression && ((BinaryOperatorExpression)expr).Operator == BinaryOperator.FunctionApplication ||
 				expr is InvocationExpression || expr is ObjectCreationExpression ||
 				expr is SafeAccess && ((SafeAccess)expr).Chain[((SafeAccess)expr).Chain.Count - 1] is SafeInvocation))
-				throw new ParseException(expr, tok.Source,
+				throw new ParseException(expr,
 					"Only invocation, function application, assignment and object creation can be used as a statement.");
 
 			return new ExpressionStatement(expr) { StartIndex = start, EndIndex = end, Document = document };
@@ -3049,6 +3047,14 @@ namespace Osprey
 				throw new ArgumentNullException("input");
 
 			var p = new Parser(input, flags);
+			return p.ParseDocument();
+		}
+		public static Document Parse(SourceFile file, ParseFlags flags)
+		{
+			if (file == null)
+				throw new ArgumentNullException("file");
+
+			var p = new Parser(file, flags);
 			return p.ParseDocument();
 		}
 

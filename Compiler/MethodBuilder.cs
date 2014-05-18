@@ -158,24 +158,24 @@ namespace Osprey
 		/// <summary>
 		/// Pushes a source location onto the top of the source location stack.
 		/// </summary>
-		/// <param name="document">The document that the source location refers to.</param>
+		/// <param name="file">The document that the source location refers to.</param>
 		/// <param name="startIndex">The first character index within the source file.</param>
 		/// <param name="endIndex">The last character index (exclusive) within the source file.</param>
-		/// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
+		/// <exception cref="ArgumentNullException"><paramref name="file"/> is null.</exception>
 		/// <remarks>
 		/// The source location will be associated with any instructions that are appended until either
 		/// another location is pushed, or this location is popped.
 		/// 
 		/// If the program is being compiled without debug symbols, the source location is ignored.
 		/// </remarks>
-		public bool PushLocation(Document document, int startIndex, int endIndex)
+		public bool PushLocation(SourceFile file, int startIndex, int endIndex)
 		{
-			if (document == null)
-				throw new ArgumentNullException("document");
+			if (file == null)
+				throw new ArgumentNullException("file");
 			if (!useDebugSymbols)
 				return false;
 
-			PushSourceLocation(new SourceLocation(document, startIndex, endIndex));
+			PushSourceLocation(new SourceLocation(file, startIndex, endIndex));
 			return true;
 		}
 		/// <summary>
@@ -842,7 +842,7 @@ namespace Osprey
 				{
 					int column;
 					var lineNumber = instr.Location.GetLineNumber(1, out column);
-					sb.AppendFormat("-- \"{0}\", line {1}, char {2}", instr.Location.Document.FileName, lineNumber, column);
+					sb.AppendFormat("-- \"{0}\", line {1}, char {2}", instr.Location.File.FileName, lineNumber, column);
 					sb.AppendLine();
 				}
 				if (knownStackCounts != null)

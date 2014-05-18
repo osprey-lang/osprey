@@ -15,23 +15,48 @@ namespace Osprey
 	public class Tokenizer : IEnumerable<Token>
 	{
 		/// <summary>
-		/// Initializes a new instance of <see cref="Tokenizer"/>.
+		/// Initializes a new instance of <see cref="Tokenizer"/> with the specified source file and flags.
 		/// </summary>
-		/// <param name="input">The string to tokenize.</param>
+		/// <param name="file">The file to tokenize.</param>
 		/// <param name="includeComments">Determines whether to include comments; set to false when parsing.</param>
 		/// <exception cref="ArgumentNullException"><paramref name="input"/> is null.</exception>
-		public Tokenizer(string input, TokenizerFlags flags)
+		public Tokenizer(SourceFile file, TokenizerFlags flags)
 		{
-			if (input == null)
-				throw new ArgumentNullException("input");
+			if (file == null)
+				throw new ArgumentNullException("file");
 
 			this.flags = flags;
-			this.source = input;
+			this.file = file;
+			// Store this in our own field to avoid double indirection
+			this.source = file.Source;
 		}
 
-		private List<Token> tokens = new List<Token>();
+		/// <summary>
+		/// Initializes a new instance of <see cref="Tokenizer"/> with the specified source text and flags.
+		/// The tokenizer's <see cref="File"/> becomes an anonymous file with the given contents.
+		/// </summary>
+		/// <param name="fileSource"></param>
+		/// <param name="flags"></param>
+		public Tokenizer(string fileSource, TokenizerFlags flags)
+		{
+			if (fileSource == null)
+				throw new ArgumentNullException("fileSource");
+
+			this.flags = flags;
+			this.file = new SourceFile("<anonymous>", fileSource);
+			this.source = fileSource;
+		}
+
+		private int tokenCount = 0;
+		private Token[] tokens = new Token[128];
 
 		private TokenizerFlags flags;
+
+		private SourceFile file;
+		/// <summary>
+		/// Gets the source file that is being tokenized.
+		/// </summary>
+		public SourceFile File { get { return file; } }
 
 		private string source;
 		/// <summary>
@@ -55,7 +80,7 @@ namespace Osprey
 		/// </summary>
 		private Token eof = null;
 
-		private string lastDocComment = null;
+		private Token lastDocComment = null;
 
 		/// <summary>
 		/// Gets the token at a specified index.
@@ -72,7 +97,8 @@ namespace Osprey
 				// Note: EnsureMinIndex updates 'tokens' and, if it returns false, 'eof'. Mmm, side-effective.
 				if (index < 0)
 					throw new ArgumentOutOfRangeException("index");
-				else if (EnsureMinIndex(index))
+
+				if (EnsureMinIndex(index))
 					return tokens[index];
 				else
 					return eof;
@@ -86,10 +112,10 @@ namespace Osprey
 		/// <returns>true if the input string has enough tokens to reach <paramref name="index"/>; otherwise, false.</returns>
 		private bool EnsureMinIndex(int index)
 		{
-			if (eof != null && index >= tokens.Count)
+			if (eof != null && index >= tokenCount)
 				return false; // we've already determined that there are no more tokens to read
 
-			while (tokens.Count < index + 1)
+			while (tokenCount < index + 1)
 				if (!MoveNext())
 					return false;
 
@@ -110,7 +136,10 @@ namespace Osprey
 				tok.documentation = lastDocComment;
 				lastDocComment = null;
 			}
-			tokens.Add(tok);
+			if (tokenCount == tokens.Length)
+				// Grow the array by 50%
+				Array.Resize(ref tokens, tokens.Length * 3 / 2);
+			tokens[tokenCount++] = tok;
 			return tok.Type != TokenType.EOF;
 		}
 
@@ -119,7 +148,7 @@ namespace Osprey
 			SkipWhitespace(ref i);
 
 			if (IsEOF(i))
-				return eof = new Token(source, TokenType.EOF, i, i);
+				return eof = new Token(file, TokenType.EOF, i, i);
 
 			var ch = source[i];
 			if (ch == '/' && !IsEOF(i + 1) && (source[i + 1] == '/' || source[i + 1] == '*'))
@@ -197,11 +226,11 @@ namespace Osprey
 						"Unable to locate end of block comment.");
 			}
 
-			var value = source.Substring(startIndex, i - startIndex);
+			var tok = new Token(file, TokenType.Comment, startIndex, i);
 			if (isDocComment)
-				lastDocComment = value;
+				lastDocComment = tok;
 			// if we reach this point, i is one index past the last character in the comment
-			return new Token(source, value, TokenType.Comment, startIndex);
+			return tok;
 		}
 
 		private Token ScanNumber(ref int i)
@@ -307,7 +336,7 @@ namespace Osprey
 				}
 			}
 
-			return new Token(source, source.Substring(startIndex, i - startIndex),
+			return new Token(file, source.Substring(startIndex, i - startIndex),
 				isReal ? TokenType.Real : TokenType.Integer, startIndex);
 		}
 
@@ -366,6 +395,7 @@ namespace Osprey
 
 			var sb = new StringBuilder();
 
+			var substrStart = i;
 			while (!IsEOF(i) && source[i] != '"')
 			{
 				var ch = source[i];
@@ -374,26 +404,32 @@ namespace Osprey
 
 				if (ch == '\\')
 				{
+					// Append any characters we may have eaten so far
+					if (i != substrStart)
+						sb.Append(source, substrStart, i - substrStart);
+
 					int codepoint = ScanEscapeSequence(ref i);
 					if (codepoint > 0xFFFF)
 						sb.Append(char.ConvertFromUtf32(codepoint));
 					else
 						sb.Append(unchecked((char)codepoint));
+
+					substrStart = i;
 				}
 				else
-				{
-					var size = GetCharSize(i);
-					sb.Append(source, i, size);
-					i += size;
-				}
+					i++;
 			}
 
 			if (IsEOF(i))
 				throw new ParseException(GetErrorToken(startIndex, 1), "Unterminated string literal.");
+
+			// Append remaining characters
+			if (i != substrStart)
+				sb.Append(source, substrStart, i - substrStart);
+
 			i++; // skip closing "
 
-			return new StringToken(source, source.Substring(startIndex, i - startIndex),
-				sb.ToString(), startIndex);
+			return new StringToken(file, sb.ToString(), startIndex, i);
 		}
 
 		private Token ScanVerbatimString(ref int i)
@@ -401,33 +437,30 @@ namespace Osprey
 			var startIndex = i;
 			i += 2; // skip r"/R"
 
-			var sb = new StringBuilder();
-
+			var hasEscapes = false;
 			var foundEnd = false;
 			while (!IsEOF(i))
 			{
-				if (source[i] == '"')
+				if (source[i++] == '"')
 				{
-					i++;
 					if (IsEOF(i) || source[i] != '"')
 					{
 						foundEnd = true;
 						break; // single ", terminates the string
 					}
-					// otherwise, double "" => "
-					// (we skip the first one and output the next)
+					hasEscapes = true;
 				}
-
-				var size = GetCharSize(i);
-				sb.Append(source, i, size);
-				i += size;
 			}
 
 			if (!foundEnd)
 				throw new ParseException(GetErrorToken(startIndex, 2), "Unterminated string literal.");
 
-			return new StringToken(source, source.Substring(startIndex, i - startIndex),
-				sb.ToString(), startIndex);
+			var value = source.Substring(startIndex + 2, i - startIndex - 1);
+			if (hasEscapes)
+				// Replace all "" with " in one go
+				value = value.Replace("\"\"", "\"");
+
+			return new StringToken(file, value, startIndex, i);
 		}
 
 		private Token ScanCharLiteral(ref int i)
@@ -459,8 +492,7 @@ namespace Osprey
 					"Expected \"'\" (single quote); character literals can only contain one character.");
 			i++; // skip closing '
 
-			return new CharToken(source, source.Substring(startIndex, i - startIndex),
-				codepoint, startIndex);
+			return new CharToken(file, codepoint, startIndex, i);
 		}
 
 		// Parses an escape sequence (of any kind) and returns the Unicode code point.
@@ -519,10 +551,13 @@ namespace Osprey
 		{
 			var startIndex = i;
 
+#if DEBUG
 			if (IsEOF(i) || !char.IsLetter(source, i) && source[i] != '_' &&
 				char.GetUnicodeCategory(source, i) != UnicodeCategory.LetterNumber)
 				throw new Exception("Internal error: ScanIdentifier called without valid identifier-start-character at i.");
+#endif
 
+			var hasFormatChars = false;
 			while (!IsEOF(i))
 			{
 				var cat = char.GetUnicodeCategory(source, i);
@@ -531,9 +566,13 @@ namespace Osprey
 					cat == UnicodeCategory.DecimalDigitNumber || // Nd
 					cat == UnicodeCategory.NonSpacingMark || // Mn
 					cat == UnicodeCategory.SpacingCombiningMark || // Mc
-					cat == UnicodeCategory.ConnectorPunctuation || // Pc
-					cat == UnicodeCategory.Format) // Cf
+					cat == UnicodeCategory.ConnectorPunctuation) // Pc
 					i += GetCharSize(i);
+				else if (cat == UnicodeCategory.Format)
+				{
+					i += GetCharSize(i);
+					hasFormatChars = true;
+				}
 				else
 					break; // all done!
 			}
@@ -545,10 +584,10 @@ namespace Osprey
 			{
 				type = TokenType.Identifier;
 				if (NormalizeIdentifiers)
-					ident = NormalizeIdentifier(ident);
+					ident = NormalizeIdentifier(ident, hasFormatChars);
 			}
 
-			return new Token(source, ident, type, startIndex);
+			return new Token(file, ident, type, startIndex);
 		}
 
 		private Token ScanPunctuation(ref int i)
@@ -696,11 +735,7 @@ namespace Osprey
 					break;
 				case '=':
 					type = TokenType.Assign;
-					if (!IsEOF(i) && source[i] == '=')
-					{
-						type = TokenType.DoubleEqual;
-						i++;
-					}
+					AcceptEquals(ref i, ref type, TokenType.DoubleEqual);
 					break;
 				case '!':
 					if (IsEOF(i) || source[i] != '=')
@@ -728,8 +763,7 @@ namespace Osprey
 						string.Format("Invalid character: {0} (U+{1:X4}).", ch, (int)ch));
 			}
 
-			//var punct = source.Substring(startIndex, i - startIndex);
-			return new Token(source, type, startIndex, i);
+			return new Token(file, type, startIndex, i);
 		}
 
 		private void AcceptEquals(ref int i, ref TokenType tokenType, TokenType equalsType)
@@ -749,9 +783,11 @@ namespace Osprey
 
 		private int GetCharSize(int i) { return char.IsSurrogatePair(source, i) ? 2 : 1; }
 
-		private Token GetErrorToken(int i, int length)
+		internal Token GetErrorToken(int i, int length)
 		{
-			return new Token(source, IsEOF(i) ? "" : source.Substring(i, length), TokenType.Invalid, i);
+			if (IsEOF(i))
+				return new Token(file, "", TokenType.Invalid, i);
+			return new Token(file, TokenType.Invalid, i, i + length);
 		}
 
 		private bool IsEOF(int i)
@@ -857,34 +893,31 @@ namespace Osprey
 
 		#region Static members
 
-		private static string NormalizeIdentifier(string ident)
+		private static string NormalizeIdentifier(string ident, bool hasFormatChars)
 		{
 			ident = ident.Normalize(NormalizationForm.FormC);
 
-			// Formatting characters are very, very rare. This algorithm only initialises sb once
-			// it encounters a formatting character, and only after that point are other characters
-			// appended to sb. This makes the loop very fast if there aren't any formatting characters
-			// (very likely), and marginally slower if there are (highly unlikely).
+			// Only run the slow path in the very unlikely case that there are
+			// any format characters (Cf) in the identifier.
 
-			StringBuilder sb = null;
-			for (var i = 0; i < ident.Length; i++)
+			if (hasFormatChars)
 			{
-				if (char.GetUnicodeCategory(ident, i) == UnicodeCategory.Format)
+				var sb = new StringBuilder();
+				for (var i = 0; i < ident.Length; i++)
 				{
-					if (sb == null)
+					if (char.GetUnicodeCategory(ident, i) == UnicodeCategory.Format)
 					{
-						sb = new StringBuilder(ident.Length);
-						sb.Append(ident, 0, i); // up to but NOT including the formatting character
+						if (char.IsSurrogate(ident, i))
+							i++;
 					}
-
-					if (char.IsSurrogate(ident, i))
-						i++;
+					else if (sb != null)
+						sb.Append(ident[i]);
 				}
-				else if (sb != null)
-					sb.Append(ident[i]);
+
+				return sb.ToString();
 			}
 
-			return sb == null ? ident : sb.ToString();
+			return ident;
 		}
 
 		static Tokenizer()

@@ -30,7 +30,13 @@ namespace Osprey.Nodes
 
 	public class Document : ParseNode
 	{
-		public Document() { }
+		public Document(SourceFile sourceFile)
+		{
+			if (sourceFile == null)
+				throw new ArgumentNullException("sourceFile");
+
+			this.SourceFile = sourceFile;
+		}
 
 		public List<UseDirective> Uses = new List<UseDirective>();
 
@@ -46,15 +52,9 @@ namespace Osprey.Nodes
 
 		/// <summary>The <see cref="FileNamespace"/> associated with this document.</summary>
 		internal FileNamespace Namespace;
-
-		/// <summary>The name of the file from which the document was created.</summary>
-		public string FileName;
-
-		/// <summary>The source code of the file from which the document was created.</summary>
-		internal string FileSource;
-
-		/// <summary>SHA-1 hash code of the file contents, or null if the program is being compiled without debug symbols.</summary>
-		internal byte[] FileHash;
+		
+		/// <summary>The source file from which the document was created.</summary>
+		public SourceFile SourceFile;
 
 		/// <summary>The compiler instance that opened the file.</summary>
 		internal Compiler Compiler;
@@ -193,7 +193,7 @@ namespace Osprey.Nodes
 		/// <summary>The function that was declared.</summary>
 		public LocalFunctionDeclaration Function;
 
-		public string DocString;
+		public Token DocString;
 
 		internal Method DeclSpace;
 
@@ -224,7 +224,7 @@ namespace Osprey.Nodes
 		/// </summary>
 		public SimpleLocalVariableDeclaration Declaration;
 
-		public string DocString;
+		public Token DocString;
 
 		/// <summary>
 		/// The constants that were declared in this declaration.
@@ -270,7 +270,7 @@ namespace Osprey.Nodes
 		/// </summary>
 		public AccessLevel Access;
 
-		public string DocString = null;
+		public Token DocString = null;
 
 		protected string AccessLevelToString()
 		{
