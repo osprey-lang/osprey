@@ -443,19 +443,24 @@ namespace Osprey
 			{
 				if (source[i++] == '"')
 				{
-					if (IsEOF(i) || source[i] != '"')
+					if (!IsEOF(i) && source[i] == '"')
 					{
-						foundEnd = true;
-						break; // single ", terminates the string
+						// Found "" sequence
+						hasEscapes = true;
+						i++; // Skip second "
+						continue;
 					}
-					hasEscapes = true;
+					// Single ", terminates the string
+					foundEnd = true;
+					break;
 				}
 			}
 
 			if (!foundEnd)
 				throw new ParseException(GetErrorToken(startIndex, 2), "Unterminated string literal.");
 
-			var value = source.Substring(startIndex + 2, i - startIndex - 1);
+			// -3 because of starting r" and final "
+			var value = source.Substring(startIndex + 2, i - startIndex - 3);
 			if (hasEscapes)
 				// Replace all "" with " in one go
 				value = value.Replace("\"\"", "\"");
