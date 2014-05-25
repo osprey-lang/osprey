@@ -28,7 +28,7 @@ namespace Osprey
 		public const string IteratorName = StandardNamespace + ".Iterator";
 		public const string MethodName = StandardNamespace + ".Method";
 		public const string ErrorName = StandardNamespace + ".Error";
-		public const string TypeName = StandardNamespace + ".Type";
+		public const string TypeName = StandardNamespace + ".reflection.Type";
 
 		public static string GetStandardName(string name)
 		{
