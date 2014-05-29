@@ -824,15 +824,34 @@ namespace Osprey
 			if (loadedModules.ContainsKey(name))
 				return loadedModules[name];
 
-			// TODO: find file name of module
+			// We look for modules in the following directories,
+			// in the order given:
+			//   $current/lib/$name/$name.ovm
+			//   $current/lib/$name.ovm
+			//   $current/$name/$name.ovm
+			//   $current/$name.ovm
+			//   $libpath/$name/$name.ovm
+			//   $libpath/$name.ovm
+			// where
+			//   $current = Environment.CurrentDirectory
+			//   $libpath = this.libraryPath
 			string fileName = null;
 
 			var nameWithExtension = name + ".ovm";
-			if (File.Exists(nameWithExtension))
-				fileName = Path.GetFullPath(nameWithExtension);
-			else if (File.Exists(fileName = Path.Combine(libraryPath, nameWithExtension)))
-				fileName = Path.GetFullPath(fileName);
-			else
+			var dirs = new string[] { Path.Combine(".", "lib"), ".", libraryPath };
+
+			for (var i = 0; i < dirs.Length; i++)
+			{
+				fileName = Path.Combine(dirs[i], name, nameWithExtension);
+				if (File.Exists(fileName))
+					break;
+				fileName = Path.Combine(dirs[i], nameWithExtension);
+				if (File.Exists(fileName))
+					break;
+				fileName = null;
+			}
+
+			if (fileName == null)
 				throw new ArgumentException("Could not find a file for the specified module.", "name");
 
 			var module = Module.Open(this, fileName);
