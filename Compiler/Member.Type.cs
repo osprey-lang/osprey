@@ -345,6 +345,8 @@ namespace Osprey.Members
 		public bool IsAbstract { get; internal set; }
 		public bool IsStatic { get; internal set; }
 
+		public bool CanInherit { get { return IsInheritable || IsAbstract; } }
+
 		private MethodGroup constructors;
 		/// <summary>Gets the method group that corresponds to the constructors of the class.</summary>
 		public MethodGroup Constructors { get { return constructors; } internal set { constructors = value; } }
@@ -569,7 +571,7 @@ namespace Osprey.Members
 					"The class '{0}' is static, and therefore cannot declare instance constructors.",
 					FullName));
 
-			if (ctor.Access == AccessLevel.Private && (this.IsInheritable || this.IsAbstract))
+			if (ctor.Access == AccessLevel.Private && this.CanInherit)
 				throw new DeclarationException(ctor.Node, string.Format(
 					"The class '{0}' is inheritable or abstract, and therefore cannot declare private constructors.",
 					FullName));
@@ -584,6 +586,8 @@ namespace Osprey.Members
 
 			if (this.IsStatic && !field.IsStatic)
 				throw new DeclarationException(field.Node, "Static classes can only declare static members.");
+			if (this.IsPrimitive && !field.IsStatic)
+				throw new DeclarationException(field.Node, "Primitive types cannot declare instance fields.");
 
 			var name = field.Name;
 			Class baseMemberClass;
@@ -634,6 +638,9 @@ namespace Osprey.Members
 			if (!this.IsAbstract && property.IsAbstract)
 				throw new DeclarationException(property.GetAccessorNode(),
 					"Only abstract classes may declare abstract members.");
+			if (!this.CanInherit && property.IsOverridable)
+				throw new DeclarationException(property.GetAccessorNode(),
+					"Only inheritable and abstract classes may declare overridable members.");
 
 			EnsureDeclarable(property.GetAccessorNode(), property);
 
@@ -667,7 +674,11 @@ namespace Osprey.Members
 				throw new ArgumentNullException("indexer");
 
 			if (!this.IsAbstract && indexer.IsAbstract)
-				throw new DeclarationException(indexer.Node, "Only abstract classes may declare abstract members.");
+				throw new DeclarationException(indexer.GetAccessorNode(),
+					"Only abstract classes may declare abstract members.");
+			if (!this.CanInherit && indexer.IsOverridable)
+				throw new DeclarationException(indexer.GetAccessorNode(),
+					"Only inheritable and abstract classes may declare overridable members.");
 
 			NamedMember member;
 			IndexerMember indexerMember;
@@ -709,6 +720,8 @@ namespace Osprey.Members
 				throw new DeclarationException(method.Node, "Static classes can only declare static members.");
 			if (!this.IsAbstract && method.IsAbstract)
 				throw new DeclarationException(method.Node, "Only abstract classes may declare abstract members.");
+			if (!this.CanInherit && method.IsOverridable && !method.IsImplDetail)
+				throw new DeclarationException(method.Node, "Only inheritable and abstract classes may declare overridable members.");
 
 			string name = method.Name;
 
