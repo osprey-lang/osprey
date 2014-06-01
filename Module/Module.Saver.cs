@@ -317,10 +317,13 @@ namespace Osprey
 			}
 
 			// memberCount
+			var indexer = type.members.ContainsKey(Indexer.MemberName) ?
+				type.members[Indexer.MemberName] as IndexerMember :
+				null;
 			writer.Write(fields.Count +
 				methods.Count +
 				properties.Count +
-				(type.Indexer != null ? 1 : 0));
+				(indexer != null ? 1 : 0));
 
 			// fields
 			if (fields.Count == 0)
@@ -361,17 +364,17 @@ namespace Osprey
 			}
 
 			// properties
-			if (properties.Count == 0 && type.Indexer == null)
+			if (properties.Count == 0 && indexer == null)
 				writer.Write(0u);
 			else
 			{
-				writer.BeginCollection(properties.Count + (type.Indexer == null ? 0 : 1));
+				writer.BeginCollection(properties.Count + (indexer == null ? 0 : 1));
 
-				if (type.Indexer != null)
+				if (indexer != null)
 				{
-					writer.Write(GetStringId(type.Indexer.Name)); // name
-					writer.Write(type.Indexer.GetterId); // getter
-					writer.Write(type.Indexer.SetterId); // setter
+					writer.Write(GetStringId(indexer.Name)); // name
+					writer.Write(indexer.GetterGroupId); // getter
+					writer.Write(indexer.SetterGroupId); // setter
 				}
 
 				foreach (var prop in properties)
@@ -420,7 +423,7 @@ namespace Osprey
 			if (method.ParentAsClass == null)
 				name = method.FullName; // full name (global function)
 			else
-				name = method.Name == "this" ? ".call" : method.Name; // name (class method)
+				name = method.Name; // name (class method)
 			writer.Write(GetStringId(name));
 
 			writer.BeginCollection(method.Count); // overloads!

@@ -2906,7 +2906,7 @@ namespace Osprey.Nodes
 
 	public sealed class CompoundAssignment : Statement
 	{
-		public CompoundAssignment(Expression target, Expression value, BinaryOperator op)
+		public CompoundAssignment(AssignableExpression target, Expression value, BinaryOperator op)
 		{
 			Target = target;
 			Operator = op;
@@ -2914,7 +2914,7 @@ namespace Osprey.Nodes
 		}
 
 		/// <summary>The target of the assignment.</summary>
-		public Expression Target;
+		public AssignableExpression Target;
 
 		/// <summary>The operator associated with the compound assignment.</summary>
 		public BinaryOperator Operator;
@@ -2934,14 +2934,14 @@ namespace Osprey.Nodes
 			// The target isn't really meant to be reduced to a single constant expression,
 			// but sub expressions might be!
 			// Like, if you're assigning to a(b, c).d or something. (Why would you do that?)
-			Target = Target.FoldConstant();
+			Target = (AssignableExpression)Target.FoldConstant();
 			Value = Value.FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			Target = Target.ResolveNames(context, document, false, false);
-			AssignmentExpression.EnsureAssignable(Target);
+			var target = Target.ResolveNames(context, document, ExpressionAccessKind.ReadWrite);
+			Target = AssignmentExpression.EnsureAssignable(target);
 			Value = Value.ResolveNames(context, document, false, false);
 		}
 
@@ -2949,14 +2949,14 @@ namespace Osprey.Nodes
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			Target = Target.TransformClosureLocals(currentBlock, forGenerator);
+			Target = (AssignableExpression)Target.TransformClosureLocals(currentBlock, forGenerator);
 			Value = Value.TransformClosureLocals(currentBlock, forGenerator);
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
 			method.PushLocation(this);
-			((AssignableExpression)Target).CompileCompoundAssignment(compiler, method, Value, Operator);
+			Target.CompileCompoundAssignment(compiler, method, Value, Operator);
 			method.PopLocation();
 		}
 	}
@@ -2964,14 +2964,14 @@ namespace Osprey.Nodes
 	public sealed class ParallelAssignment : Statement
 	{
 		// 'targets' will have at least two values, otherwise it's not a parallel assignment.
-		public ParallelAssignment(List<Expression> targets, List<Expression> values)
+		public ParallelAssignment(List<AssignableExpression> targets, List<Expression> values)
 		{
 			Targets = targets;
 			Values = values;
 		}
 
 		/// <summary>The targets of the assignment.</summary>
-		public List<Expression> Targets;
+		public List<AssignableExpression> Targets;
 
 		/// <summary>The values of the assignment.</summary>
 		public List<Expression> Values;
@@ -2984,7 +2984,7 @@ namespace Osprey.Nodes
 		public override void FoldConstant()
 		{
 			for (var i = 0; i < Targets.Count; i++)
-				Targets[i] = Targets[i].FoldConstant();
+				Targets[i] = (AssignableExpression)Targets[i].FoldConstant();
 			for (var i = 0; i < Values.Count; i++)
 				Values[i] = Values[i].FoldConstant();
 		}
@@ -2993,9 +2993,8 @@ namespace Osprey.Nodes
 		{
 			for (var i = 0; i < Targets.Count; i++)
 			{
-				var result = Targets[i].ResolveNames(context, document, false, false);
-				AssignmentExpression.EnsureAssignable(result);
-				Targets[i] = result;
+				var result = Targets[i].ResolveNames(context, document, ExpressionAccessKind.Write);
+				Targets[i] = AssignmentExpression.EnsureAssignable(result);
 			}
 
 			for (var i = 0; i < Values.Count; i++)
@@ -3012,7 +3011,7 @@ namespace Osprey.Nodes
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			for (var i = 0; i < Targets.Count; i++)
-				Targets[i] = Targets[i].TransformClosureLocals(currentBlock, forGenerator);
+				Targets[i] = (AssignableExpression)Targets[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			for (var i = 0; i < Values.Count; i++)
 				Values[i] = Values[i].TransformClosureLocals(currentBlock, forGenerator);
@@ -3049,7 +3048,7 @@ namespace Osprey.Nodes
 						unpackTargets[i] = ((LocalVariableAccess)Targets[i]).GetLocal(method);
 					else
 					{
-						targetLocals[i] = ((AssignableExpression)Targets[i]).CompileParallelFirstEvaluation(compiler, method);
+						targetLocals[i] = Targets[i].CompileParallelFirstEvaluation(compiler, method);
 						unpackTargets[i] = method.GetAnonymousLocal();
 					}
 
@@ -3061,7 +3060,7 @@ namespace Osprey.Nodes
 				for (var i = 0; i < count; i++)
 					if (!(Targets[i] is LocalVariableAccess))
 					{
-						var target = (AssignableExpression)Targets[i];
+						var target = Targets[i];
 						var currentTargetLocals = targetLocals[i];
 
 						// Load the instance, if any
@@ -3111,7 +3110,7 @@ namespace Osprey.Nodes
 
 				// First, evaluate the instance expression (if any) of each target
 				for (var i = 0; i < count; i++)
-					targetLocals[i] = ((AssignableExpression)Targets[i]).CompileParallelFirstEvaluation(compiler, method);
+					targetLocals[i] = Targets[i].CompileParallelFirstEvaluation(compiler, method);
 
 				// Then, evaluate each value, storing the result in a local
 				// unless the value can be safely inlined.
@@ -3129,7 +3128,7 @@ namespace Osprey.Nodes
 				// along with each value, and perform the store.
 				for (var i = 0; i < count; i++)
 				{
-					var target = (AssignableExpression)Targets[i];
+					var target = Targets[i];
 					var currentTargetLocals = targetLocals[i];
 
 					// Load the target instance (if any)
@@ -3218,7 +3217,7 @@ namespace Osprey.Nodes
 				ctorClass = (Class)thisClass.BaseType;
 			}
 
-			var ctor = ctorClass.FindConstructor(this, Arguments.Count, instClass: thisClass, fromClass: thisClass);
+			var ctor = ctorClass.FindConstructor(this, Arguments.Count, instType: thisClass, fromType: thisClass);
 			if (ctor == null)
 				throw new CompileTimeException(this, string.Format("Could not find a constructor for '{0}' that takes {1} arguments.",
 					ctorClass.FullName, Arguments.Count));

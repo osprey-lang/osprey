@@ -252,5 +252,15 @@ namespace Osprey
 		{
 			return value.ToString(CI.InvariantCulture);
 		}
+
+		public static bool IsRead(this ExpressionAccessKind access)
+		{
+			return (access & ExpressionAccessKind.Read) == ExpressionAccessKind.Read;
+		}
+
+		public static bool IsWrite(this ExpressionAccessKind access)
+		{
+			return (access & ExpressionAccessKind.Write) == ExpressionAccessKind.Write;
+		}
 	}
 }

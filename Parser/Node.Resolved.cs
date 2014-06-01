@@ -13,6 +13,13 @@ namespace Osprey.Nodes
 	public sealed class LocalVariableAccess : AssignableExpression
 	{
 		public LocalVariableAccess(Variable variable, BlockSpace accessFrom)
+			: this(variable, accessFrom, ExpressionAccessKind.Read)
+		{ }
+		public LocalVariableAccess(Variable variable, LocalAccessKind kind)
+			: this(variable, kind, ExpressionAccessKind.Read)
+		{ }
+
+		public LocalVariableAccess(Variable variable, BlockSpace accessFrom, ExpressionAccessKind access)
 		{
 			if (accessFrom == null)
 				throw new ArgumentNullException("accessFrom");
@@ -20,16 +27,20 @@ namespace Osprey.Nodes
 			Variable = variable;
 			this.accessFrom = accessFrom;
 
-			// Assume the variable is being read, until IsAssignment is set to true.
-			variable.ReadCount++;
+			if (access.IsRead())
+				variable.ReadCount++;
+			if (access.IsWrite())
+				variable.AssignmentCount++;
 		}
-		public LocalVariableAccess(Variable variable, LocalAccessKind kind)
+		public LocalVariableAccess(Variable variable, LocalAccessKind kind, ExpressionAccessKind access)
 		{
 			Variable = variable;
 			accessKind = kind;
 
-			// Assume the variable is being read, until IsAssignment is set to true.
-			variable.ReadCount++;
+			if (access.IsRead())
+				variable.ReadCount++;
+			if (access.IsWrite())
+				variable.AssignmentCount++;
 		}
 
 		/// <summary>The variable that this expression accesses.</summary>
@@ -58,30 +69,6 @@ namespace Osprey.Nodes
 				return LocalAccessKind.NonCapturing;
 			}
 		}
-
-		public override bool IsAssignment
-		{
-			get { return base.IsAssignment; }
-			set
-			{
-				if (Variable != null && value != IsAssignment)
-				{
-					// The value has changed! We must update the Variable's status.
-					if (value)
-					{
-						Variable.AssignmentCount++;
-						Variable.ReadCount--;
-					}
-					else
-					{
-						Variable.AssignmentCount--;
-						Variable.ReadCount++;
-					}
-				}
-
-				base.IsAssignment = value;
-			}
-		}
 		
 		public override string ToString(int indent)
 		{
@@ -96,6 +83,11 @@ namespace Osprey.Nodes
 				default:
 					return "«var " + Variable.Name + "»";
 			}
+		}
+
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind kind)
+		{
+			return this;
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
@@ -479,6 +471,11 @@ namespace Osprey.Nodes
 			return this;
 		}
 
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind kind)
+		{
+			return this;
+		}
+
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			Inner = Inner.TransformClosureLocals(currentBlock, forGenerator);
@@ -649,6 +646,11 @@ namespace Osprey.Nodes
 			return "‹field " + Field.Parent.FullName + "." + Field.Name + "›";
 		}
 
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind kind)
+		{
+			return this;
+		}
+
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
 			if (IsAssignment)
@@ -737,6 +739,11 @@ namespace Osprey.Nodes
 		public override string ToString(int indent)
 		{
 			return "‹prop " + Property.Parent.FullName + "." + Property.Name + "›";
+		}
+
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind kind)
+		{
+			return this;
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
@@ -961,6 +968,11 @@ namespace Osprey.Nodes
 		public override string ToString(int indent)
 		{
 			return "‹var global." + Variable.Name + "›";
+		}
+
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind kind)
+		{
+			return this;
 		}
 
 		private void Load(Compiler compiler, MethodBuilder method)

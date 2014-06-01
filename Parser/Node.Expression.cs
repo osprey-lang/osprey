@@ -279,14 +279,27 @@ namespace Osprey.Nodes
 		void SetTargetVariable(LocalVariable target);
 	}
 
+	/// <summary>
+	/// Represents an expression that might be able to be assigned to. Derived classes are not
+	/// guaranteed to represent actual assignable expressions. Rather, deriving from this class
+	/// is an indication that the expression *might* be assignable after name resolution, unlike
+	/// other expressions, which are never assignable.
+	/// </summary>
 	public abstract class AssignableExpression : Expression
 	{
 		private bool isAssignment = false;
-		public virtual bool IsAssignment
+		public bool IsAssignment
 		{
 			get { return isAssignment; }
 			set { isAssignment = value; }
 		}
+
+		public sealed override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
+		{
+			return ResolveNames(context, document, ExpressionAccessKind.Read);
+		}
+
+		public abstract Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind kind);
 
 		public abstract void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue);
 
@@ -297,6 +310,20 @@ namespace Osprey.Nodes
 		public abstract void CompileParallelLoadInstance(Compiler compiler, MethodBuilder method, LocalVariable[] locals);
 
 		public abstract void CompileParallelAssignment(Compiler compiler, MethodBuilder method, LocalVariable[] locals);
+	}
+
+	/// <summary>
+	/// Determines whether an expression is read, written, or both.
+	/// </summary>
+	[Flags]
+	public enum ExpressionAccessKind
+	{
+		/// <summary>The expression is read from.</summary>
+		Read = 1,
+		/// <summary>The expression is assigned to.</summary>
+		Write = 2,
+		/// <summary>The expression is both read from and written to, e.g. in a compound assignment.</summary>
+		ReadWrite = Read | Write,
 	}
 
 	public sealed class RefExpression : Expression
@@ -1375,14 +1402,17 @@ namespace Osprey.Nodes
 	// Simple assignments only; that is, one value to one storage location.
 	public class AssignmentExpression : Expression
 	{
-		public AssignmentExpression(Expression target, Expression value)
+		public AssignmentExpression(AssignableExpression target, Expression value)
 		{
+			var assignableTarget = target as AssignableExpression;
+			if (assignableTarget != null)
+				assignableTarget.IsAssignment = true;
 			Target = target;
 			Value = value;
 		}
 
 		/// <summary>The target of the assignment.</summary>
-		public Expression Target;
+		public AssignableExpression Target;
 		/// <summary>The value to be assigned.</summary>
 		public Expression Value;
 
@@ -1414,77 +1444,39 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			Target = Target.FoldConstant();
+			Target = (AssignableExpression)Target.FoldConstant();
 			Value = Value.FoldConstant();
 			return this;
 		}
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			Target = Target.ResolveNames(context, document, false, false);
-			EnsureAssignable(Target);
+			var target = Target.ResolveNames(context, document, ExpressionAccessKind.Write);
+			Target = EnsureAssignable(target);
 			Value = Value.ResolveNames(context, document, false, false);
 			return this;
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			Target = Target.TransformClosureLocals(currentBlock, forGenerator);
+			Target = (AssignableExpression)Target.TransformClosureLocals(currentBlock, forGenerator);
 			Value = Value.TransformClosureLocals(currentBlock, forGenerator);
 			return this;
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			((AssignableExpression)Target).CompileSimpleAssignment(compiler, method, Value, !IgnoreValue);
+			Target.CompileSimpleAssignment(compiler, method, Value, !IgnoreValue);
 		}
 
-		internal static void EnsureAssignable(Expression expr)
+		internal static AssignableExpression EnsureAssignable(Expression expr)
 		{
-			if (!(expr is AssignableExpression))
+			var assignableExpr = expr as AssignableExpression;
+			if (assignableExpr == null)
 				throw new CompileTimeException(expr, "This expression cannot be assigned to.");
 
-			((AssignableExpression)expr).IsAssignment = true;
-
-			if (expr is LocalVariableAccess)
-			{
-				var variable = ((LocalVariableAccess)expr).Variable;
-				variable.EnsureAssignable(expr);
-			}
-			else if (expr is InstanceMemberAccess)
-			{
-				var member = ((InstanceMemberAccess)expr).Member;
-				// Note: fields are always OK
-				switch (member.Kind)
-				{
-					case MemberKind.Constant:
-						// This should never happen, should it? Constants are static.
-						throw new CompileTimeException(expr,
-							string.Format("The constant '{0}.{1}' cannot be reassigned.",
-								((ClassMember)member).Parent.FullName, member.Name));
-					case MemberKind.MethodGroup:
-						throw new CompileTimeException(expr,
-							string.Format("Cannot assign to the method '{0}.{1}'.",
-								((MethodGroup)member).ParentAsClass.FullName, member.Name));
-					case MemberKind.Property:
-						{
-							var prop = (Property)member;
-							if (prop.PropertyKind == PropertyKind.ReadOnly)
-								throw new CompileTimeException(expr,
-									string.Format("The property '{0}.{1}' cannot be assigned to; it is read-only.",
-										prop.Parent.FullName, prop.Name));
-							break; // Property is OK
-						}
-				}
-			}
-			else if (expr is StaticPropertyAccess)
-			{
-				var prop = ((StaticPropertyAccess)expr).Property;
-				if (prop.PropertyKind == PropertyKind.ReadOnly)
-					throw new CompileTimeException(expr,
-						string.Format("The property '{0}.{1}' cannot be assigned to; it is read-only.",
-							prop.Parent.FullName, prop.Name));
-			}
+			assignableExpr.IsAssignment = true;
+			return assignableExpr;
 		}
 	}
 
@@ -1495,7 +1487,7 @@ namespace Osprey.Nodes
 	// a lambda expression.
 	internal class FieldInitializer : AssignmentExpression
 	{
-		public FieldInitializer(Expression target, VariableDeclarator declarator)
+		public FieldInitializer(AssignableExpression target, VariableDeclarator declarator)
 			: base(target, declarator.Initializer)
 		{
 			this.declarator = declarator;
@@ -1511,7 +1503,7 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class SimpleNameExpression : Expression
+	public sealed class SimpleNameExpression : AssignableExpression
 	{
 		public SimpleNameExpression(string name)
 		{
@@ -1528,10 +1520,10 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			throw new InvalidOperationException("SimpleNameExpression encountered during constant reduction.");
+			throw new InvalidOperationException(NotResolved);
 		}
 
-		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind access)
 		{
 			bool hasInstance;
 			var containingClass = context.GetContainingClass(out hasInstance);
@@ -1604,19 +1596,27 @@ namespace Osprey.Nodes
 						if (!hasInstance)
 						{
 							if (context.IsInFieldInitializer())
-								throw new InstanceMemberAccessException(this, method, "Cannot refer to instance members in a field initializer.");
+								throw new InstanceMemberAccessException(this, method,
+									"Cannot refer to instance members in a field initializer.");
 							throw new InstanceMemberAccessException(this, method);
 						}
+						if (access.IsWrite())
+							throw new CompileTimeException(this, string.Format("Cannot assign to the method '{0}'.", method.FullName));
 
-						var inner = new ThisAccess();
-						inner.ResolveNames(context, document, false, false);
-
-						result = new InstanceMemberAccess(inner, (Class)method.Parent, method);
+						result = new InstanceMemberAccess(
+							new ThisAccess().At(this).ResolveNames(context, document, false, false),
+							(Class)method.Parent, method
+						);
 					}
 					break;
 				case MemberKind.Property:
 					{
 						var prop = ((Property)member);
+						if (access.IsRead())
+							prop.EnsureReadable(this);
+						if (access.IsWrite())
+							prop.EnsureWritable(this);
+
 						if (prop.IsStatic)
 							return new StaticPropertyAccess(prop);
 						if (!hasInstance)
@@ -1626,37 +1626,31 @@ namespace Osprey.Nodes
 							throw new InstanceMemberAccessException(this, prop);
 						}
 
-						if (block != null && block.ContainingMember is LocalMethod)
-							((LocalMethod)block.ContainingMember).Function.CapturesThis = true;
-
-						var inner = new ThisAccess();
-						inner.ResolveNames(context, document, false, false);
-
-						result = new InstanceMemberAccess(inner, prop.Parent, prop);
+						result = new InstanceMemberAccess(
+							new ThisAccess().At(this).ResolveNames(context, document, false, false),
+							prop.Parent, prop
+						);
 					}
 					break;
 				case MemberKind.Variable:
 					{
 						// Note: local variables only occur within blocks, so we don't actually
 						// need to test whether 'block' is null.
-
-						// Also note: if the variable was declared in a VariableDeclarator with
-						// an initializer, the EndIndex includes the initializer.
-
+						
 						var variable = (Variable)member;
 						variable.EnsureAccessibleFrom(this);
+						if (access.IsWrite())
+							variable.EnsureAssignable(this);
 
 						// If the variable comes from another method, then we must capture it,
 						// but only if the current method is a local method. The actual trans-
 						// formation takes place elsewhere.
-						if (variable.Parent.ContainingMember != block.ContainingMember &&
-							block.ContainingMember is LocalMethod)
-						{
-							var function = ((LocalMethod)block.ContainingMember).Function;
-							function.Capture(variable, this);
-						}
+						var localMethod = variable.Parent.ContainingMember != block.ContainingMember ?
+							block.ContainingMember as LocalMethod : null;
+						if (localMethod != null)
+							localMethod.Function.Capture(variable, this);
 
-						result = new LocalVariableAccess(variable, block);
+						result = new LocalVariableAccess(variable, block, access);
 					}
 					break;
 				case MemberKind.LocalConstant:
@@ -1718,13 +1712,40 @@ namespace Osprey.Nodes
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			throw new InvalidOperationException("SimpleNameExpression encountered when transforming closure locals.");
+			throw new InvalidOperationException(NotResolved);
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			throw new InvalidOperationException("SimpleNameExpression encountered when emitting bytecode.");
+			throw new InvalidOperationException(NotResolved);
 		}
+
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		{
+			throw new InvalidOperationException(NotResolved);
+		}
+
+		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)
+		{
+			throw new InvalidOperationException(NotResolved);
+		}
+
+		public override LocalVariable[] CompileParallelFirstEvaluation(Compiler compiler, MethodBuilder method)
+		{
+			throw new InvalidOperationException(NotResolved);
+		}
+
+		public override void CompileParallelLoadInstance(Compiler compiler, MethodBuilder method, LocalVariable[] locals)
+		{
+			throw new InvalidOperationException(NotResolved);
+		}
+
+		public override void CompileParallelAssignment(Compiler compiler, MethodBuilder method, LocalVariable[] locals)
+		{
+			throw new InvalidOperationException(NotResolved);
+		}
+
+		private const string NotResolved = "SimpleNameExpression found after name resolution.";
 	}
 
 	/// <summary>
@@ -2238,110 +2259,100 @@ namespace Osprey.Nodes
 			return this;
 		}
 
-		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind access)
 		{
 			Inner = Inner.ResolveNames(context, document, true, true);
 			if (Inner is NamespaceAccess)
 			{
-				var ns = ((NamespaceAccess)Inner).Namespace;
-				if (ns.ContainsMember(Member))
-					return GetNamespaceMemberAccess(ns.GetMember(Member)).At(this);
-
-				throw new UndefinedNameException(this, Member,
-					string.Format("The namespace '{0}' does not contain a definition for '{1}'.",
-						ns.FullName, Member));
+				return GetNamespaceMemberAccess(((NamespaceAccess)Inner).Namespace);
 			}
 			if (Inner is TypeAccess)
 			{
-				var type = ((TypeAccess)Inner).Type;
-				if (type.ContainsMember(Member))
-				{
-					bool _;
-					return GetTypeMemberAccess(type.GetMember(Member,
-						instType: null, fromType: context.GetContainingClass(out _)),
-						context).At(this);
-				}
-
-				throw new UndefinedNameException(this, Member,
-					string.Format("The type '{0}' does not contain a definition for '{1}'.",
-					type.FullName, Member));
-			}
-			if (Inner is ThisAccess || Inner is BaseAccess)
-			{
-				bool hasInstance;
-				var @class = context.GetContainingClass(out hasInstance);
-				var thisType = @class;
-				if (Inner is BaseAccess)
-					@class = (Class)@class.BaseType;
-
-				NamedMember inaccessibleMember;
-				var member = @class.GetMember(Member, instType: thisType, fromType: thisType,
-					inaccessibleMember: out inaccessibleMember);
-
-				if (inaccessibleMember != null)
-					throw new CompileTimeException(this, string.Format("The member '{0}' is not accessible in this context.",
-						inaccessibleMember.FullName));
-				if (member == null)
-					throw new UndefinedNameException(this, Member,
-						string.Format("The type '{0}' does not contain a definition for '{1}'.",
-							@class.FullName, Member));
-
-				if (member is ClassMember && ((ClassMember)member).IsStatic ||
-					member.Kind == MemberKind.MethodGroup && ((MethodGroup)member).IsStatic)
-					throw new StaticMemberAccessException(this, member,
-						string.Format("The member '{0}.{1}' is static and cannot be accessed through an instance.",
-							@class.FullName, Member));
-
-				if (Inner is BaseAccess)
-					if (member.Kind == MemberKind.Property && ((Property)member).IsAbstract)
-						throw new CompileTimeException(this,
-							string.Format("The member '{0}.{1}' is abstract and cannot be accessed through 'base'.",
-								@class.FullName, Member));
-					else if (!IsInvocation && member.Kind == MemberKind.MethodGroup &&
-						((MethodGroup)member).Any(o => o.IsAbstract))
-						throw new CompileTimeException(this,
-							string.Format("The method '{0}.{1}' cannot be accessed through 'base' as a value because it contains one or more abstract overloads.",
-								@class.FullName, Member));
-
-				return new InstanceMemberAccess(Inner,
-					member is ClassMember ? ((ClassMember)member).Parent : ((MethodGroup)member).ParentAsClass,
-					member).At(this);
+				bool _;
+				return GetTypeMemberAccess(context,
+					type: ((TypeAccess)Inner).Type,
+					fromType: context.GetContainingClass(out _),
+					access: access);
 			}
 			if (Inner.IsTypeKnown(document.Compiler))
 			{
-				var knownType = Inner.GetKnownType(document.Compiler);
+				bool _;
+				var fromType = context.GetContainingClass(out _);
 
-				if (knownType == null)
-					throw new CompileTimeException(this, "Cannot access any members on the null value.");
+				bool throughBase = false;
+				Class instType;
+				if (Inner is ThisAccess)
+					instType = fromType;
+				else if (throughBase = (Inner is BaseAccess))
+					instType = fromType.BaseType as Class;
+				else
+				{
+					var type = Inner.GetKnownType(document.Compiler);
+					if (type == null)
+						throw new CompileTimeException(Inner, "Cannot access any members on the null value.");
 
-				bool hasInstance;
-				var @class = context.GetContainingClass(out hasInstance);
+					instType = (Class)type;
+				}
 
 				NamedMember inaccessibleMember;
-				var member = knownType.GetMember(Member, instType: knownType, fromType: @class,
+				var member = instType.GetMember(Member,
+					instType: instType,
+					fromType: fromType,
 					inaccessibleMember: out inaccessibleMember);
-
 				if (inaccessibleMember != null)
 					throw new CompileTimeException(this, string.Format("The member '{0}' is not accessible in this context.",
 						inaccessibleMember.FullName));
+
 				if (member == null)
 					throw new UndefinedNameException(this, Member,
 						string.Format("The type '{0}' does not contain a definition for '{1}'.",
-							knownType.FullName, Member));
+							instType.FullName, Member));
 
-				if (member is ClassMember && ((ClassMember)member).IsStatic ||
-					member.Kind == MemberKind.MethodGroup && ((MethodGroup)member).IsStatic)
-					throw new StaticMemberAccessException(this, member,
-						string.Format("The member '{0}.{1}' is static and cannot be accessed through an instance.",
-							knownType.FullName, Member));
+				if (member is ClassMember)
+				{
+					var classMember = (ClassMember)member;
+					if (classMember.IsStatic)
+						throw new StaticMemberAccessException(this, member);
+					if (classMember.Kind == MemberKind.Property)
+					{
+						var prop = (Property)classMember;
+						if (access.IsRead())
+							prop.EnsureReadable(this);
+						if (access.IsWrite())
+							prop.EnsureWritable(this);
+						if (prop.IsAbstract)
+							throw new CompileTimeException(this,
+								string.Format("The property '{0}' is abstract and cannot be accessed through 'base'.",
+									member.FullName));
+					}
+				}
+				else if (member.Kind == MemberKind.MethodGroup)
+				{
+					var methodGroup = (MethodGroup)member;
+					if (methodGroup.IsStatic)
+						throw new StaticMemberAccessException(this, member);
+					if (throughBase && !IsInvocation && methodGroup.Any(o => o.IsAbstract))
+						throw new CompileTimeException(this,
+							string.Format("The method '{0}' cannot be accessed as a value through 'base', only invoked, because it contains one or more abstract overloads.",
+								methodGroup.FullName));
+				}
+
+				if (throughBase)
+					if (member.Kind == MemberKind.Property && ((Property)member).IsAbstract)
+						throw new CompileTimeException(this,
+							string.Format("The member '{0}' is abstract and cannot be accessed through 'base'.",
+								member.FullName));
+					else if (!IsInvocation && member.Kind == MemberKind.MethodGroup &&
+						((MethodGroup)member).Any(o => o.IsAbstract))
+						throw new CompileTimeException(this,
+							string.Format("The method '{0}' cannot be accessed through 'base' as a value because it contains one or more abstract overloads.",
+								member.FullName));
 
 				Class declType; // The declaring type of the member
-				if (member is ClassMember)
-					declType = ((ClassMember)member).Parent;
-				else if (member.Kind == MemberKind.MethodGroup)
+				if (member.Kind == MemberKind.MethodGroup)
 					declType = ((MethodGroup)member).ParentAsClass;
 				else
-					throw new InvalidOperationException("Invalid member kind: a type member must be a ClassMember or a MethodGroup.");
+					declType = ((ClassMember)member).Parent;
 
 				return new InstanceMemberAccess(Inner, declType, member).At(this);
 			}
@@ -2432,67 +2443,102 @@ namespace Osprey.Nodes
 			method.Append(new StoreMember(method.Module.GetStringId(Member))); // Store the member :D
 		}
 
-		private Expression GetNamespaceMemberAccess(NamedMember member)
+		private Expression GetNamespaceMemberAccess(Namespace ns)
 		{
-			switch (member.Kind)
+			if (ns.ContainsMember(Member))
 			{
-				case MemberKind.Namespace:
-					return new NamespaceAccess((Namespace)member);
-				case MemberKind.Class:
-				case MemberKind.Enum:
-					return new TypeAccess((Type)member);
-				case MemberKind.MethodGroup:
-					return new StaticMethodAccess((MethodGroup)member);
-				case MemberKind.GlobalConstant:
-					return new GlobalConstantAccess((GlobalConstant)member);
-				case MemberKind.Ambiguous:
-					throw new AmbiguousNameException(this, (AmbiguousMember)member,
-						string.Format("The name '{0}' is ambiguous between the following members: {1}",
-							member.Name, ((AmbiguousMember)member).GetMemberNamesJoined()));
+				var member = ns.GetMember(Member);
+
+				Expression result;
+				switch (member.Kind)
+				{
+					case MemberKind.Namespace:
+						result = new NamespaceAccess((Namespace)member);
+						break;
+					case MemberKind.Class:
+					case MemberKind.Enum:
+						result = new TypeAccess((Type)member);
+						break;
+					case MemberKind.MethodGroup:
+						result = new StaticMethodAccess((MethodGroup)member);
+						break;
+					case MemberKind.GlobalConstant:
+						result = new GlobalConstantAccess((GlobalConstant)member);
+						break;
+					case MemberKind.Ambiguous:
+						throw new AmbiguousNameException(this, (AmbiguousMember)member,
+							string.Format("The name '{0}' is ambiguous between the following members: {1}",
+								member.Name, ((AmbiguousMember)member).GetMemberNamesJoined()));
+					default:
+						throw new InvalidOperationException("Namespace member is of an invalid kind.");
+				}
+
+				return result.At(this);
 			}
 
-			throw new ArgumentException("Namespace member is of an invalid kind (must be namespace, type, function or const).");
+			throw new UndefinedNameException(this, Member,
+				string.Format("The namespace '{0}' does not contain a definition for '{1}'.",
+					ns.FullName, Member));
 		}
 
-		private Expression GetTypeMemberAccess(NamedMember member, IDeclarationSpace context)
+		private Expression GetTypeMemberAccess(IDeclarationSpace context, Type type, Type fromType, ExpressionAccessKind access)
 		{
-			switch (member.Kind)
+			var member = type.GetMember(Member,
+				instType: null,
+				fromType: fromType);
+			if (member != null)
 			{
-				case MemberKind.Field:
-					{
-						var field = (Field)member;
-						if (field.IsStatic)
-							return new StaticFieldAccess(field);
-						throw new InstanceMemberAccessException(this, member);
-					}
-				case MemberKind.Property:
-					{
-						var prop = (Property)member;
-						if (prop.IsStatic)
-							return new StaticPropertyAccess(prop);
-						throw new InstanceMemberAccessException(this, member);
-					}
-				case MemberKind.MethodGroup:
-					{
-						var method = (MethodGroup)member;
-						if (method.IsStatic)
-							return new StaticMethodAccess(method);
-						throw new InstanceMemberAccessException(this, member);
-					}
-				case MemberKind.Constant:
-					{
-						var constant = (ClassConstant)member;
-						return new ClassConstantAccess(constant);
-					}
-				case MemberKind.EnumField:
-					{
-						var field = (EnumField)member;
-						return new EnumFieldAccess(field,
-							context is Enum && ((Enum)context) == field.Parent);
-					}
+				Expression result;
+				switch (member.Kind)
+				{
+					case MemberKind.Field:
+						{
+							var field = (Field)member;
+							if (!field.IsStatic)
+								throw new InstanceMemberAccessException(this, member);
+							result = new StaticFieldAccess(field);
+						}
+						break;
+					case MemberKind.Property:
+						{
+							var prop = (Property)member;
+							if (!prop.IsStatic)
+								throw new InstanceMemberAccessException(this, member);
+							if (access.IsRead())
+								prop.EnsureReadable(this);
+							if (access.IsWrite())
+								prop.EnsureWritable(this);
+							result = new StaticPropertyAccess(prop);
+						}
+						break;
+					case MemberKind.MethodGroup:
+						{
+							var method = (MethodGroup)member;
+							if (!method.IsStatic)
+								throw new InstanceMemberAccessException(this, member);
+							result = new StaticMethodAccess(method);
+						}
+						break;
+					case MemberKind.Constant:
+						result = new ClassConstantAccess((ClassConstant)member);
+						break;
+					case MemberKind.EnumField:
+						{
+							var field = (EnumField)member;
+							result = new EnumFieldAccess(field,
+								context is Enum && ((Enum)context) == field.Parent);
+						}
+						break;
+					default:
+						throw new InvalidOperationException("Member of type is of an invalid kind.");
+				}
+
+				return result.At(this);
 			}
 
-			throw new ArgumentException("Member of type is of an invalid kind (must be field, property, method or const).");
+			throw new UndefinedNameException(this, Member,
+				string.Format("The type '{0}' does not contain a definition for '{1}'.",
+				type.FullName, Member));
 		}
 	}
 
@@ -2523,7 +2569,7 @@ namespace Osprey.Nodes
 			}
 
 			var block = context as BlockSpace;
-			var localMethod = block != null ? block.Method as LocalMethod : null;
+			var localMethod = block != null ? block.ContainingMember as LocalMethod : null;
 			if (block != null && localMethod != null)
 				localMethod.Function.CapturesThis = true;
 
@@ -2706,6 +2752,10 @@ namespace Osprey.Nodes
 		/// <summary>The arguments for the indexer.</summary>
 		public List<Expression> Arguments;
 
+		// This field is only set if the indexer is being accessed non-virtually
+		// through a known type.
+		private Indexer indexer;
+
 		public override string ToString(int indent)
 		{
 			return String.Format("{0}[{1}]", Inner.ToString(indent), Arguments.JoinString(", ", indent));
@@ -2719,10 +2769,64 @@ namespace Osprey.Nodes
 			return this;
 		}
 
-		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
+		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind access)
 		{
 			Inner = Inner.ResolveNames(context, document, false, false);
-			
+
+			if (Inner.IsTypeKnown(document.Compiler))
+			{
+				bool _;
+				var fromType = context.GetContainingClass(out _);
+
+				bool throughBase = false;
+				Class instType;
+				if (Inner is ThisAccess)
+					instType = fromType;
+				else if (throughBase = (Inner is BaseAccess))
+					instType = fromType.BaseType as Class;
+				else
+				{
+					var type = Inner.GetKnownType(document.Compiler);
+					if (type == null)
+						throw new CompileTimeException(Inner, "Cannot index into the null value.");
+					if (type is Enum)
+						throw new CompileTimeException(Inner, "Enum values cannot be indexed into.");
+
+					instType = (Class)type;
+				}
+
+				NamedMember inaccessibleMember;
+				var indexerMember = instType.GetMember(Indexer.MemberName,
+					instType: instType,
+					fromType: fromType,
+					inaccessibleMember: out inaccessibleMember);
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(Inner, string.Format("The member '{0}' is not accessible in this context.",
+						inaccessibleMember.FullName));
+
+				var argCount = Arguments.Count;
+				var indexer = indexerMember.Kind == MemberKind.IndexerMember ?
+					((IndexerMember)indexerMember).GetIndexer(argCount) :
+					null;
+				if (indexer == null)
+					throw new CompileTimeException(Inner, string.Format("The type '{0}' does not define an indexer that takes {1} arguments.",
+						instType.FullName, argCount.ToStringInvariant()));
+
+				if (access.IsRead())
+					indexer.EnsureReadable(this);
+				if (access.IsWrite())
+					indexer.EnsureWritable(this);
+
+				// Cannot index into an abstract indexer with base[...]
+				if (throughBase && indexer.IsAbstract)
+					throw new CompileTimeException(Inner,
+						string.Format("The {0}-argument indexer of class '{2}' is abstract and cannot be accessed through 'base'.",
+							argCount, indexer.Parent.FullName));
+
+				if (throughBase || (!indexer.IsOverridable && !indexer.IsAbstract))
+					this.indexer = indexer;
+			}
+
 			for (var i = 0; i < Arguments.Count; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 
@@ -2746,7 +2850,10 @@ namespace Osprey.Nodes
 			foreach (var arg in Arguments)
 				arg.Compile(compiler, method);
 
-			method.Append(new LoadIndexer(Arguments.Count));
+			if (indexer != null)
+				method.Append(new StaticCall(indexer.GetterId, Arguments.Count));
+			else
+				method.Append(new LoadIndexer(Arguments.Count));
 		}
 
 		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
@@ -2765,7 +2872,7 @@ namespace Osprey.Nodes
 				method.Append(new StoreLocal(valueLocal));
 			}
 
-			method.Append(new StoreIndexer(Arguments.Count));
+			AppendStoreInstruction(method);
 
 			if (useValue)
 				if (value.CanSafelyInline)
@@ -2828,7 +2935,7 @@ namespace Osprey.Nodes
 				}
 
 			method.Append(new LoadLocal(finalValueLocal));
-			method.Append(new StoreIndexer(Arguments.Count));
+			AppendStoreInstruction(method);
 
 			finalValueLocal.Done();
 		}
@@ -2879,7 +2986,18 @@ namespace Osprey.Nodes
 
 		public override void CompileParallelAssignment(Compiler compiler, MethodBuilder method, LocalVariable[] locals)
 		{
-			method.Append(new StoreIndexer(Arguments.Count));
+			AppendStoreInstruction(method);
+		}
+
+		private void AppendStoreInstruction(MethodBuilder method)
+		{
+			if (indexer != null)
+			{
+				method.Append(new StaticCall(indexer.SetterId, Arguments.Count + 1));
+				method.Append(new SimpleInstruction(Opcode.Pop));
+			}
+			else
+				method.Append(new StoreIndexer(Arguments.Count));
 		}
 	}
 
@@ -3470,12 +3588,13 @@ namespace Osprey.Nodes
 			else if (Inner.IsTypeKnown(document.Compiler))
 			{
 				bool _;
-				Class instType;
+				var fromType = context.GetContainingClass(out _);
 
-				if (Inner is ThisAccess || Inner is BaseAccess)
-				{
-					instType = context.GetContainingClass(out _);
-				}
+				Class instType;
+				if (Inner is ThisAccess)
+					instType = fromType;
+				else if (Inner is BaseAccess)
+					instType = fromType.BaseType as Class;
 				else
 				{
 					var type = Inner.GetKnownType(document.Compiler);
@@ -3488,9 +3607,9 @@ namespace Osprey.Nodes
 				}
 
 				NamedMember inaccessibleMember;
-				var invocators = instType.GetMember(".call",
-					instType: Inner is BaseAccess ? instType.BaseType : instType,
-					fromType: context.GetContainingClass(out _),
+				var invocators = instType.GetMember(Class.InvocatorName,
+					instType: instType,
+					fromType: fromType,
 					inaccessibleMember: out inaccessibleMember);
 				if (inaccessibleMember != null)
 					throw new CompileTimeException(Inner, string.Format("The member '{0}' is not accessible in this context.",

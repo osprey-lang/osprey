@@ -899,7 +899,7 @@ namespace Osprey.Nodes
 
 		internal Method DeclSpace;
 
-		internal string DeclaredName { get { return Name == "this" ? ".call" : Name; } }
+		internal string DeclaredName { get { return Name == "this" ? Class.InvocatorName : Name; } }
 
 		public override string ToString(int indent)
 		{

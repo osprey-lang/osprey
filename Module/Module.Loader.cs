@@ -550,10 +550,9 @@ namespace Osprey
 								"PropertyDef accessors must refer to a method declared in the containing class.");
 					}
 
-					if (name == ".item") // indexer
+					if (name == Indexer.MemberName) // indexer
 					{
-						var indexer = new Indexer(target);
-						indexer.SetAccessors(getterGroup, setterGroup);
+						var indexer = CreateIndexer(target, getterGroup, setterGroup);
 						target.ImportIndexer(indexer);
 					}
 					else // other property
@@ -574,9 +573,9 @@ namespace Osprey
 
 						var prop = new Property(name, target);
 						if (getter != null)
-							prop.Getter = new PropertyAccessor((ClassMemberMethod)getter, false);
+							prop.Getter = new PropertyAccessor((ClassMemberMethod)getter, isSetter: false, isIndexer: false);
 						if (setter != null)
-							prop.Setter = new PropertyAccessor((ClassMemberMethod)setter, true);
+							prop.Setter = new PropertyAccessor((ClassMemberMethod)setter, isSetter: true, isIndexer: false);
 						target.ImportProperty(prop);
 					}
 				}
@@ -584,6 +583,50 @@ namespace Osprey
 				if (reader.BaseStream.Position != posBefore + size)
 					throw new ModuleLoadException(reader.FileName, "PropertyDef table reported an inaccurate size.");
 			}
+		}
+
+		private static IndexerMember CreateIndexer(Class owner, MethodGroup getterGroup, MethodGroup setterGroup)
+		{
+			var indexerMember = new IndexerMember(owner);
+
+			var indexers = new Dictionary<int, Indexer>(Math.Max(
+				getterGroup == null ? 0 : getterGroup.Count,
+				setterGroup == null ? 0 : setterGroup.Count));
+
+			if (getterGroup != null)
+				foreach (var ovl in getterGroup)
+				{
+					var cmm = ovl as ClassMemberMethod;
+					if (cmm != null)
+					{
+						var argCount = cmm.Parameters.Length;
+						Indexer indexer;
+						if (!indexers.TryGetValue(argCount, out indexer))
+							indexers.Add(argCount, indexer = new Indexer(owner, argCount));
+
+						indexer.Getter = new IndexerAccessor(argCount, cmm, isSetter: false);
+					}
+				}
+
+			if (setterGroup != null)
+				foreach (var ovl in setterGroup)
+				{
+					var cmm = ovl as ClassMemberMethod;
+					if (cmm != null)
+					{
+						var argCount = cmm.Parameters.Length - 1; // -1 for the value parameter
+						Indexer indexer;
+						if (!indexers.TryGetValue(argCount, out indexer))
+							indexers.Add(argCount, indexer = new Indexer(owner, argCount));
+
+						indexer.Setter = new IndexerAccessor(argCount, cmm, isSetter: true);
+					}
+				}
+
+			foreach (var indexer in indexers.Values)
+				indexerMember.AddIndexer(indexer);
+
+			return indexerMember;
 		}
 
 		private static void ReadOperators(ModuleReader reader, Module module, Class target)

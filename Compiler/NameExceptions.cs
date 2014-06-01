@@ -187,7 +187,7 @@ namespace Osprey
 	public class InstanceMemberAccessException : CompileTimeException
 	{
 		public InstanceMemberAccessException(ParseNode node, NamedMember member)
-			: this(node, member, "Instance members must be accessed through an instance of the type.", null)
+			: this(node, member, GetDefaultMessage(member), null)
 		{ }
 		public InstanceMemberAccessException(ParseNode node, NamedMember member, string message)
 			: this(node, member, message, null)
@@ -203,12 +203,20 @@ namespace Osprey
 		/// Gets the member that was accessed incorrectly.
 		/// </summary>
 		public NamedMember Member { get { return member; } }
+
+		private static string GetDefaultMessage(NamedMember member)
+		{
+			if (member != null)
+				return string.Format("The member '{0}' must be accessed through an instance",
+					member.FullName);
+			return "Instance members must be accessed through an instance.";
+		}
 	}
 
 	public class StaticMemberAccessException : CompileTimeException
 	{
 		public StaticMemberAccessException(ParseNode node, NamedMember member)
-			: this(node, member, "Static members cannot be accessed through an instance.", null)
+			: this(node, member, GetDefaultMessage(member), null)
 		{ }
 		public StaticMemberAccessException(ParseNode node, NamedMember member, string message)
 			: this(node, member, message, null)
@@ -224,5 +232,13 @@ namespace Osprey
 		/// Gets the member that was accessed incorrectly.
 		/// </summary>
 		public NamedMember Member { get { return member; } }
+
+		private static string GetDefaultMessage(NamedMember member)
+		{
+			if (member != null)
+				return string.Format("The member '{0}' is static and cannot be accessed through an instance.",
+					member.FullName);
+			return "Static members cannot be accessed through an instance.";
+		}
 	}
 }

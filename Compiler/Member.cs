@@ -205,7 +205,7 @@ namespace Osprey.Members
 			return null;
 		}
 
-		public override Method FindConstructor(ParseNode node, int argCount, Class instClass, Class fromClass)
+		public override Method FindConstructor(ParseNode node, int argCount, Type instType, Type fromType)
 		{
 			throw new NotSupportedException();
 		}
@@ -216,55 +216,60 @@ namespace Osprey.Members
 	/// </summary>
 	public enum MemberKind
 	{
-		/// <summary>The member is a namespace.</summary>
+		/// <summary>Namespace.</summary>
 		Namespace,
 
-		/// <summary>The member is a global constant.</summary>
+		/// <summary>Global constant.</summary>
 		GlobalConstant,
-		/// <summary>The member is a global variable.</summary>
+		/// <summary>Global variable.</summary>
 		GlobalVariable,
 
-		/// <summary>The member is a class.</summary>
+		/// <summary>Class.</summary>
 		Class,
-		/// <summary>The member is an enum.</summary>
+		/// <summary>Enum.</summary>
 		Enum,
 
-		/// <summary>The member is a constructor.</summary>
+		/// <summary>Constructor.</summary>
 		Constructor,
 
-		/// <summary>The member is a class field.</summary>
+		/// <summary>Class field.</summary>
 		Field,
-		/// <summary>The member is a class constant.</summary>
+		/// <summary>Class constant.</summary>
 		Constant,
-		/// <summary>The member is an enum field.</summary>
+		/// <summary>Enum field.</summary>
 		EnumField,
 
-		/// <summary>The member is a method group.</summary>
+		/// <summary>Method group.</summary>
 		MethodGroup,
-		/// <summary>The member is a single method.</summary>
+		/// <summary>Single method overload.</summary>
 		Method,
 
-		/// <summary>The member is a property.</summary>
+		/// <summary>Property.</summary>
 		Property,
-		/// <summary>The member is a property getter.</summary>
+		/// <summary>Property getter.</summary>
 		PropertyGetter,
-		/// <summary>The member is a property setter.</summary>
+		/// <summary>Property setter.</summary>
 		PropertySetter,
-		/// <summary>The member is an indexer getter.</summary>
+
+		/// <summary>An indexer member, which is a wrapper class for all the indexers in a class.</summary>
+		IndexerMember,
+		/// <summary>Indexer.</summary>
+		Indexer,
+		/// <summary>Indexer getter.</summary>
 		IndexerGetter,
-		/// <summary>The member is an indexer setter.</summary>
+		/// <summary>Indexer setter.</summary>
 		IndexerSetter,
 
-		/// <summary>The member is an operator.</summary>
+		/// <summary>Operator.</summary>
 		Operator,
-		/// <summary>The member is an iterator.</summary>
+		/// <summary>Iterator.</summary>
 		Iterator,
 
-		/// <summary>The member is a local variable or parameter.</summary>
+		/// <summary>Local variable or parameter.</summary>
 		Variable,
-		/// <summary>The member is a local constant.</summary>
+		/// <summary>Local constant.</summary>
 		LocalConstant,
-		/// <summary>The member is a local function.</summary>
+		/// <summary>Local function.</summary>
 		LocalFunction,
 
 		/// <summary>The member is ambiguous between several imported names.</summary>

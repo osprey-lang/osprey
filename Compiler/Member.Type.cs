@@ -148,7 +148,7 @@ namespace Osprey.Members
 			return Parent;
 		}
 
-		public abstract Method FindConstructor(ParseNode errorNode, int argCount, Class instClass, Class fromClass);
+		public abstract Method FindConstructor(ParseNode errorNode, int argCount, Type instClass, Type fromClass);
 
 		Class IDeclarationSpace.GetContainingClass(out bool hasInstance)
 		{
@@ -257,7 +257,7 @@ namespace Osprey.Members
 			return result;
 		}
 
-		public override Method FindConstructor(ParseNode errorNode, int argCount, Class instClass, Class fromClass)
+		public override Method FindConstructor(ParseNode errorNode, int argCount, Type instType, Type fromType)
 		{
 			throw new CompileTimeException(errorNode, "Enums do not have any constructors.");
 		}
@@ -348,10 +348,6 @@ namespace Osprey.Members
 		private MethodGroup constructors;
 		/// <summary>Gets the method group that corresponds to the constructors of the class.</summary>
 		public MethodGroup Constructors { get { return constructors; } internal set { constructors = value; } }
-
-		private Indexer indexer = null;
-		/// <summary>Gets the indexer declared in the class.</summary>
-		public Indexer Indexer { get { return indexer; } }
 
 		private Iterator iterator;
 		/// <summary>Gets the iterator declared in the class, or null if no iterator was declared.</summary>
@@ -460,32 +456,42 @@ namespace Osprey.Members
 			var properties = new Dictionary<string, Property>();
 			foreach (var prop in node.Properties)
 			{
+				string name;
+				PropertyAccessor accessor;
 				if (prop is IndexerAccessorDeclaration)
 				{
-					var indexer = new IndexerAccessor((IndexerAccessorDeclaration)prop);
-					DeclareIndexerAccessor(indexer);
-					indexer.InitBody(compiler);
+					var idxDecl = (IndexerAccessorDeclaration)prop;
+					name = Indexer.MemberName + "`" + idxDecl.Parameters.Count.ToStringInvariant();
+					accessor = new IndexerAccessor(idxDecl);
 				}
 				else
 				{
-					var name = prop.Name;
-
-					Property property;
-					if (properties.ContainsKey(name))
-						property = properties[name];
-					else
-						properties[name] = property = new Property(name, this);
-
-					if (prop.IsSetter)
-						property.Setter = new PropertyAccessor(prop);
-					else
-						property.Getter = new PropertyAccessor(prop);
+					name = prop.Name;
+					accessor = new PropertyAccessor(prop);
 				}
+
+				Property property;
+				if (!properties.TryGetValue(name, out property))
+				{
+					property = prop is IndexerAccessorDeclaration ?
+						new Indexer(this, ((IndexerAccessorDeclaration)prop).Parameters.Count) :
+						new Property(name, this);
+					properties.Add(name, property);
+				}
+
+				if (prop.IsSetter)
+					property.Setter = accessor;
+				else
+					property.Getter = accessor;
 			}
 
 			foreach (var prop in properties.Values)
 			{
-				DeclareProperty(prop);
+				if (prop.Kind == MemberKind.Indexer)
+					DeclareIndexer((Indexer)prop);
+				else
+					DeclareProperty(prop);
+
 				if (prop.Getter != null)
 					prop.Getter.InitBody(compiler);
 				if (prop.Setter != null)
@@ -655,24 +661,41 @@ namespace Osprey.Members
 			members.Add(property.Name, property);
 		}
 
-		public void DeclareIndexerAccessor(IndexerAccessor accessor)
+		public void DeclareIndexer(Indexer indexer)
 		{
-			if (accessor == null)
-				throw new ArgumentNullException("accessor");
-
-			if (!this.IsAbstract && accessor.Method.IsAbstract)
-				throw new DeclarationException(accessor.Node, "Only abstract classes may declare abstract members.");
-
 			if (indexer == null)
-			{
-				if (members.ContainsKey(".item"))
-					throw new DuplicateNameException(accessor.Node, ".item", "There is already a member with the name '.item' in this class.");
+				throw new ArgumentNullException("indexer");
 
-				indexer = new Indexer(this);
-				members.Add(".item", indexer);
-			}
+			if (!this.IsAbstract && indexer.IsAbstract)
+				throw new DeclarationException(indexer.Node, "Only abstract classes may declare abstract members.");
 
-			indexer.AddAccessor(accessor);
+			NamedMember member;
+			IndexerMember indexerMember;
+			if (!members.TryGetValue(Indexer.MemberName, out member))
+				members.Add(Indexer.MemberName, indexerMember = new IndexerMember(this));
+			else
+				indexerMember = (IndexerMember)member;
+
+			EnsureDeclarable(indexer.GetAccessorNode(), indexer);
+
+			indexerMember.AddIndexer(indexer);
+
+			// These steps also update the accessibility of the accessors,
+			// if they are overrides without a declared accessibility. We
+			// must therefore declare the accessors before making sure they
+			// have the same declared accessibility.
+			if (indexer.Getter != null)
+				DeclareMethod(indexer.Getter.Method);
+			if (indexer.Setter != null)
+				DeclareMethod(indexer.Setter.Method);
+
+			if (indexer.Getter != null && indexer.Setter != null &&
+				indexer.Getter.Method.Access != indexer.Setter.Method.Access)
+				throw new DeclarationException(indexer.Getter.Node, "Both accessors must have the same declared accessibility.");
+
+			indexer.Access = indexer.Getter != null ?
+				indexer.Getter.Method.Access :
+				indexer.Setter.Method.Access;
 		}
 
 		public MethodGroup DeclareMethod(Method method)
@@ -783,12 +806,12 @@ namespace Osprey.Members
 			}
 		}
 
-		internal void ImportIndexer(Indexer indexer)
+		internal void ImportIndexer(IndexerMember indexer)
 		{
-			if (this.indexer != null)
-				throw new DuplicateNameException(null, ".item", string.Format("The class '{0}' already has an indexer.", this.FullName));
+			if (this.members.ContainsKey(Indexer.MemberName))
+				throw new DuplicateNameException(null, ".item",
+					string.Format("The class '{0}' already has an indexer member.", this.FullName));
 
-			this.indexer = indexer;
 			members.Add(".item", indexer);
 		}
 
@@ -845,9 +868,9 @@ namespace Osprey.Members
 			return result;
 		}
 
-		public override Method FindConstructor(ParseNode errorNode, int argCount, Class instClass, Class fromClass)
+		public override Method FindConstructor(ParseNode errorNode, int argCount, Type instType, Type fromType)
 		{
-			if (!IsAccessible(constructors.Access, instType: instClass, declType: this, fromType: fromClass))
+			if (!IsAccessible(constructors.Access, instType: instType, declType: this, fromType: fromType))
 				throw new CompileTimeException(errorNode,
 					string.Format("The constructor of '{0}' is not accessible from this location.",
 						this.FullName));
@@ -873,7 +896,7 @@ namespace Osprey.Members
 		/// <param name="name">The name of the member to find.</param>
 		/// <returns>The nearest accessible member with the specified name declared in a base type of the current class,
 		/// or null if no matching member could be found.</returns>
-		private NamedMember GetBaseMember(string name, Class startType, out Class declType)
+		private static NamedMember GetBaseMember(string name, Class startType, out Class declType)
 		{
 			var type = startType;
 			while (type != null)
@@ -1064,7 +1087,8 @@ namespace Osprey.Members
 			//      read-write).
 			//
 			//   c) If this property overrides an inherited property, it must be marked with the
-			//      'override' modifier.
+			//      'override' modifier. Otherwise, if there is nothing to override, it must not
+			//      have that modifier.
 
 			var name = property.Name;
 
@@ -1076,63 +1100,169 @@ namespace Osprey.Members
 			{
 				if (baseMember.Kind != MemberKind.Property)
 					throw new DeclarationException(errorNode,
-						string.Format("Cannot hide inherited member '{0}.{1}'.",
-							baseMemberClass.FullName, name));
+						string.Format("Cannot hide inherited member '{0}'.",
+							baseMember.FullName));
 
 				// At this point, baseMember is a property
 				var baseProp = ((Property)baseMember);
 				if (baseProp.IsStatic != property.IsStatic)
 					throw new DeclarationException(errorNode,
-						string.Format("Static modifier mismatch with inherited member '{0}.{1}'.",
-							baseMemberClass.FullName, name));
+						string.Format("Static modifier mismatch with inherited member '{0}'.",
+							baseProp.FullName));
 
 				if (!baseProp.IsOverridable && !baseProp.IsAbstract)
 					throw new DeclarationException(errorNode,
-						string.Format("Cannot override inherited member '{0}.{1}'.",
-							baseMemberClass.FullName, name));
+						string.Format("Cannot override inherited member '{0}'.",
+							baseProp.FullName));
 
-				// property is overridable or abstract
+				// baseProp is overridable or abstract
 				if (!property.IsOverride)
 					throw new DeclarationException(errorNode,
-						string.Format("Cannot hide inherited member '{0}.{1}'. Specify 'override' if the intent is to override it.",
-							baseMemberClass.FullName, name));
+						string.Format("Cannot hide inherited member '{0}'. Specify 'override' if the intent is to override it.",
+							baseProp.FullName));
 
 				// Read-writeness must match base property.
 				if (property.PropertyKind != baseProp.PropertyKind)
 					throw new DeclarationException(errorNode,
-						string.Format("Cannot override {0} property '{1}.{2}' with {3} property.",
+						string.Format("Cannot override {0} property '{1}' with {2} property.",
 							PropertyKindToString(baseProp.PropertyKind),
-							baseMemberClass.FullName, name,
+							baseProp.FullName,
 							PropertyKindToString(property.PropertyKind)));
 
 				if (property.Access == AccessLevel.None)
 				{
 					property.Access = baseProp.Access;
-					if (property.Getter != null)
-						if (property.Getter.Access == AccessLevel.None)
-							property.Getter.Access = baseProp.Access;
-						else if (property.Getter.Access != baseProp.Access)
+
+					var getter = property.Getter;
+					if (getter != null)
+						if (getter.Access == AccessLevel.None)
+							getter.Access = baseProp.Access;
+						else if (getter.Access != baseProp.Access)
 							throw new InconsistentAccessibilityException(errorNode,
 								string.Format("Accessibility mismatch when overriding '{0}.get {1}'.",
 									baseMemberClass.FullName, name));
-					if (property.Setter != null)
-						if (property.Setter.Access == AccessLevel.None)
-							property.Setter.Access = baseProp.Access;
-						else if (property.Setter.Access != baseProp.Access)
+
+					var setter = property.Setter;
+					if (setter != null)
+						if (setter.Access == AccessLevel.None)
+							setter.Access = baseProp.Access;
+						else if (setter.Access != baseProp.Access)
 							throw new InconsistentAccessibilityException(errorNode,
 								string.Format("Accessibility mismatch when overriding '{0}.set {1}'.",
 									baseMemberClass.FullName, name));
 				}
 				else if (property.Access != baseProp.Access)
 					throw new InconsistentAccessibilityException(errorNode,
-						string.Format("Accessibility mismatch when overriding '{0}.{1}'.",
-							baseMemberClass.FullName, name));
+						string.Format("Accessibility mismatch when overriding '{0}'.",
+							baseMember.FullName));
 
 				hasOverridden = true;
 			}
 
 			if (!hasOverridden && property.IsOverride)
 				throw new DeclarationException(errorNode, "Found no suitable property to override.");
+		}
+
+		private void EnsureDeclarable(ParseNode errorNode, Indexer indexer)
+		{
+			// An indexer, a getter and setter for a specific argument count, is declarable if:
+			//   a) No base type does contains a public or protected indexer, or that indexer
+			//      does not take the argument count of this indexer[1].
+			//
+			//   b) If there is such an indexer in any base type, it must be abstract or
+			//      overridable, and have the same readability/writability as the new indexer
+			//      (i.e. readonly matched with readonly, writeonly with writeonly and read-write
+			//      with read-write).
+			//
+			//   c) If this indexer overrides another indexer, it must be marked with the
+			//      'override' modifier. Otherwise, if there is nothing to override, it must
+			//      not have that modifier.
+			//
+			// Indexers do not take optional or variadic parameters, so we never have to worry
+			// about overlapping signatures. It is sufficient to check for an exact arg count.
+			//
+			// [1] Note that it is not possible to add overloads to protected indexers outside
+			// of the declaring class. However, this check is performed when the accessor methods
+			// are declared, by EnsureDeclarable(ParseNode, Method). See the comments there for
+			// more details.
+
+			var hasOverridden = false;
+
+			var baseStartType = this.BaseType as Class;
+			NamedMember baseMember;
+			do
+			{
+				Class baseMemberClass;
+				baseMember = GetBaseMember(Indexer.MemberName, baseStartType, out baseMemberClass);
+
+				if (baseMember != null)
+				{
+					if (baseMember.Kind != MemberKind.IndexerMember)
+						throw new DeclarationException(errorNode,
+							string.Format("Cannot hide inherited member '{0}'.",
+								baseMember.FullName));
+
+					var baseIndexer = ((IndexerMember)baseMember).GetIndexer(indexer.ArgCount);
+					if (baseIndexer != null)
+					{
+						if (!baseIndexer.IsOverridable && !baseIndexer.IsAbstract)
+							throw new DeclarationException(errorNode,
+								string.Format("Cannot override inherited member '{0}'.",
+									baseIndexer.GetDisplayName()));
+
+						// baseProp is overridable or abstract
+						if (!indexer.IsOverride)
+							throw new DeclarationException(errorNode,
+								string.Format("Cannot hide inherited member '{0}'. Specify 'override' if the intent is to override it.",
+									baseIndexer.GetDisplayName()));
+
+						// Read-writeness must match base property.
+						if (indexer.PropertyKind != baseIndexer.PropertyKind)
+							throw new DeclarationException(errorNode,
+								string.Format("Cannot override {0} indexer '{1}' with {2} indexer.",
+									PropertyKindToString(baseIndexer.PropertyKind),
+									baseIndexer.GetDisplayName(),
+									PropertyKindToString(indexer.PropertyKind)));
+
+						if (indexer.Access == AccessLevel.None)
+						{
+							indexer.Access = baseIndexer.Access;
+
+							var getter = indexer.IndexerGetter;
+							if (getter != null)
+								if (getter.Access == AccessLevel.None)
+									getter.Access = baseIndexer.Access;
+								else if (getter.Access != baseIndexer.Access)
+									throw new InconsistentAccessibilityException(errorNode,
+										string.Format("Accessibility mismatch when overriding '{0}'.",
+											baseIndexer.IndexerGetter.GetDisplayName()));
+
+							var setter = indexer.IndexerSetter;
+							if (setter != null)
+								if (setter.Access == AccessLevel.None)
+									setter.Access = baseIndexer.Access;
+								else if (setter.Access != baseIndexer.Access)
+									throw new InconsistentAccessibilityException(errorNode,
+										string.Format("Accessibility mismatch when overriding '{0}'.",
+											baseIndexer.IndexerSetter.GetDisplayName()));
+						}
+						else if (indexer.Access != baseIndexer.Access)
+							throw new InconsistentAccessibilityException(errorNode,
+								string.Format("Accessibility mismatch when overriding '{0}'.",
+									baseIndexer.GetDisplayName()));
+
+						// If we get here, we've successfully overridden a base indexer!
+						// We can stop looking.
+						hasOverridden = true;
+						break;
+					}
+
+					baseStartType = baseStartType.BaseType as Class;
+				}
+			} while (baseMember != null);
+
+			if (!hasOverridden && indexer.IsOverride)
+				throw new DeclarationException(errorNode, "Found no suitable indexer to override.");
 		}
 
 		private void OverrideIfPossible(Method method)
@@ -1213,6 +1343,8 @@ namespace Osprey.Members
 			var classNumber = closureClassCounter++;
 			return string.Format("I${0}{1}!{2}", prefix, "__", classNumber.ToStringInvariant());
 		}
+
+		internal const string InvocatorName = ".call";
 
 		private enum ClassState
 		{
@@ -1372,6 +1504,9 @@ namespace Osprey.Members
 		public Property(string name, Class parent)
 			: base(name, MemberKind.Property, null, AccessLevel.None, parent)
 		{ }
+		protected internal Property(string name, Class parent, bool isIndexer)
+			: base(name, isIndexer ? MemberKind.Indexer : MemberKind.Property, null, AccessLevel.None, parent)
+		{ }
 
 		private PropertyAccessor getter, setter;
 
@@ -1400,7 +1535,7 @@ namespace Osprey.Members
 				if (getter != null)
 					throw new DeclarationException(getter.Node, "The property already has a getter.");
 				if (setter != null)
-					ValidateAccessors(value.Method, setter.Method);
+					ValidateAccessors(value.Method, setter.Method, value.Node);
 				SetField(value, out getter);
 			}
 		}
@@ -1413,7 +1548,7 @@ namespace Osprey.Members
 				if (setter != null)
 					throw new DeclarationException(setter.Node, "The property already has a setter.");
 				if (getter != null)
-					ValidateAccessors(getter.Method, value.Method);
+					ValidateAccessors(getter.Method, value.Method, value.Node);
 				SetField(value, out setter);
 			}
 		}
@@ -1438,6 +1573,11 @@ namespace Osprey.Members
 			}
 		}
 
+		public virtual string GetDisplayName()
+		{
+			return FullName;
+		}
+
 		private void SetField(PropertyAccessor value, out PropertyAccessor field)
 		{
 			var method = value.Method;
@@ -1453,24 +1593,42 @@ namespace Osprey.Members
 			field = value;
 		}
 
-		internal static void ValidateAccessors(Method getter, Method setter)
+		internal static void ValidateAccessors(Method getter, Method setter, ParseNode errorNode)
 		{
+			// Note: The accessors must also have the same accessibility, but
+			// we check that in Class.EnsureDeclarable(ParseNode, Property),
+			// since property accessors may have the 'override' modifier and
+			// no explicitly declared accessibility.
+
 			if (getter.IsAbstract != setter.IsAbstract)
-				throw new DeclarationException(getter.Node, "If either property accessor is marked abstract, then both must be.");
+				throw new DeclarationException(errorNode, "If either property accessor is marked abstract, then both must be.");
 
 			if (getter.IsOverridable != setter.IsOverridable)
-				throw new DeclarationException(getter.Node, "If either property accessor is marked overridable, then both must be.");
+				throw new DeclarationException(errorNode, "If either property accessor is marked overridable, then both must be.");
 
 			if (getter.IsOverride != setter.IsOverride)
-				throw new DeclarationException(getter.Node, "If either property accessor is marked override, then both must be.");
+				throw new DeclarationException(errorNode, "If either property accessor is marked override, then both must be.");
 
 			if (getter.IsStatic != setter.IsStatic)
-				throw new DeclarationException(getter.Node, "If either property accessor is marked static, then both must be.");
+				throw new DeclarationException(errorNode, "If either property accessor is marked static, then both must be.");
 		}
 
 		internal ParseNode GetAccessorNode()
 		{
 			return getter != null ? getter.Node : setter.Node;
+		}
+
+		internal void EnsureReadable(ParseNode errorNode)
+		{
+			if (getter == null)
+				throw new CompileTimeException(errorNode,
+					string.Format("The property '{0}' cannot be read from; it is write-only.", GetDisplayName()));
+		}
+		internal void EnsureWritable(ParseNode errorNode)
+		{
+			if (setter == null)
+				throw new CompileTimeException(errorNode,
+					string.Format("The property '{0}' cannot be assigned to; it is read-only.", GetDisplayName()));
 		}
 	}
 
@@ -1513,8 +1671,39 @@ namespace Osprey.Members
 				};
 			node.DeclSpace = method;
 		}
-		public PropertyAccessor(ClassMemberMethod method, bool isSetter)
-			: base(method.Name, isSetter ? MemberKind.PropertySetter : MemberKind.IndexerGetter, null, method.Access)
+		protected PropertyAccessor(IndexerAccessorDeclaration node)
+			: base(Indexer.MemberName, node.IsSetter ? MemberKind.IndexerSetter : MemberKind.IndexerGetter, node, node.Access)
+		{
+			var parameters = new Parameter[node.Parameters.Count + (node.IsSetter ? 1 : 0)];
+			for (var i = 0; i < node.Parameters.Count; i++)
+				parameters[i] = node.Parameters[i];
+			if (node.IsSetter)
+				parameters[node.Parameters.Count] = new Parameter("value", null)
+				{
+					StartIndex = node.StartIndex,
+					EndIndex = node.EndIndex,
+				};
+
+			isSetter = node.IsSetter;
+			method = new ClassMemberMethod(node,
+				PropertyAccessor.GetAccessorMethodName(node.IsSetter, Indexer.MemberName), this,
+				node.Access, node.Body, Splat.None, parameters)
+				{
+					IsAbstract = node.IsAbstract,
+					IsOverridable = node.IsOverridable,
+					IsOverride = node.IsOverride,
+					IsStatic = false,
+					IsImplDetail = true,
+				};
+			node.DeclSpace = method;
+		}
+
+		internal PropertyAccessor(ClassMemberMethod method, bool isSetter, bool isIndexer)
+			: base(method.Name,
+				isIndexer ?
+					(isSetter ? MemberKind.IndexerSetter : MemberKind.IndexerGetter) :
+					(isSetter ? MemberKind.PropertySetter : MemberKind.PropertyGetter),
+				null, method.Access)
 		{
 			this.method = method;
 			this.isSetter = isSetter;
@@ -1564,111 +1753,137 @@ namespace Osprey.Members
 		internal const string SetterNameFormat = "set:{0}";
 	}
 
-	public class Indexer : ClassMember
+	public class IndexerMember : ClassMember
 	{
-		public Indexer(Class parent)
-			: base(MemberName, MemberKind.Property, null, AccessLevel.None, parent)
-		{ }
-
-		private MethodGroup getterGroup, setterGroup;
-
-		public MethodGroup Getter { get { return getterGroup; } }
-		public MethodGroup Setter { get { return setterGroup; } }
-
-		internal uint GetterId
+		public IndexerMember(Class parent)
+			: base(Indexer.MemberName, MemberKind.IndexerMember, null, AccessLevel.None, parent)
 		{
-			get { return getterGroup == null ? 0 : getterGroup.Id; }
-		}
-		internal uint SetterId
-		{
-			get { return setterGroup == null ? 0 : setterGroup.Id; }
+			Indexers = new List<Indexer>(1);
 		}
 
-		public void AddAccessor(IndexerAccessor accessor)
+		internal List<Indexer> Indexers;
+
+		internal uint GetterGroupId
 		{
-			if (accessor.IsGetter)
+			get
 			{
-				if (getterGroup != null && getterGroup.Name != accessor.Method.Name)
-					throw new ArgumentException("The indexer getter must have the same name as the other getters.", "accessor");
-				getterGroup = Parent.DeclareMethod(accessor.Method);
+				foreach (var idx in Indexers)
+					if (idx.Getter != null)
+						return idx.GetterId;
+				return 0;
 			}
+		}
+
+		internal uint SetterGroupId
+		{
+			get
+			{
+				foreach (var idx in Indexers)
+					if (idx.Setter != null)
+						return idx.SetterId;
+				return 0;
+			}
+		}
+
+		public Indexer GetIndexer(int argCount)
+		{
+			for (var i = 0; i < Indexers.Count; i++)
+			{
+				var idx = Indexers[i];
+				if (idx.ArgCount == argCount)
+					return idx;
+			}
+			return null;
+		}
+
+		internal void AddIndexer(Indexer indexer)
+		{
+			if (indexer == null)
+				throw new ArgumentNullException("indexer");
+
+			for (var i = 0; i < Indexers.Count; i++)
+				if (Indexers[i].ArgCount == indexer.ArgCount)
+					throw new DeclarationException(indexer.GetAccessorNode(),
+						string.Format("There is already an indexer that takes {0} arguments.", indexer.ArgCount));
+			Indexers.Add(indexer);
+		}
+	}
+
+	public class Indexer : Property
+	{
+		public Indexer(Class parent, int argCount)
+			: base(MemberName, parent, isIndexer: true)
+		{
+			this.argCount = argCount;
+		}
+
+		private int argCount;
+		/// <summary>
+		/// Gets the number of arguments that each indexer accessor takes,
+		/// not including the value for the setter.
+		/// </summary>
+		public int ArgCount { get { return argCount; } }
+
+		internal IndexerAccessor IndexerGetter { get { return (IndexerAccessor)Getter; } }
+
+		internal IndexerAccessor IndexerSetter { get { return (IndexerAccessor)Setter; } }
+
+		public override string GetDisplayName()
+		{
+			var sb = new StringBuilder(128);
+
+			sb.Append(Parent.FullName);
+			sb.Append(".this[");
+			var node = GetAccessorNode() as IndexerAccessorDeclaration;
+			if (node != null)
+				sb.Append(node.Parameters.Select(p => p.Name).JoinString(","));
 			else
-			{
-				if (setterGroup != null && setterGroup.Name != accessor.Method.Name)
-					throw new ArgumentException("The indexer setter must have the same name as the other setters.", "accessor");
-				setterGroup = Parent.DeclareMethod(accessor.Method);
-			}
-		}
+				sb.Append(argCount.ToStringInvariant());
+			sb.Append("]");
 
-		internal void SetAccessors(MethodGroup getter, MethodGroup setter)
-		{
-			this.getterGroup = getter;
-			this.setterGroup = setter;
+			return sb.ToString();
 		}
 
 		internal const string MemberName = ".item";
 	}
 
-	public class IndexerAccessor : NamedMember
+	public class IndexerAccessor : PropertyAccessor
 	{
 		public IndexerAccessor(IndexerAccessorDeclaration node)
-			: base(".item", node.IsSetter ? MemberKind.IndexerSetter : MemberKind.IndexerGetter, node, node.Access)
+			: base(node)
 		{
-			var parameters = new Parameter[node.Parameters.Count + (node.IsSetter ? 1 : 0)];
-			for (var i = 0; i < node.Parameters.Count; i++)
-				parameters[i] = node.Parameters[i];
-			if (node.IsSetter)
-				parameters[node.Parameters.Count] = new Parameter("value", null)
-				{
-					StartIndex = node.StartIndex,
-					EndIndex = node.EndIndex,
-				};
-
-			this.isSetter = node.IsSetter;
-			method = new ClassMemberMethod(node,
-				PropertyAccessor.GetAccessorMethodName(node.IsSetter, Indexer.MemberName), this,
-				node.Access, node.Body, Splat.None, parameters)
-				{
-					IsAbstract = node.IsAbstract,
-					IsOverridable = node.IsOverridable,
-					IsOverride = node.IsOverride,
-					IsStatic = false,
-					IsImplDetail = true,
-				};
-			node.DeclSpace = method;
+			argCount = node.Parameters.Count;
 		}
 
-		public Indexer Parent { get; internal set; }
-		public Class Owner { get { return Parent == null ? null : Parent.Parent; } }
-
-		private ClassMemberMethod method;
-		/// <summary>Gets the method that implements the property accessor.</summary>
-		public ClassMemberMethod Method { get { return method; } }
-
-		private bool isSetter;
-		/// <summary>Gets a value indicating whether the accessor is a getter.</summary>
-		public bool IsGetter { get { return !isSetter; } }
-		/// <summary>Gets a value indicating whether the accessor is a setter.</summary>
-		public bool IsSetter { get { return isSetter; } }
-
-		public override Namespace GetContainingNamespace()
+		internal IndexerAccessor(int argCount, ClassMemberMethod method, bool isSetter)
+			: base(method, isSetter, isIndexer: true)
 		{
-			return Owner.GetContainingNamespace();
+			this.argCount = argCount;
 		}
 
-		public void InitBody(Compiler compiler)
-		{
-			method.InitBody(compiler);
-			if (isSetter)
-			{
-				if (method.IsGenerator)
-					throw new CompileTimeException(method.Yields[0], "An indexer setter may not be a generator.");
+		private int argCount;
+		/// <summary>
+		/// Gets the number of arguments that the indexer accessor takes,
+		/// not including the value for setters.
+		/// </summary>
+		public int ArgCount { get { return argCount; } }
 
-				Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValues.Count > 0;
-				if (method.Returns != null && method.Returns.Any(hasReturnValue))
-					throw new CompileTimeException(method.Returns.First(hasReturnValue),
-						"An indexer setter can only contain empty return statements.");
-			}
+		public Indexer ParentIndexer { get { return (Indexer)Parent; } }
+
+		public string GetDisplayName()
+		{
+			var sb = new StringBuilder(128);
+			sb.Append(Owner.FullName);
+			sb.Append(".");
+			sb.Append(IsGetter ? "get this[" : "set this[");
+			var node = Node as IndexerAccessorDeclaration;
+			if (node != null)
+				sb.Append(node.Parameters.Select(p => p.Name).JoinString(","));
+			else
+				sb.Append(argCount.ToStringInvariant());
+			sb.Append("]");
+
+			return sb.ToString();
 		}
 	}
 
@@ -1982,7 +2197,7 @@ namespace Osprey.Members
 				IsOverride = true,
 			};
 
-			var currentValueGetter = new PropertyAccessor(currentValueGetterMethod, false);
+			var currentValueGetter = new PropertyAccessor(currentValueGetterMethod, isSetter: false, isIndexer: false);
 
 			DeclareProperty(new Property("current", this) { Getter = currentValueGetter });
 

@@ -1509,7 +1509,7 @@ namespace Osprey
 						if (member is MethodGroup)
 						{
 							var method = (MethodGroup)member;
-							outputModule.GetStringId(method.Name == "this" ? ".call" : method.Name);
+							outputModule.GetStringId(method.Name);
 							method.Module = outputModule;
 							method.Id = outputModule.GetMethodId(method);
 							AddParametersToOutput(method, outputModule);
@@ -1536,7 +1536,7 @@ namespace Osprey
 							if (constant.Value.Type == ConstantValueType.String)
 								outputModule.GetStringId(constant.Value.StringValue);
 						}
-						else if (member is Property || member is Indexer)
+						else if (member is Property || member is IndexerMember)
 							outputModule.GetStringId(member.Name);
 						// Properties and operators have no IDs
 					}

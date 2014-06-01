@@ -281,15 +281,18 @@ namespace Osprey
 
 		#endregion
 
-		private void EnsureAssignable(Expression expr, Token t)
+		private AssignableExpression EnsureAssignable(Expression expr, Token t)
 		{
 			if (expr is ThisAccess)
 				throw new ParseException(t, "Cannot assign to 'this'.");
-			else if (expr is BaseAccess)
+			if (expr is BaseAccess)
 				throw new ParseException(t, "Cannot assign to 'base'.");
-			else if (!(expr is SimpleNameExpression || expr is MemberAccess ||
-				expr is IndexerAccess || expr is GlobalAccess))
+
+			var assignableExpr = expr as AssignableExpression;
+			if (assignableExpr == null)
 				throw new ParseException(t, "Can only assign to variables, members and indexers.");
+
+			return assignableExpr;
 		}
 
 		/// <summary>
@@ -1976,7 +1979,7 @@ namespace Osprey
 
 			if (Accept(i, TokenType.CompoundAssign))
 			{
-				EnsureAssignable(expr, tok[i]);
+				var assignableExpr = EnsureAssignable(expr, tok[i]);
 
 				var op = GetCompoundAssignmentOp(tok[i].Type);
 				i++;
@@ -1987,7 +1990,12 @@ namespace Osprey
 
 				Expect(ref i, TokenType.Semicolon);
 
-				return new CompoundAssignment(expr, value, op) { StartIndex = start, EndIndex = value.EndIndex, Document = document };
+				return new CompoundAssignment(assignableExpr, value, op)
+				{
+					StartIndex = start,
+					EndIndex = value.EndIndex,
+					Document = document,
+				};
 			}
 
 			if (Accept(i, TokenType.Comma)) // parallel assignment
@@ -2033,15 +2041,14 @@ namespace Osprey
 
 		private ParallelAssignment ParseParallelAssignment(ref int i, Expression expr, int startIndex)
 		{
-			var targets = new List<Expression> { expr };
+			var targets = new List<Expression>(4) { expr };
 			while (Accept(ref i, TokenType.Comma))
 			{
 				expr = ParseNullCoalescingExpr(ref i); // ParseExpression(ref i) would gobble up assignments
 				targets.Add(expr);
 
-				// EnsureAssignable(expr, null);
-				// tested later; it's better to say "Cannot assign to ..." /after/
-				// determining there's an equals sign somewhere, so we can emit the
+				// Assignability is tested for later; it's better to say "Cannot assign to ..."
+				// *after* determining there's an equals sign somewhere, so we can emit the
 				// error message "Expected '='" first.
 			}
 
@@ -2064,10 +2071,15 @@ namespace Osprey
 
 			if (values.Count != 1 && values.Count != targets.Count)
 				throw new ParseException(tok[i - 1],
-					string.Format("Wrong number of values in parallel assignment (expected {0}, got {1})",
-					targets.Count, values.Count));
+					string.Format("Wrong number of values in parallel assignment (expected 1 or {0}, got {1}).",
+						targets.Count.ToStringInvariant(), values.Count.ToStringInvariant()));
 
-			return new ParallelAssignment(targets, values) { StartIndex = startIndex, EndIndex = end, Document = document };
+			return new ParallelAssignment(targets.Cast<AssignableExpression>().ToList(), values)
+			{
+				StartIndex = startIndex,
+				EndIndex = end,
+				Document = document,
+			};
 		}
 
 		private Block ParseBlockOrExtern(ref int i)
@@ -2145,11 +2157,11 @@ namespace Osprey
 			var left = ParseConditionalExpr(ref i);
 			if (Accept(i, TokenType.Assign))
 			{
-				EnsureAssignable(left, tok[i]);
+				var leftAssignable = EnsureAssignable(left, tok[i]);
 				i++;
 
 				var value = ParseExpression(ref i);
-				return new AssignmentExpression(left, value)
+				return new AssignmentExpression(leftAssignable, value)
 					.At(left.StartIndex, value.EndIndex, document);
 			}
 			return left;
@@ -2458,8 +2470,6 @@ namespace Osprey
 				}
 				else // tok[i].Type == TokenType.SquareOpen
 				{
-					if (left is BaseAccess)
-						throw new ParseException(tok[i], "'base' cannot be indexed into.");
 					i++;
 
 					bool _;

@@ -168,18 +168,6 @@ namespace Osprey.Nodes
 			if (contextBlock == null || !(contextBlock.ContainingMember is Method))
 				throw new CompileTimeException(this, "'__get_argc' may only appear inside a method body.");
 
-			// __get_argc becomes constant if the containing method has no optional parameters and is not variadic.
-			// Instead of storing the arg count somewhere and then returning it during the FoldConstant step, we
-			// return a ConstantExpression here right away.
-
-			var signature = ((BlockSpace)context).Method.Signature;
-			if (signature.OptionalParameterCount == 0 && signature.Splat == Splat.None)
-				return new ConstantExpression(ConstantValue.CreateInt(signature.ParameterCount))
-				{
-					StartIndex = this.StartIndex,
-					EndIndex = this.EndIndex,
-				};
-
 			return this;
 		}
 
