@@ -686,7 +686,7 @@ namespace Osprey
 			if (!NoStandardModule)
 			{
 				importedModules.Add(StandardNames.StandardModuleName);
-				modules.StandardModule = modules.GetOrLoad(StandardNames.StandardModuleName);
+				modules.StandardModule = modules.GetOrLoad(StandardNames.StandardModuleName, null);
 			}
 
 			var newFiles = new HashSet<string>(sourceFiles.Select(kvp => Path.GetFullPath(kvp.Key)));
@@ -723,10 +723,10 @@ namespace Osprey
 			}
 
 			foreach (var modName in importedModules)
-				if (!modules.HasLoaded(modName))
+				if (!modules.HasLoaded(modName, null))
 				{
 					Notice(CompilerVerbosity.Verbose, "Loading module '{0}'.", modName);
-					modules.Load(modName);
+					modules.GetOrLoad(modName, null);
 				}
 
 			this.projectNamespace = projectNs;

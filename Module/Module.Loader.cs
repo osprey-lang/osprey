@@ -33,7 +33,7 @@ namespace Osprey
 		/// <param name="pool">The pool that the module is being opened for.</param>
 		/// <param name="fileName">The name of the file to open.</param>
 		/// <returns>The module that was loaded.</returns>
-		internal static Module Open(ModulePool pool, string fileName)
+		internal static Module Open(ModulePool pool, string fileName, Version requiredVersion, bool fromVersionedFile)
 		{
 			if (fileName == null)
 				throw new ArgumentNullException("fileName");
@@ -51,6 +51,10 @@ namespace Osprey
 			// First the module name and version
 			var modName = reader.ReadOvumString();
 			var modVersion = reader.ReadVersion();
+			if (requiredVersion != null && modVersion != requiredVersion)
+				throw new ModuleLoadException(fileName,
+					string.Format("Wrong version number for module (expected {0}, found {1}).",
+						requiredVersion.ToStringInvariant(4), modVersion.ToStringInvariant(4)));
 
 			// Then the metadata table
 			var metaSize = reader.ReadUInt32(); // The size of the (rest of the) metadata table, let's skip it
@@ -62,7 +66,7 @@ namespace Osprey
 
 			// We have enough information to create a Module object, and populate it with some basic data!
 			var output = new Module(pool, modName, modVersion, fileFormatVersion, true);
-			pool.AddModule(output.name, output); // For detecting circular dependencies
+			pool.AddModule(output.name, output, fromVersionedFile); // For detecting circular dependencies
 
 			// Skip typeCount, functionCount, constantCount, fieldCount, methodCount and methodStart
 			reader.Seek(6 * sizeof(int), SeekOrigin.Current);
@@ -162,15 +166,13 @@ namespace Osprey
 					var refName = target.members.Strings[reader.ReadUInt32()];
 					var refVersion = reader.ReadVersion();
 
-					var mod = target.Pool.GetOrLoad(refName);
+					var mod = target.Pool.GetOrLoad(refName, refVersion);
 					if (!mod.fullyLoaded)
 						throw new ModuleLoadException(reader.FileName,
-							string.Format("Circular dependency between '{0}' and '{1}'.",
+							string.Format("Circular dependency between modules '{0}' and '{1}'.",
 								mod.name, target.name));
-					if (mod.version < refVersion)
-						throw new ModuleLoadException(reader.FileName,
-							string.Format("Dependent module '{0}' has too low a version number (at least {1} required, found {2}).",
-								refName, refVersion.ToString(4), mod.version.ToString(4)));
+					// We no longer have to check the version; Module.Open gets the required version
+					// and throws if we can't find the right one.
 
 					modRefs.Add(mod);
 				}

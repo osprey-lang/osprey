@@ -253,6 +253,34 @@ namespace Osprey
 			return value.ToString(CI.InvariantCulture);
 		}
 
+		public static string ToStringInvariant(this Version value, int fieldCount)
+		{
+			switch (fieldCount)
+			{
+				case 0:
+					return "";
+				case 1:
+					return value.Major.ToStringInvariant();
+				case 2:
+					return value.Major.ToStringInvariant() + "." + value.Minor.ToStringInvariant();
+				case 3:
+					return string.Concat(
+						value.Major.ToStringInvariant(), ".",
+						value.Minor.ToStringInvariant(), ".",
+						value.Build.ToStringInvariant()
+					);
+				case 4:
+					return string.Concat(
+						value.Major.ToStringInvariant(), ".",
+						value.Minor.ToStringInvariant(), ".",
+						value.Build.ToStringInvariant(), ".",
+						value.Revision.ToStringInvariant()
+					);
+				default:
+					throw new ArgumentOutOfRangeException("fieldCount");
+			}
+		}
+
 		public static bool IsRead(this ExpressionAccessKind access)
 		{
 			return (access & ExpressionAccessKind.Read) == ExpressionAccessKind.Read;

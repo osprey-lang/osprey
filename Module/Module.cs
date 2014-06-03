@@ -415,6 +415,8 @@ namespace Osprey
 		internal static readonly byte[] MagicNumber = { (byte)'O', (byte)'V', (byte)'M', (byte)'M' };
 		internal const int DataStart = 16; // the beginning of the "real" data in the module
 
+		internal const string FileExtension = ".ovm";
+
 		internal class MemberDefsAndRefs
 		{
 			public MemberDefsAndRefs(bool imported)
@@ -803,49 +805,88 @@ namespace Osprey
 				if (standardModule != null)
 					throw new InvalidOperationException("The standard module has already been set for this pool.");
 				standardModule = value;
-				loadedModules[value.Name] = value; // Add to pool if it isn't there already
+				// Add to pool if it isn't there already
+				loadedModules[new Key(value.Name, value.Version)] = value;
+				loadedModules[new Key(value.Name, null)] = value;
 			}
 		}
 
-		private Dictionary<string, Module> loadedModules = new Dictionary<string, Module>();
+		private Dictionary<Key, Module> loadedModules = new Dictionary<Key, Module>();
 
-		public bool HasLoaded(string name)
+		public bool HasLoaded(string name, Version version)
 		{
-			return loadedModules.ContainsKey(name);
+			return loadedModules.ContainsKey(new Key(name, version));
 		}
 
 		/// <summary>
-		/// Gets a module by the specified name, loading it from file if it has not already been loaded.
+		/// Gets a module by the specified name and optionally with a specified version,
+		/// loading it from file if it has not already been loaded.
 		/// </summary>
 		/// <param name="name">The name of the module to get.</param>
+		/// <param name="version">The version of the module to load, or null to ignore the version.</param>
 		/// <returns>The module with the specified name.</returns>
-		public Module GetOrLoad(string name)
+		public Module GetOrLoad(string name, Version version)
 		{
-			if (loadedModules.ContainsKey(name))
-				return loadedModules[name];
+			Module module;
+			if (loadedModules.TryGetValue(new Key(name, version), out module))
+				return module;
 
 			// We look for modules in the following directories,
 			// in the order given:
+			//   $current/lib/$name-$version/$name.ovm
+			//   $current/lib/$name-$version.ovm
 			//   $current/lib/$name/$name.ovm
 			//   $current/lib/$name.ovm
+			//
+			//   $current/$name-$version/$name.ovm
+			//   $current/$name-$version.ovm
 			//   $current/$name/$name.ovm
 			//   $current/$name.ovm
+			//
+			//   $libpath/$name-$version/$name.ovm
+			//   $libpath/$name-$version.ovm
 			//   $libpath/$name/$name.ovm
 			//   $libpath/$name.ovm
 			// where
 			//   $current = Environment.CurrentDirectory
 			//   $libpath = this.libraryPath
+			//   $version = versionStr
+			// The versioned paths are excluded if version is null.
 			string fileName = null;
 
-			var nameWithExtension = name + ".ovm";
+			var versionStr = version != null ? "-" + version.ToStringInvariant(4) : null;
 			var dirs = new string[] { Path.Combine(".", "lib"), ".", libraryPath };
 
+			bool isVersionedFile = false;
 			for (var i = 0; i < dirs.Length; i++)
 			{
-				fileName = Path.Combine(dirs[i], name, nameWithExtension);
+				// Versioned paths first
+				// path/$name
+				var baseName = Path.Combine(dirs[i], name);
+				if (versionStr != null)
+				{
+					// path/$name-$version
+					var versionedName = baseName + versionStr;
+
+					// path/$name-$version/$name.ovm
+					fileName = Path.Combine(versionedName, name + Module.FileExtension);
+					if (isVersionedFile = File.Exists(fileName))
+						break;
+
+					// path/$name-$version.ovm
+					fileName = versionedName + Module.FileExtension;
+					if (isVersionedFile = File.Exists(fileName))
+						break;
+				}
+
+				// And then unversioned paths
+				// path/$name/$name.ovm
+				fileName = Path.Combine(baseName, name + Module.FileExtension);
 				if (File.Exists(fileName))
 					break;
-				fileName = Path.Combine(dirs[i], nameWithExtension);
+
+				// path/$name.ovm
+				fileName = baseName + Module.FileExtension;
 				if (File.Exists(fileName))
 					break;
 				fileName = null;
@@ -854,24 +895,18 @@ namespace Osprey
 			if (fileName == null)
 				throw new ArgumentException("Could not find a file for the specified module.", "name");
 
-			var module = Module.Open(this, fileName);
-			//loadedModules.Add(name, module); // Note: the module adds itself.
+			// Note: The module adds itself to the pool.
+			module = Module.Open(this, fileName, version, isVersionedFile);
 
 			return module;
 		}
 
-		/// <summary>
-		/// Loads a module by the specified name, if it has not already been loaded.
-		/// </summary>
-		/// <param name="name">The name of the module to load.</param>
-		public void Load(string name)
+		internal void AddModule(string name, Module module, bool fromVersionedFile)
 		{
-			GetOrLoad(name);
-		}
+			loadedModules.Add(new Key(name, module.Version), module);
 
-		internal void AddModule(string name, Module module)
-		{
-			loadedModules.Add(name, module);
+			if (!fromVersionedFile)
+				loadedModules.Add(new Key(name, null), module);
 		}
 
 		public IEnumerator<Module> GetEnumerator()
@@ -882,6 +917,37 @@ namespace Osprey
 		System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
 		{
 			return loadedModules.Values.GetEnumerator();
+		}
+
+		private struct Key
+		{
+			public Key(string name, Version version)
+			{
+				Name = name;
+				Version = version;
+			}
+
+			public string Name;
+			public Version Version;
+
+			public override bool Equals(object obj)
+			{
+				return obj is Key && Equals((Key)obj);
+			}
+			public bool Equals(Key other)
+			{
+				return this.Name == other.Name && this.Version == other.Version;
+			}
+
+			public override int GetHashCode()
+			{
+				int hash = 0;
+				if (Name != null)
+					hash = Name.GetHashCode();
+				if (Version != null)
+					hash ^= Version.GetHashCode();
+				return hash;
+			}
 		}
 	}
 	
