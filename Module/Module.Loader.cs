@@ -65,7 +65,11 @@ namespace Osprey
 			reader.Seek(/*sizeof(UTF-16 codon)*/ 2 * nativeLibStrlen, SeekOrigin.Current);
 
 			// We have enough information to create a Module object, and populate it with some basic data!
-			var output = new Module(pool, modName, modVersion, fileFormatVersion, true);
+			var output = new Module(pool,
+				modName, modVersion,
+				fileFormatVersion,
+				imported: true,
+				fromVersionedFile: fromVersionedFile);
 			pool.AddModule(output.name, output, fromVersionedFile); // For detecting circular dependencies
 
 			// Skip typeCount, functionCount, constantCount, fieldCount, methodCount and methodStart

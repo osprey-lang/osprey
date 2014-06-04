@@ -16,9 +16,9 @@ namespace Osprey
 	public sealed partial class Module
 	{
 		public Module(ModulePool pool, string name, Version version)
-			: this(pool, name, version, MaxFileFormatVersion, false)
+			: this(pool, name, version, MaxFileFormatVersion, false, false)
 		{ }
-		private Module(ModulePool pool, string name, Version version, uint fileFormatVersion, bool imported)
+		private Module(ModulePool pool, string name, Version version, uint fileFormatVersion, bool imported, bool fromVersionedFile)
 		{
 			this.pool = pool;
 			this.name = name;
@@ -34,9 +34,14 @@ namespace Osprey
 				this.methodBodies = new Dictionary<byte[], uint>(MethodBlockComparer.Instance);
 				this.metadata = new Dictionary<string, string>();
 			}
-
-			this.explicitlyImported = pool != null && name != null &&
-				pool.Compiler != null && pool.Compiler.ImportsModule(name);
+			else
+			{
+				this.explicitlyImported = !fromVersionedFile &&
+					name != null &&
+					pool != null &&
+					pool.Compiler != null &&
+					pool.Compiler.ImportsModule(name);
+			}
 		}
 
 		private bool fullyLoaded = false;
