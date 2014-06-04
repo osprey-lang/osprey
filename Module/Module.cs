@@ -898,7 +898,7 @@ namespace Osprey
 			}
 
 			if (fileName == null)
-				throw new ArgumentException("Could not find a file for the specified module.", "name");
+				throw new ModuleLoadException(name, "Could not find a file for the specified module.");
 
 			// Note: The module adds itself to the pool.
 			module = Module.Open(this, fileName, version, isVersionedFile);
