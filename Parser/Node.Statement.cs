@@ -2470,8 +2470,9 @@ namespace Osprey.Nodes
 					if (error != null)
 						throw new CompileTimeException(this, error);
 				}
-				else if (block.Method == document.Compiler.MainMethod)
-					throw new CompileTimeException(this, "Cannot return from the top level of a script.");
+				else if (document.Compiler.ProjectType == ProjectType.Application &&
+					block.Method == document.Compiler.MainMethod)
+					throw new CompileTimeException(this, "Cannot return from a global statement.");
 
 				if (block.IsInsideFinally())
 					throw new CompileTimeException(this, "Cannot return inside a finally clause.");
@@ -2586,7 +2587,10 @@ namespace Osprey.Nodes
 						"Constructors, property setters, indexer setters and operators cannot be generator methods.");
 			}
 			else if (block.Method == document.Compiler.MainMethod)
-				throw new CompileTimeException(this, "Cannot yield from the top level of a script.");
+				throw new CompileTimeException(this,
+					document.Compiler.ProjectType == ProjectType.Application ?
+						"Cannot yield from a global statement." :
+						"The main method cannot be a generator method.");
 
 			if (block.IsInsideProtectedBlock())
 				throw new CompileTimeException(this, "Cannot yield inside a try, catch or finally.");

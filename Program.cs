@@ -72,7 +72,7 @@ namespace Osprey
 			var err = compilerOptions.ErrorToStdout ? Console.Out : Console.Error;
 			try
 			{
-				Compiler.Compile(compilerOptions, programOptions.OutFile, constants, sourceFiles.ToArray());
+				Compiler.Compile(ref compilerOptions, programOptions.OutFile, constants, sourceFiles.ToArray());
 			}
 			catch (ParseException e)
 			{
@@ -296,7 +296,7 @@ namespace Osprey
 			constants = new Dictionary<string, bool>();
 
 			var argc = args.Length;
-			for (var i = 0; i < args.Length; i++)
+			for (var i = 0; i < argc; i++)
 			{
 				var arg = args[i];
 
@@ -339,7 +339,11 @@ namespace Osprey
 								throw new ArgumentException("'/type' must be followed by a project type (app or module).");
 							i++;
 							if (args[i] == "app")
+							{
+								if (seenSwitches.Contains("main"))
+									throw new ArgumentException("Projects that use '/type app' cannot have an explicit main method; you must specify '/type module' or no explicit project type to use '/main'.");
 								compilerOptions.Type = ProjectType.Application;
+							}
 							else if (args[i] == "module")
 								compilerOptions.Type = ProjectType.Module;
 							else
@@ -355,8 +359,18 @@ namespace Osprey
 
 						case "name":
 							if (i == argc - 1)
-								throw new ArgumentException("'/name' must be followed by a project name.");
+								throw new ArgumentException("'/name' must be followed by a module name.");
 							compilerOptions.ModuleName = args[++i];
+							break;
+
+						case "main":
+							if (i == argc - 1)
+								throw new ArgumentException("'/main' must be followed by a fully qualified global function name.");
+							if (seenSwitches.Contains("type") && compilerOptions.Type == ProjectType.Application)
+								throw new ArgumentException("Projects that use '/main' cannot use '/type app'; all modules with an explicit main method must use '/type module' or no explicit project type.");
+							compilerOptions.MainMethod = args[++i];
+							// Project type is set implicitly
+							compilerOptions.Type = ProjectType.Module;
 							break;
 
 						case "verbose":

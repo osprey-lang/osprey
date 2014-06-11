@@ -18,7 +18,7 @@ namespace Osprey
 {
 	public partial class Compiler : IDisposable
 	{
-		private Compiler(CompilerOptions options, Dictionary<string, bool> constants, params string[] sourceFiles)
+		private Compiler(ref CompilerOptions options, Dictionary<string, bool> constants, params string[] sourceFiles)
 		{
 			if (sourceFiles == null)
 				throw new ArgumentNullException("sourceFiles");
@@ -32,6 +32,7 @@ namespace Osprey
 			this.metadataFile = options.MetadataFile;
 
 			this.moduleName = options.ModuleName ?? Path.GetFileNameWithoutExtension(sourceFiles[0]);
+			this.mainMethodName = options.MainMethod;
 
 			this.sourceFiles = new Dictionary<string, Document>();
 			foreach (var file in sourceFiles)
@@ -87,14 +88,16 @@ namespace Osprey
 		private CompilerVerbosity verbosity;
 
 		private ProjectType projectType;
+		public ProjectType ProjectType { get { return projectType; } }
 
 		private string libraryPath;
 		private string metadataFile;
 
-		/// <summary>
-		/// The name of the module that is being compiled.
-		/// </summary>
+		/// <summary>The name of the module that is being compiled.</summary>
 		private string moduleName;
+
+		/// <summary>The name of the main method, if specified in the CompilerOptions.</summary>
+		private string mainMethodName;
 
 		private NativeLibrary nativeLibrary;
 		internal NativeLibrary NativeLibrary { get { return nativeLibrary; } }
@@ -546,26 +549,7 @@ namespace Osprey
 
 			// Step 2: Using the parse trees we have, build a hierarchical structure of global names
 			// and their respective members. During this step, we do NOT initialize class members.
-			List<Statement> mainMethodContents = null;
-			if (projectType == ProjectType.Application)
-			{
-				// Pretend there's a main method that belongs to the project namespace.
-				// There isn't, of course, but that won't stop us!
-				// NOTE: This method will never actually be /declared/ in the project namespace;
-				// we just pretend it's in there. The compiler will still output metadata about
-				// the existence of a method with the fully qualified name "<main>", so we can
-				// reference it as the main method of the module.
-
-				Notice("Initializing main method...", CompilerVerbosity.Verbose);
-				mainMethodContents = new List<Statement>();
-				mainMethodBody = new Block(mainMethodContents);
-				mainMethod = new Method(null, MainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
-
-				var mainMethodGroup = new MethodGroup(MainMethodName, projectNamespace, AccessLevel.Private);
-				mainMethodGroup.AddOverload(mainMethod);
-				AddGlobalFunction(mainMethodGroup); // Always first!
-			}
-			BuildProjectNamespace(mainMethodContents);
+			BuildProjectNamespace();
 
 			if (extraConstants != null)
 				DeclareExtraConstants();
@@ -821,8 +805,30 @@ namespace Osprey
 				}
 		}
 
-		private void BuildProjectNamespace(List<Statement> mainMethodBody)
+		private void BuildProjectNamespace()
 		{
+			// If we're compiling the project as an application, we need to gather up
+			// all the global statements into a main method in this phase too.
+			List<Statement> mainMethodContents = null;
+			if (projectType == ProjectType.Application)
+			{
+				// Pretend there's a main method that belongs to the project namespace.
+				// There isn't, of course, but that won't stop us!
+				// NOTE: This method will never actually be /declared/ in the project namespace;
+				// we just pretend it's in there. The compiler will still output metadata about
+				// the existence of a method with the fully qualified name "<main>", so we can
+				// reference it as the main method of the module.
+
+				Notice("Initializing main method...", CompilerVerbosity.Verbose);
+				mainMethodContents = new List<Statement>();
+				mainMethodBody = new Block(mainMethodContents);
+				mainMethod = new Method(null, DefaultMainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
+
+				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, AccessLevel.Private);
+				mainMethodGroup.AddOverload(mainMethod);
+				AddGlobalFunction(mainMethodGroup); // Always first!
+			}
+
 			for (var i = 0; i < documents.Count; i++)
 				try
 				{
@@ -839,13 +845,67 @@ namespace Osprey
 			for (var i = 0; i < documents.Count; i++)
 				try
 				{
-					InitializeGlobalVariables(documents[i], mainMethodBody);
+					InitializeGlobalVariables(documents[i], mainMethodContents);
 				}
 				catch (CompileTimeException e)
 				{
 					e.Document = documents[i];
 					throw;
 				}
+
+			// If an explicit main method was specified, we now have enough information
+			// to locate it, so let's try doing that.
+			if (mainMethodName != null)
+			{
+				var nameParts = mainMethodName.Split(Dot);
+
+				int lastIndex;
+				NamedMember member;
+				switch (FindNamespace(nameParts, 0, nameParts.Length - 1, out member, out lastIndex))
+				{
+					case NamespaceLookupResult.Success:
+						{
+							var ns = (Namespace)member;
+							var lastPart = nameParts[nameParts.Length - 1];
+							if (!ns.ContainsMember(lastPart))
+								throw new CompileTimeException(null, string.Format(
+									"Cannot use '{0}.{1}' as the main method because it does not exist.",
+									ns.FullName, lastPart));
+
+							// The main method must be a method group
+							member = ns.GetMember(lastPart);
+							if (member.Kind != MemberKind.MethodGroup)
+								throw new CompileTimeException(null, string.Format(
+									"Cannot use '{0}' as the main method because it is not a global function.",
+									member.FullName));
+
+							// And it must come from the module we're building; can't be imported.
+							var mainMethodGroup = (MethodGroup)member;
+							// Note: MethodGroup.Module is null until we've actually constructed our module.
+							if (mainMethodGroup.Module != null)
+								throw new CompileTimeException(null, string.Format(
+									"Cannot use an imported method ('{0}') as the main method.",
+									mainMethodGroup.FullName));
+
+							// And it must have exactly one overload, which must take 1 or 0 arguments.
+							// (If it takes one argument, it gets an aves.List of command-line arguments.)
+							mainMethod = mainMethodGroup.FindOverload(1) ?? mainMethodGroup.FindOverload(0);
+							if (mainMethodGroup.Count != 1 || mainMethod == null)
+								throw new CompileTimeException(null, string.Format(
+									"The specified main method ('{0}') must have exactly one overload, which must take one or zero arguments.",
+									mainMethodGroup.FullName));
+						}
+						break;
+					case NamespaceLookupResult.IntermediateNamespaceMissing:
+						throw new CompileTimeException(null, string.Format(
+							"Cannot use '{0}' as the main method because the intermediate namespace '{1}.{2}' does not exist",
+							mainMethodName, member.FullName, nameParts[lastIndex]));
+					case NamespaceLookupResult.MemberIsNotNamespace:
+						throw new CompileTimeException(null, string.Format(
+							"Cannot use '{0}' as the main method because '{1}' is not a namespace.",
+							mainMethodName, member.FullName));
+				}
+			}
 		}
 
 		private void ProcessNamespaceMembers(NamespaceDeclaration nsDecl, Namespace parent)
@@ -947,38 +1007,75 @@ namespace Osprey
 			Notice("Declaring command-line constants...", CompilerVerbosity.Verbose);
 			foreach (var kvp in extraConstants)
 			{
-				var nameParts = kvp.Key.Split('.');
+				var nameParts = kvp.Key.Split(Dot);
 
-				var ns = projectNamespace;
-				for (var i = 0; i < nameParts.Length - 1; i++)
+				int lastIndex;
+				NamedMember member;
+				switch (FindNamespace(nameParts, 0, nameParts.Length - 1, out member, out lastIndex))
 				{
-					var name = nameParts[i];
-					if (ns.ContainsMember(name) && ns.GetMember(name).Kind == MemberKind.Namespace)
-						ns = (Namespace)ns.GetMember(name);
-					else
-					{
-						Warning(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
-						ns = null;
+					case NamespaceLookupResult.Success:
+						{
+							var ns = (Namespace)member;
+
+							var lastPart = nameParts[nameParts.Length - 1];
+							if (!ns.ContainsMember(lastPart))
+							{
+								ns.DeclareConstant(new GlobalConstant(lastPart,
+									ConstantValue.CreateBoolean(kvp.Value), AccessLevel.Private));
+								Notice(CompilerVerbosity.Verbose, "Declared constant: {0} = {1}", kvp.Key, kvp.Value);
+							}
+							else
+								Warning(CompilerVerbosity.NotVerbose,
+									"Could not declare constant '{0}': a member by that name already exists.",
+									kvp.Key);
+						}
 						break;
-					}
-				}
-
-				if (ns != null)
-				{
-					var lastPart = nameParts[nameParts.Length - 1];
-					if (!ns.ContainsMember(lastPart))
-					{
-						ns.DeclareConstant(new GlobalConstant(lastPart,
-							ConstantValue.CreateBoolean(kvp.Value), AccessLevel.Private));
-						Notice(CompilerVerbosity.Verbose, "Declared constant: {0} = {1}", kvp.Key, kvp.Value);
-					}
-					else
-						Warning(CompilerVerbosity.NotVerbose, "Could not declare constant: {0}", kvp.Key);
+					case NamespaceLookupResult.IntermediateNamespaceMissing:
+						Warning(CompilerVerbosity.NotVerbose,
+							"Could not declare constant '{0}': intermediate namespace '{1}.{2}' does not exist.",
+							kvp.Key, member.FullName, nameParts[lastIndex]);
+						break;
+					case NamespaceLookupResult.MemberIsNotNamespace:
+						Warning(CompilerVerbosity.NotVerbose,
+							"Could not declare constant '{0}': '{1}' is not a namespace.",
+							kvp.Key, member.FullName);
+						break;
 				}
 			}
 			Notice("Finished adding command-line constants.", CompilerVerbosity.Verbose);
 
 			extraConstants = null;
+		}
+
+		private NamespaceLookupResult FindNamespace(string[] path, int index, int count, out NamedMember member, out int lastIndex)
+		{
+			member = projectNamespace;
+			lastIndex = index;
+
+			var ns = projectNamespace;
+
+			for (var i = 0; i < count; i++)
+			{
+				var name = path[index + i];
+				if (ns.ContainsMember(name))
+				{
+					member = ns.GetMember(name);
+					if (member.Kind == MemberKind.Namespace)
+						ns = (Namespace)member;
+					else
+					{
+						lastIndex = index + i;
+						return NamespaceLookupResult.MemberIsNotNamespace;
+					}
+				}
+				else
+				{
+					lastIndex = index + i;
+					return NamespaceLookupResult.IntermediateNamespaceMissing;
+				}
+			}
+
+			return NamespaceLookupResult.Success;
 		}
 
 		private void ResolveBaseTypeNames()
@@ -1147,7 +1244,7 @@ namespace Osprey
 					throw;
 				}
 
-			if (mainMethod != null)
+			if (projectType == ProjectType.Application)
 				try
 				{
 					mainMethod.InitBody(this);
@@ -1223,7 +1320,7 @@ namespace Osprey
 				throw;
 			}
 
-			if (mainMethod != null && mainMethod.HasLocalFunctions)
+			if (projectType == ProjectType.Application && mainMethod.HasLocalFunctions)
 				AddMethodWithLocalFunctions(mainMethod);
 
 			Notice("All names were resolved successfully.", CompilerVerbosity.Verbose);
@@ -1430,13 +1527,11 @@ namespace Osprey
 				foreach (var type in types.OrderBy(t => t.FullName, StringComparer.InvariantCultureIgnoreCase))
 					AddTypeToOutput(type, outputModule);
 
-			if (this.mainMethod != null)
+			if (mainMethod != null)
 			{
 				var mainMethodGroup = mainMethod.Group;
 				outputModule.MainMethod = mainMethodGroup;
 				mainMethodGroup.Module = outputModule;
-				//mainMethodGroup.Id = outputModule.GetMethodId(mainMethodGroup);
-				//Notice(CompilerVerbosity.ExtraVerbose, "Giving ID {0:X8} to function '{1}'.", mainMethodGroup.Id, mainMethodGroup.FullName);
 			}
 
 			if (globalFunctions != null)
@@ -1827,14 +1922,14 @@ namespace Osprey
 			Warning(string.Format(format, args), level);
 		}
 
-		public static void Compile(CompilerOptions options, string targetPath, params string[] sourceFiles)
+		public static void Compile(ref CompilerOptions options, string targetPath, params string[] sourceFiles)
 		{
-			Compile(options, targetPath, null, sourceFiles);
+			Compile(ref options, targetPath, null, sourceFiles);
 		}
 
-		public static void Compile(CompilerOptions options, string targetPath, Dictionary<string, bool> constants, params string[] sourceFiles)
+		public static void Compile(ref CompilerOptions options, string targetPath, Dictionary<string, bool> constants, params string[] sourceFiles)
 		{
-			using (var c = new Compiler(options, constants, sourceFiles))
+			using (var c = new Compiler(ref options, constants, sourceFiles))
 			{
 				c.Compile(targetPath);
 				if (c.nativeLibrary != null)
@@ -1853,9 +1948,9 @@ namespace Osprey
 			}
 		}
 
-		private const string MainMethodName = "<main>";
+		private const string DefaultMainMethodName = "<main>";
 
-		private static Dictionary<LambdaOperator, string> lambdaOperatorNames = new Dictionary<LambdaOperator, string>
+		private static readonly Dictionary<LambdaOperator, string> lambdaOperatorNames = new Dictionary<LambdaOperator, string>
 		{
 			{LambdaOperator.Plus, "λ<plus>"},
 			{LambdaOperator.Minus, "λ<minus>"},
@@ -1886,7 +1981,18 @@ namespace Osprey
 			{LambdaOperator.And, "λ<boolAnd>"}
 		};
 
-		private static byte[] DebugSymbolsMagicNumber = { (byte)'O', (byte)'V', (byte)'D', (byte)'S' };
+		private static readonly byte[] DebugSymbolsMagicNumber = { (byte)'O', (byte)'V', (byte)'D', (byte)'S' };
+
+		private static readonly char[] Dot = { '.' };
+
+		private enum NamespaceLookupResult
+		{
+			Success,
+			/// <summary>In a path such as 'a.b.c', one of 'a', 'a.b' or 'a.b.c' does not exist.</summary>
+			IntermediateNamespaceMissing,
+			/// <summary>In a path such as 'a.b.c', one of 'a', 'a.b.' or 'a.b.c' is not a namespace.</summary>
+			MemberIsNotNamespace,
+		}
 	}
 
 	public struct CompilerOptions
@@ -1900,10 +2006,11 @@ namespace Osprey
 			this.nativeLibrary = null;
 			this.metadataFile = null;
 			this.moduleName = null;
+			this.mainMethod = null;
 			this.docFile = null;
 		}
 		public CompilerOptions(CompilerFlags flags, CompilerVerbosity verbosity, ProjectType type,
-			string moduleName, string libraryPath, string nativeLibrary, string metadataFile, string docFile)
+			string moduleName, string libraryPath, string nativeLibrary, string metadataFile, string mainMethod, string docFile)
 		{
 			this.flags = flags;
 			this.verbosity = verbosity;
@@ -1912,6 +2019,7 @@ namespace Osprey
 			this.libraryPath = libraryPath;
 			this.nativeLibrary = nativeLibrary;
 			this.metadataFile = metadataFile;
+			this.mainMethod = mainMethod;
 			this.docFile = docFile;
 		}
 
@@ -2021,6 +2129,28 @@ namespace Osprey
 		/// Gets or sets the name of the output module.
 		/// </summary>
 		public string ModuleName { get { return moduleName; } set { moduleName = value; } }
+
+		private string mainMethod;
+		/// <summary>
+		/// Gets or sets the name of the main method.
+		/// </summary>
+		/// <remarks>
+		/// <para>If <see cref="MainMethod"/> is null, then the compiled module gets a main method according to its project type:</para>
+		/// <list type="bullet">
+		///		<item>
+		///			<description>If the <see cref="Type"/> is <see cref="ProjectType.Application"/>,
+		///			then the main method is comprised of global statements from all source files,
+		///			concatenated in an unspecified order.</description>
+		///		</item>
+		///		<item>
+		///			<description>If the <see cref="Type"/> is <see cref="ProjectType.Module"/>,
+		///			then the output module has no main method.</description>
+		///		</item>
+		/// </list>
+		/// <para>The project type <see cref="ProjectType.Application"/> cannot be used if <see cref="MainMethod"/> is not null.
+		/// The property value must contain the name of a fully qualified global function; static class methods are not permitted.</para>
+		/// </remarks>
+		public string MainMethod { get { return mainMethod; } set { mainMethod = value; } }
 
 		private string docFile;
 		/// <summary>
