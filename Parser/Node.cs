@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Osprey.Members;
 using CI = System.Globalization.CultureInfo;
+using Enum = Osprey.Members.Enum;
 using Type = Osprey.Members.Type;
 
 namespace Osprey.Nodes
@@ -59,6 +60,12 @@ namespace Osprey.Nodes
 		/// <summary>The compiler instance that opened the file.</summary>
 		internal Compiler Compiler;
 
+		/// <summary>
+		/// True if any use directive requires a second pass.
+		/// See the remarks for <see cref="UseDirective.ResolveNames(Namespace)"/>.
+		/// </summary>
+		internal bool UseDirectivesRequireSecondPass;
+
 		public override string ToString(int indent)
 		{
 			var sb = new StringBuilder();
@@ -75,7 +82,35 @@ namespace Osprey.Nodes
 	}
 
 	public abstract class UseDirective : ParseNode
-	{ }
+	{
+		/// <summary>
+		/// Attempts to resolve names within the use directive.
+		/// </summary>
+		/// <param name="globalNamespace">The global namespace for the project.</param>
+		/// <param name="firstPass">
+		/// True if this is the first pass (before type bodies are initialized),
+		/// or false if it's the second (after type bodies are initialized).
+		/// </param>
+		/// <returns>True if the use directive requires a second pass; otherwise, false.</returns>
+		/// <remarks>
+		/// <para>The <paramref name="firstPass"/> parameter is required for two reasons:</para>
+		/// <list type="bullet">
+		///		<item><para>
+		///			Class declarations may use a base type that is from an imported namespace or
+		///			an aliased name, so we need to be able to resolve those use directives before
+		///			we initialize base types and type bodies.
+		///		</para></item>
+		///		<item><para>
+		///			Aliases may refer to members inside types (such as a static field or property),
+		///			and we can't find those until we've initialized base types and type bodies.
+		///		</para></item>
+		/// </list>
+		/// <para>The returning of a bool is strictly for performance reasons. Second passes are only
+		/// used with aliases, and only aliases into type members, which are likely to be uncommon.
+		/// By returning a bool, we save ourselves unnecessary work in the common case.</para>
+		/// </remarks>
+		public virtual bool ResolveNames(Namespace globalNamespace, bool firstPass) { return false; }
+	}
 
 	public sealed class UseModuleDirective : UseDirective
 	{
@@ -125,6 +160,152 @@ namespace Osprey.Nodes
 		public override string ToString(int indent)
 		{
 			return new string('\t', indent) + "use namespace " + Name + ";";
+		}
+
+		public override bool ResolveNames(Namespace globalNamespace, bool firstPass)
+		{
+			var ns = globalNamespace.FindNamespace(Name);
+			Document.Namespace.ImportNamespace(ns);
+			return false;
+		}
+	}
+
+	public sealed class UseAliasDirective : UseDirective
+	{
+		public UseAliasDirective(string aliasName, QualifiedName fullName)
+		{
+			AliasName = aliasName;
+			FullName = fullName;
+		}
+
+		/// <summary>The name of the alias.</summary>
+		public string AliasName;
+
+		/// <summary>The name of the member the alias refers to.</summary>
+		public QualifiedName FullName;
+
+		// The type that was found during the first pass, if the alias
+		// refers to a member inside that type.
+		private Type foundType;
+		// The index of the type within the qualified name's parts.
+		private int foundIndex;
+
+		public override string ToString(int indent)
+		{
+			return string.Format("{0}use {1} = {2};",
+				new string('\t', indent), AliasName,
+				FullName.ToString(indent + 1));
+		}
+
+		public override bool ResolveNames(Namespace globalNamespace, bool firstPass)
+		{
+			if (firstPass)
+				return ResolveNamesFirstPass(globalNamespace);
+			else if (foundType != null)
+				ResolveNamesSecondPass();
+			return false;
+		}
+
+		private bool ResolveNamesFirstPass(Namespace globalNamespace)
+		{
+			NamedMember member = null;
+
+			var path = FullName.Parts;
+			var i = 0;
+
+			// First, let's look for namespaces as far along the path as we can
+			Namespace ns = globalNamespace;
+			while (ns != null && i < path.Length)
+			{
+				if (!ns.ContainsMember(path[i]))
+					throw new CompileTimeException(this,
+						string.Format("The member '{0}' could not be found. (Did you forget to import a module?)",
+							string.Join(".", path, 0, i + 1)));
+				member = ns.GetMember(path[i++]);
+				ns = member as Namespace;
+			}
+
+			// If the member is not a namespace, then we may have stopped
+			// before the last component in the path. The member can only
+			// be a type, global function, global constant or ambiguous name.
+			switch (member.Kind)
+			{
+				case MemberKind.GlobalConstant:
+				case MemberKind.MethodGroup:
+					if (i < path.Length)
+						// This member is not the last; throw
+						ErrorAccessThroughInstance(path, i);
+					break;
+				case MemberKind.Class:
+				case MemberKind.Enum:
+					if (i < path.Length)
+					{
+						// Look for the type member in the next pass
+						foundIndex = i;
+						foundType = member as Type;
+						return true; // need second pass
+					}
+					break;
+				case MemberKind.Ambiguous:
+					throw new AmbiguousNameException(this, (AmbiguousMember)member);
+			}
+
+			Document.Namespace.DeclareAlias(this, AliasName, member);
+			return false;
+		}
+
+		private void ResolveNamesSecondPass()
+		{
+			NamedMember member;
+
+			var i = foundIndex;
+			var path = FullName.Parts;
+			if (foundType is Class)
+			{
+				var type = (Class)foundType;
+
+				NamedMember inaccessibleMember;
+				member = type.GetMember(path[i++], null, null, out inaccessibleMember);
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(FullName,
+						string.Format("The member '{0}' is not accessible from this context.",
+							inaccessibleMember.FullName));
+				if (member == null)
+					throw new CompileTimeException(FullName,
+						string.Format("The type '{0}' does not contain a definition for '{1}'.",
+							type.FullName, path[i - 1]));
+
+				var classMember = member as ClassMember;
+				if (!(classMember != null ? classMember.IsStatic : ((MethodGroup)member).IsStatic))
+					throw new InstanceMemberAccessException(this, member);
+
+				if (i < path.Length)
+					// The member is not the last; throw
+					ErrorAccessThroughInstance(path, i);
+			}
+			else
+			{
+				var type = (Enum)foundType;
+
+				member = type.GetMember(path[i++], null, null);
+				if (member == null)
+					throw new CompileTimeException(FullName,
+						string.Format("The type '{0}' does not contain a definition for '{1}'.",
+							type.FullName, path[i - 1]));
+
+				if (i < path.Length)
+					// The member is not the last; throw
+					ErrorAccessThroughInstance(path, i);
+			}
+
+			Document.Namespace.DeclareAlias(this, AliasName, member);
+		}
+
+		private void ErrorAccessThroughInstance(string[] path, int i)
+		{
+			throw new CompileTimeException(this,
+				string.Format("The member '{0}' cannot be aliased because it is accessed through an instance.",
+					string.Join(".", path, 0, i + 1)));
 		}
 	}
 
@@ -363,6 +544,7 @@ namespace Osprey.Nodes
 		}
 
 		public Expression Value;
+		internal EnumField Field;
 
 		public override string ToString(int indent)
 		{
@@ -374,10 +556,18 @@ namespace Osprey.Nodes
 			if (Value == null)
 				return;
 
-			Value = Value.FoldConstant();
-			if (!(Value is ConstantExpression) ||
-				((ConstantExpression)Value).Value.Type != ConstantValueType.Int)
-				throw new CompileTimeException(Value, "The value of an enum member must be a constant expression of type Int.");
+			var value = Value.FoldConstant();
+			var constExpr = value as ConstantExpression;
+			if (constExpr == null || constExpr.Value.Type != ConstantValueType.Int)
+				throw new CompileTimeException(value, "The value of an enum member must be a constant expression of type Int.");
+
+			// And now convert the integral expression
+			// to an enum value of the containing type
+			Value = new ConstantExpression(ConstantValue.CreateEnumValue(constExpr.Value.IntValue, Field.Parent))
+				.At(constExpr);
+
+			// Prevent multiple folding
+			Field.State = ConstantState.HasValue;
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, Compiler compiler)

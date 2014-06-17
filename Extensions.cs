@@ -5,6 +5,7 @@ using System.Text;
 using Osprey.Members;
 using Osprey.Nodes;
 using CI = System.Globalization.CultureInfo;
+using Enum = Osprey.Members.Enum;
 
 namespace Osprey
 {
@@ -97,6 +98,21 @@ namespace Osprey
 					return true;
 				context = context.Parent;
 			} while (context !=	null);
+
+			return false;
+		}
+
+		public static bool IsInEnumBody(this IDeclarationSpace context, Enum enumType)
+		{
+			if (context == null)
+				throw new ArgumentNullException("context");
+
+			do
+			{
+				if ((context as Enum) == enumType)
+					return true;
+				context = context.Parent;
+			} while (context != null);
 
 			return false;
 		}

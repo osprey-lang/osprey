@@ -842,21 +842,9 @@ namespace Osprey.Nodes
 			get
 			{
 				var fieldValue = Field.Value;
-				if (fieldValue.Type == ConstantValueType.Enum)
-				{
-					if (UseUnderlyingValue)
-						return ConstantValue.CreateInt(fieldValue.EnumValue.Value);
-
-					return fieldValue;
-				}
-				else
-				{
-					if (UseUnderlyingValue)
-						return fieldValue;
-
-					var value = fieldValue.IntValue;
-					return ConstantValue.CreateEnumValue(value, Field.Parent);
-				}
+				if (UseUnderlyingValue)
+					return ConstantValue.CreateInt(fieldValue.EnumValue.Value);
+				return fieldValue;
 			}
 			internal set
 			{

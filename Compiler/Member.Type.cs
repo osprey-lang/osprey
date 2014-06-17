@@ -274,6 +274,7 @@ namespace Osprey.Members
 			: base(node.Name, MemberKind.EnumField, node, AccessLevel.Public)
 		{
 			Parent = parent;
+			node.Field = this;
 		}
 		public EnumField(string name, long value, Enum parent)
 			: base(name, MemberKind.EnumField, null, AccessLevel.Public)
@@ -288,7 +289,7 @@ namespace Osprey.Members
 		}
 
 		private ConstantState state;
-		public ConstantState State { get { return state; } }
+		public ConstantState State { get { return state; } internal set { state = value; } }
 
 		private ConstantValue value;
 		public ConstantValue Value

@@ -266,7 +266,7 @@ namespace Osprey
 				writer.Write(field.Id); // id
 				writer.WriteFlags(FieldFlags.Public | FieldFlags.HasValue); // flags
 				writer.Write(GetStringId(field.Name)); // name
-				WriteConstantValue(writer, ConstantValue.CreateEnumValue(field.Value.IntValue, type)); // value
+				WriteConstantValue(writer, field.Value); // value
 			}
 
 			writer.EndCollection();

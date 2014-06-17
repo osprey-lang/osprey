@@ -542,27 +542,25 @@ namespace Osprey.Members
 
 		internal Namespace FindNamespace(QualifiedName name)
 		{
-			return FindNamespace(name, name.Parts.ToArray(), 0);
+			return FindNamespace(name, name.Parts, 0);
 		}
-		private Namespace FindNamespace(ParseNode node, string[] path, int offset)
+		private Namespace FindNamespace(ParseNode errorNode, string[] path, int offset)
 		{
 			var name = path[offset];
 			Namespace ns = null;
-			if (members.ContainsKey(name))
-			{
-				var mem = members[name];
-				if (mem.Kind == MemberKind.Namespace)
-					ns = (Namespace)mem;
-			}
+			NamedMember mem;
+			if (members.TryGetValue(name, out mem) &&
+				mem.Kind == MemberKind.Namespace)
+				ns = (Namespace)mem;
 			if (ns == null)
-				throw new CompileTimeException(node,
+				throw new CompileTimeException(errorNode,
 					string.Format("The namespace '{0}' could not be found. (Did you forget to import a module?)",
 						path.JoinString(".")));
 
 			if (offset == path.Length - 1)
 				return ns;
 			else
-				return ns.FindNamespace(node, path, offset + 1);
+				return ns.FindNamespace(errorNode, path, offset + 1);
 		}
 
 		public bool ContainsMember(string name)
@@ -577,8 +575,9 @@ namespace Osprey.Members
 			if (name == null)
 				throw new ArgumentNullException("name");
 
-			if (members.ContainsKey(name))
-				return members[name];
+			NamedMember member;
+			if (members.TryGetValue(name, out member))
+				return member;
 			if (parent != null)
 				return parent.ResolveName(name, fromClass);
 
@@ -687,7 +686,8 @@ namespace Osprey.Members
 		/// the "global" project namespace, if you will.
 		/// </summary>
 		private Namespace projectNamespace;
-		private List<Namespace> importedNamespaces = new List<Namespace>();
+		private List<Namespace> importedNamespaces;
+		private Dictionary<string, NamedMember> aliases;
 
 		/// <summary>
 		/// Gets the namespace of the project that the file belongs to.
@@ -716,8 +716,21 @@ namespace Osprey.Members
 			Members.Add(variable.Name, variable);
 		}
 
+		public void DeclareAlias(ParseNode errorNode, string name, NamedMember member)
+		{
+			if (aliases == null)
+				aliases = new Dictionary<string, NamedMember>();
+
+			if (aliases.ContainsKey(name))
+				throw new DuplicateNameException(errorNode,
+					string.Format("There is already an alias with the name '{0}'.", name));
+			aliases.Add(name, member);
+		}
+
 		public void ImportNamespace(Namespace ns)
 		{
+			if (importedNamespaces == null)
+				importedNamespaces = new List<Namespace>();
 			importedNamespaces.Add(ns);
 		}
 
@@ -728,10 +741,24 @@ namespace Osprey.Members
 
 		public override Type ResolveTypeName(TypeName name, FileNamespace document)
 		{
-			var output = new List<Type>();
+			var output = new HashSet<Type>();
+			Type lastType = null;
+
+			NamedMember member;
+			// If the name is not global and has one part, see if there is an
+			// alias with that name.
+			if (aliases != null && !name.IsGlobal && name.Parts.Length == 1)
+			{
+				if (aliases.TryGetValue(name.Parts[0], out member))
+				{
+					lastType = member as Type;
+					if (lastType != null)
+						return name.Type = lastType;
+				}
+			}
 
 			// Try to find a fully qualified member in the project namespace
-			NamedMember member = projectNamespace;
+			member = projectNamespace;
 			for (var i = 0; i < name.Parts.Length; i++)
 			{
 				if (member.Kind != MemberKind.Namespace)
@@ -743,24 +770,26 @@ namespace Osprey.Members
 				if (i == name.Parts.Length - 1)
 				{
 					if (member is Type)
-						output.Add((Type)member); // Found!
+						output.Add(lastType = (Type)member); // Found!
 					else if (member.Kind == MemberKind.Ambiguous)
-						output.AddRange(((AmbiguousMember)member).Members
-							.Where(m => m is Type).Cast<Type>());
+						foreach (var type in ((AmbiguousMember)member).Members.OfType<Type>())
+							output.Add(type);
 				}
 			}
 
-			if (name.Parts.Length == 1 && !name.IsGlobal)
+			// If the name is not global and has one part, try also to find
+			// type members from imported namespaces.
+			if (!name.IsGlobal && name.Parts.Length == 1)
 			{
 				var first = name.Parts[0];
 				foreach (var ns in importedNamespaces)
 					if (ns.Members.TryGetValue(first, out member))
 					{
 						if (member is Type)
-							output.Add((Type)member);
+							output.Add(lastType = (Type)member); // Found!
 						else if (member.Kind == MemberKind.Ambiguous)
-							output.AddRange(((AmbiguousMember)member).Members
-								.Where(m => m is Type).Cast<Type>());
+							foreach (var type in ((AmbiguousMember)member).Members.OfType<Type>())
+								output.Add(type);
 					}
 			}
 
@@ -768,7 +797,8 @@ namespace Osprey.Members
 				throw new UndefinedNameException(name, name.ToString(),
 					string.Format("The type name '{0}' could not be resolved.", name));
 			if (output.Count == 1)
-				return name.Type = output[0];
+				// If there is only one type, then lastType can only have been assigned once.
+				return name.Type = lastType;
 
 			throw new AmbiguousTypeNameException(name, new AmbiguousTypeName(name, output.ToArray()),
 				string.Format("The type name '{0}' is ambiguous between the following members: {1}",
@@ -786,26 +816,32 @@ namespace Osprey.Members
 				return null;
 			}
 
-			List<NamedMember> matches = new List<NamedMember>();
-			if (Members.ContainsKey(name))
-				matches.Add(Members[name]);
+			NamedMember member, lastMember = null;
+			if (aliases != null && aliases.TryGetValue(name, out member))
+				return member;
 
-			if (projectNamespace.ContainsMember(name))
-				matches.Add(projectNamespace.Members[name]);
+			var matches = new HashSet<NamedMember>();
+			if (Members.TryGetValue(name, out member))
+				matches.Add(lastMember = member);
 
-			foreach (var ns in importedNamespaces)
-				if (ns.ContainsMember(name))
-				{
-					var mem = ns.GetMember(name);
-					// Only non-namespace members are imported from namespaces
-					if (mem.Kind != MemberKind.Namespace)
-						matches.Add(mem);
-				}
+			if (projectNamespace.Members.TryGetValue(name, out member))
+				matches.Add(lastMember = member);
+
+			if (importedNamespaces != null)
+				foreach (var ns in importedNamespaces)
+					if (ns.Members.TryGetValue(name, out member))
+					{
+						// Only non-namespace members are imported from namespaces
+						if (member.Kind != MemberKind.Namespace)
+							matches.Add(lastMember = member);
+					}
 
 			if (matches.Count == 0)
 				return null;
 			if (matches.Count == 1)
-				return matches[0]; // the first match is the deepest
+				// If there is only one member, then 'lastMember' could only
+				// have been assigned to once, so use that.
+				return lastMember;
 			return new AmbiguousMember(name, matches.ToArray());
 		}
 	}

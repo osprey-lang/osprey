@@ -1583,7 +1583,10 @@ namespace Osprey.Nodes
 					result = new ClassConstantAccess((ClassConstant)member);
 					break;
 				case MemberKind.EnumField:
-					result = new EnumFieldAccess((EnumField)member, true);
+					{
+						var field = (EnumField)member;
+						result = new EnumFieldAccess(field, context.IsInEnumBody(field.Parent));
+					}
 					break;
 				case MemberKind.MethodGroup:
 					{
@@ -2525,8 +2528,7 @@ namespace Osprey.Nodes
 					case MemberKind.EnumField:
 						{
 							var field = (EnumField)member;
-							result = new EnumFieldAccess(field,
-								context is Enum && ((Enum)context) == field.Parent);
+							result = new EnumFieldAccess(field, context.IsInEnumBody(field.Parent));
 						}
 						break;
 					default:

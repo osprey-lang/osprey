@@ -506,7 +506,7 @@ namespace Osprey
 			int start = tok[i - 1].Index, end = tok[i - 1].EndIndex;
 
 			UseDirective result;
-			if (Accept(i, TokenType.String)) // use "<script name>";
+			if (Accept(i, TokenType.String)) // use "<file name>";
 			{
 				var token = tok[i];
 				i++;
@@ -519,11 +519,21 @@ namespace Osprey
 				Expect(ref i, TokenType.Semicolon);
 				result = new UseNamespaceDirective(name);
 			}
-			else if (Accept(i, TokenType.Identifier)) // use foo.bar.baz;
+			else if (Accept(i, TokenType.Identifier)) // use foo.bar.baz;  or  use alias = foo.bar.baz;
 			{
+				string aliasName = null;
+				if (Accept(i + 1, TokenType.Assign))
+				{
+					// use alias = foo.bar.baz;
+					aliasName = tok[i++].Value;
+					i++; // skip =
+				}
 				var name = ParseQualifiedName(ref i);
 				Expect(ref i, TokenType.Semicolon);
-				result = new UseModuleDirective(name);
+				if (aliasName != null)
+					result = new UseAliasDirective(aliasName, name);
+				else
+					result = new UseModuleDirective(name);
 			}
 			else
 				throw new ParseException(tok[i], "Expected identifier, string or 'namespace'.");

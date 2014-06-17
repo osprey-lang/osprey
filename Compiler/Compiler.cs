@@ -913,7 +913,7 @@ namespace Osprey
 			// nsDecl.Name should only be null for the file's global declaration space,
 			// when the file doesn't have 'namespace blah;' at the top, and in that case
 			// parent will be the project namespace.
-			var ns = nsDecl.Name == null ? parent : parent.GetNamespace(nsDecl.Name.Parts.ToArray());
+			var ns = nsDecl.Name == null ? parent : parent.GetNamespace(nsDecl.Name.Parts);
 			nsDecl.Namespace = ns;
 
 			foreach (var typeDecl in nsDecl.Types)
@@ -1102,14 +1102,14 @@ namespace Osprey
 				try
 				{
 					foreach (var use in doc.Uses)
-						if (use is UseNamespaceDirective)
-						{
-							var ns = projectNamespace.FindNamespace(((UseNamespaceDirective)use).Name);
-							doc.Namespace.ImportNamespace(ns);
-						}
+					{
+						if (use.ResolveNames(projectNamespace, firstPass: true))
+							doc.UseDirectivesRequireSecondPass = true;
+					}
 
 					// If the document has "namespace blah;" at the top,
-					// then we act as if it also had "use namespace blah;".
+					// then we act as if it also had "use namespace blah;",
+					// for the benefit of global statements.
 					if (doc.GlobalDeclarationSpace.Name != null)
 						doc.Namespace.ImportNamespace(doc.GlobalDeclarationSpace.Namespace);
 
@@ -1237,6 +1237,10 @@ namespace Osprey
 				try
 				{
 					InitializeClassMembers(doc.GlobalDeclarationSpace);
+
+					if (doc.UseDirectivesRequireSecondPass)
+						foreach (var use in doc.Uses)
+							use.ResolveNames(projectNamespace, firstPass: false);
 				}
 				catch (CompileTimeException e)
 				{
