@@ -46,7 +46,7 @@ namespace Osprey.Nodes
 		public NamespaceDeclaration GlobalDeclarationSpace = new NamespaceDeclaration(null);
 
 		/// <summary>Global statements.</summary>
-		public List<Statement> Statements = new List<Statement>();
+		public Statement[] Statements;
 
 		/// <summary>The version of the file, which determines the version of the project.</summary>
 		public Version Version;
@@ -553,7 +553,7 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			if (Value == null)
+			if (Value == null || Field.State == ConstantState.HasValue)
 				return;
 
 			var value = Value.FoldConstant();
@@ -686,7 +686,7 @@ namespace Osprey.Nodes
 				var @class = (Class)this.Type;
 				if (StaticConstructor == null)
 				{
-					StaticConstructor = new ConstructorDeclaration(new List<ConstructorParam>(), new Block());
+					StaticConstructor = new ConstructorDeclaration(EmptyArrays.CtorParameters, new Block());
 					var staticCtorObject = new Constructor(StaticConstructor, @class);
 					@class.DeclareStaticConstructor(staticCtorObject);
 				}
@@ -765,7 +765,7 @@ namespace Osprey.Nodes
 
 	public sealed class FieldDeclaration : MemberDeclaration
 	{
-		public FieldDeclaration(AccessLevel access, bool isConst, List<VariableDeclarator> declarators)
+		public FieldDeclaration(AccessLevel access, bool isConst, VariableDeclarator[] declarators)
 			: base(null, access)
 		{
 			IsConstant = isConst;
@@ -774,7 +774,7 @@ namespace Osprey.Nodes
 
 		public bool IsConstant, IsStatic;
 		/// <summary>The fields that are being declared.</summary>
-		public List<VariableDeclarator> Declarators;
+		public VariableDeclarator[] Declarators;
 
 		public override string ToString(int indent)
 		{
@@ -830,14 +830,14 @@ namespace Osprey.Nodes
 
 	public sealed class ConstructorDeclaration : MemberDeclaration
 	{
-		public ConstructorDeclaration(AccessLevel access, List<ConstructorParam> parameters, Splat splat, Block body)
+		public ConstructorDeclaration(AccessLevel access, ConstructorParam[] parameters, Splat splat, Block body)
 			: base("new", access)
 		{
 			Parameters = parameters;
 			Splat = splat;
 			Body = body;
 		}
-		public ConstructorDeclaration(List<ConstructorParam> parameters, Block body)
+		public ConstructorDeclaration(ConstructorParam[] parameters, Block body)
 			: base("init", AccessLevel.Private)
 		{
 			IsStatic = true;
@@ -849,7 +849,7 @@ namespace Osprey.Nodes
 		/// <summary>Indicates whether the constructor is a static constructor.</summary>
 		public bool IsStatic;
 		/// <summary>The parameters of the constructor.</summary>
-		public List<ConstructorParam> Parameters;
+		public ConstructorParam[] Parameters;
 		/// <summary>The location of the splat, if any.</summary>
 		public Splat Splat;
 		/// <summary>The body of the constructor.</summary>
@@ -900,13 +900,16 @@ namespace Osprey.Nodes
 				if (!(Body is ExternBody) && ConstructorCall == null &&
 					@class.BaseType != null)
 				{
-					ConstructorCall = new ConstructorCall(new List<Expression>(), false, true)
+					ConstructorCall = new ConstructorCall(EmptyArrays.Expressions, false, true)
 						{
 							StartIndex = this.StartIndex,
 							EndIndex = this.EndIndex,
 							Document = this.Document,
 						};
-					Body.Statements.Insert(0, ConstructorCall);
+					var stmtCount = Body.Statements.Length;
+					Array.Resize(ref Body.Statements, stmtCount + 1);
+					Array.Copy(Body.Statements, 0, Body.Statements, 1, stmtCount);
+					Body.Statements[0] = ConstructorCall;
 				}
 
 				foreach (var param in Parameters)
@@ -1070,7 +1073,7 @@ namespace Osprey.Nodes
 
 	public sealed class MethodDeclaration : MemberDeclaration
 	{
-		public MethodDeclaration(string name, AccessLevel access, List<Parameter> parameters, Splat splat, Statement body)
+		public MethodDeclaration(string name, AccessLevel access, Parameter[] parameters, Splat splat, Statement body)
 			: base(name, access)
 		{
 			Parameters = parameters;
@@ -1079,7 +1082,7 @@ namespace Osprey.Nodes
 		}
 
 		/// <summary>The parameters of the method.</summary>
-		public List<Parameter> Parameters;
+		public Parameter[] Parameters;
 		/// <summary>The location of the splat, if any.</summary>
 		public Splat Splat;
 		/// <summary>The method body. This can be a <see cref="Block"/> or <see cref="EmptyStatement"/>.</summary>
@@ -1187,8 +1190,8 @@ namespace Osprey.Nodes
 				DefaultValue = DefaultValue.FoldConstant();
 				var value = DefaultValue;
 				if (!(value is ConstantExpression ||
-					value is ListLiteralExpression && ((ListLiteralExpression)value).Values.Count == 0 ||
-					value is HashLiteralExpression && ((HashLiteralExpression)value).Members.Count == 0))
+					value is ListLiteralExpression && ((ListLiteralExpression)value).Values.Length == 0 ||
+					value is HashLiteralExpression && ((HashLiteralExpression)value).Members.Length == 0))
 					throw new CompileTimeException(value, "The default value of an optional parameter must be a constant expression, [] or {}.");
 			}
 		}
@@ -1274,14 +1277,14 @@ namespace Osprey.Nodes
 
 	public sealed class IndexerAccessorDeclaration : PropertyAccessorDeclaration
 	{
-		public IndexerAccessorDeclaration(AccessLevel access, bool isSetter, List<Parameter> parameters, Statement body)
+		public IndexerAccessorDeclaration(AccessLevel access, bool isSetter, Parameter[] parameters, Statement body)
 			: base(".item", access, isSetter, body)
 		{
 			this.Parameters = parameters;
 		}
 
 		/// <summary>The parameters of the indexer.</summary>
-		public List<Parameter> Parameters;
+		public Parameter[] Parameters;
 
 		protected override string GetName()
 		{

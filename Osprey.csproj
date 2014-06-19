@@ -66,7 +66,9 @@
     <Compile Include="Compiler\MethodBuilder.SourceLocation.cs" />
     <Compile Include="Compiler\StandardNames.cs" />
     <Compile Include="DocGenerator.cs" />
+    <Compile Include="EmptyArrays.cs" />
     <Compile Include="JsonGen.cs" />
+    <Compile Include="Module\MemberTable.cs" />
     <Compile Include="Module\Module.Saver.cs" />
     <Compile Include="Module\ModuleReader.cs" />
     <Compile Include="Module\Module.Loader.cs" />
@@ -100,6 +102,7 @@
     <Compile Include="Parser\Token.cs" />
     <Compile Include="Parser\Tokenizer.cs" />
     <Compile Include="SourceFile.cs" />
+    <Compile Include="TempList.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="osprey.ico" />

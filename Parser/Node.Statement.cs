@@ -78,19 +78,15 @@ namespace Osprey.Nodes
 	public class Block : Statement
 	{
 		internal Block()
-			: this(new List<Statement>())
+			: this(EmptyArrays.Statements)
 		{ }
-		public Block(List<Statement> statements)
+		public Block(params Statement[] statements)
 		{
 			Statements = statements;
 		}
 
-		internal Block(params Statement[] statements)
-			: this(statements.ToList())
-		{ }
-
 		/// <summary>The statemenets contained within the block.</summary>
-		public List<Statement> Statements;
+		public Statement[] Statements;
 
 		/// <summary>The declaration space associated with the block.</summary>
 		internal BlockSpace DeclSpace;
@@ -158,7 +154,7 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			if (Statements.Count == 0 && Initializer == null)
+			if (Statements.Length == 0 && Initializer == null)
 				return "{ }";
 			var sb = new StringBuilder("{\r\n"); // opening curly on same line
 
@@ -377,7 +373,7 @@ namespace Osprey.Nodes
 						method.PopLocation();
 				}
 
-			var iMax = Statements.Count - 1;
+			var iMax = Statements.Length - 1;
 			for (var i = 0; i <= iMax; i++)
 			{
 				var stmt = Statements[i];
@@ -405,11 +401,17 @@ namespace Osprey.Nodes
 	public abstract class LocalDeclaration : Statement
 	{ }
 
+	public abstract class LocalVariableDeclaration : LocalDeclaration
+	{
+		/// <summary>Indicates whether the declaration is for one or more global variables.</summary>
+		public bool IsGlobal;
+	}
+
 	// var a = 1, b = 2, c = 3;
 	// const x = 24, y = 25, z = 26;
-	public sealed class SimpleLocalVariableDeclaration : LocalDeclaration
+	public sealed class SimpleLocalVariableDeclaration : LocalVariableDeclaration
 	{
-		public SimpleLocalVariableDeclaration(bool isConst, List<VariableDeclarator> declarators)
+		public SimpleLocalVariableDeclaration(bool isConst, VariableDeclarator[] declarators)
 		{
 			IsConst = isConst;
 			Declarators = declarators;
@@ -417,11 +419,9 @@ namespace Osprey.Nodes
 
 		/// <summary>Indicates whether the declaration is for a set of constant values.</summary>
 		public bool IsConst;
-		/// <summary>Indicates whether the declaration is for a global variable.</summary>
-		public bool IsGlobal;
 
 		/// <summary>The variables declared in this declaration.</summary>
-		public List<VariableDeclarator> Declarators;
+		public VariableDeclarator[] Declarators;
 
 		public override string ToString(int indent)
 		{
@@ -579,24 +579,21 @@ namespace Osprey.Nodes
 	}
 
 	// var (a, b, c) = expr;
-	public sealed class ParallelLocalVariableDeclaration : LocalDeclaration
+	public sealed class ParallelLocalVariableDeclaration : LocalVariableDeclaration
 	{
-		public ParallelLocalVariableDeclaration(List<string> names, Expression value)
+		public ParallelLocalVariableDeclaration(string[] names, Expression value)
 		{
 			Names = names;
 			Value = value;
 		}
 
 		/// <summary>The names that are being declared.</summary>
-		public List<string> Names;
+		public string[] Names;
 
 		/// <summary>The expression that is being assigned.</summary>
 		public Expression Value;
 
 		internal Variable[] Variables;
-
-		/// <summary>Indicates whether the declaration is for one or more global variables.</summary>
-		public bool IsGlobal;
 
 		public override string ToString(int indent)
 		{
@@ -620,9 +617,9 @@ namespace Osprey.Nodes
 		public override void DeclareNames(BlockSpace parent)
 		{
 			if (!IsGlobal)
-				Variables = new Variable[Names.Count];
+				Variables = new Variable[Names.Length];
 
-			for (var i = 0; i < Names.Count; i++)
+			for (var i = 0; i < Names.Length; i++)
 			{
 				if (!IsGlobal)
 				{
@@ -706,7 +703,7 @@ namespace Osprey.Nodes
 
 	public sealed class LocalFunctionDeclaration : LocalDeclaration
 	{
-		public LocalFunctionDeclaration(string name, List<Parameter> parameters, Splat splat, Block body)
+		public LocalFunctionDeclaration(string name, Parameter[] parameters, Splat splat, Block body)
 		{
 			Name = name;
 			Parameters = parameters;
@@ -718,7 +715,7 @@ namespace Osprey.Nodes
 		public string Name;
 
 		/// <summary>The parameters of the function.</summary>
-		public List<Parameter> Parameters;
+		public Parameter[] Parameters;
 
 		/// <summary>The location of the splat in the function's parameters.</summary>
 		public Splat Splat;
@@ -1040,7 +1037,7 @@ namespace Osprey.Nodes
 
 				var elseLabel = new Label("else");
 				var bodyBlock = (Block)Body;
-				var firstStmt = bodyBlock.Statements.Count == 0 ? null : bodyBlock.Statements[0];
+				var firstStmt = bodyBlock.Statements.Length == 0 ? null : bodyBlock.Statements[0];
 				if (firstStmt is BreakStatement ? !((BreakStatement)firstStmt).IsLeave :
 					firstStmt is NextStatement && !((NextStatement)firstStmt).IsLeave)
 				{
@@ -1178,7 +1175,7 @@ namespace Osprey.Nodes
 
 	public sealed class ForStatement : IterationStatement
 	{
-		public ForStatement(string label, List<string> variables, Expression list, Statement body, ElseClause @else)
+		public ForStatement(string label, string[] variables, Expression list, Statement body, ElseClause @else)
 			: base(label, body)
 		{
 			VariableNames = variables;
@@ -1187,7 +1184,7 @@ namespace Osprey.Nodes
 		}
 
 		/// <summary>The variables associated with the for statement.</summary>
-		public List<string> VariableNames;
+		public string[] VariableNames;
 
 		/// <summary>The expression that describes the list to iterate over.</summary>
 		public Expression List;
@@ -1289,8 +1286,8 @@ namespace Osprey.Nodes
 			//     for a, b, c in [a, b, c] { ... }
 			// And that's clearly wrong.
 
-			Variables = new Variable[VariableNames.Count];
-			for (var i = 0; i < VariableNames.Count; i++)
+			Variables = new Variable[VariableNames.Length];
+			for (var i = 0; i < VariableNames.Length; i++)
 			{
 				Variables[i] = new Variable(VariableNames[i],
 					new VariableDeclarator(VariableNames[i], null)
@@ -2081,7 +2078,7 @@ namespace Osprey.Nodes
 	public sealed class TryStatement : CompoundStatement
 	{
 		// Note: catches may not be null, but it can be empty.
-		public TryStatement(Block body, List<CatchClause> catches, FinallyClause fin)
+		public TryStatement(Block body, CatchClause[] catches, FinallyClause fin)
 			: base(body)
 		{
 			if (catches == null)
@@ -2092,7 +2089,7 @@ namespace Osprey.Nodes
 		}
 
 		/// <summary>The catch clauses associated with the try statement.</summary>
-		public List<CatchClause> Catches;
+		public CatchClause[] Catches;
 
 		/// <summary>The finally clause associated with the try statement, or null if there is none.</summary>
 		public FinallyClause Finally;
@@ -2109,7 +2106,7 @@ namespace Osprey.Nodes
 				// Note: finally clauses are not able to return, which is checked
 				// at another step during compilation.
 				if (!canReturn.HasValue)
-					canReturn = Body.CanReturn || (Catches.Count > 0 && Catches.Any(stmt => stmt.CanReturn));
+					canReturn = Body.CanReturn || (Catches.Length > 0 && Catches.Any(stmt => stmt.CanReturn));
 				return canReturn.Value;
 			}
 		}
@@ -2173,11 +2170,11 @@ namespace Osprey.Nodes
 			// This is because catch clauses are examined in lexical
 			// order. Without this restriction, the ArgumentError catch
 			// clause in the first example would be unreachable.
-			if (Catches.Count > 1)
+			if (Catches.Length > 1)
 			{
-				int max = Catches[Catches.Count - 1] is SpecificCatchClause ?
-					Catches.Count : // The last catch clause has a type, process it
-					Catches.Count - 1; // The last catch clause is generic, ignore it
+				int max = Catches[Catches.Length - 1] is SpecificCatchClause ?
+					Catches.Length : // The last catch clause has a type, process it
+					Catches.Length - 1; // The last catch clause is generic, ignore it
 				for (var i = 1; i < max; i++)
 				{
 					var catchType = ((SpecificCatchClause)Catches[i]).Type.Type;
@@ -2209,7 +2206,7 @@ namespace Osprey.Nodes
 		{
 			base.TransformClosureLocals(currentBlock, forGenerator); // Body
 
-			for (var i = 0; i < Catches.Count; i++)
+			for (var i = 0; i < Catches.Length; i++)
 				Catches[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			if (Finally != null)
@@ -2224,7 +2221,7 @@ namespace Osprey.Nodes
 			if (Finally != null)
 				tryFinally = method.BeginTry();
 
-			if (Catches.Count > 0)
+			if (Catches.Length > 0)
 				tryCatch = method.BeginTry();
 
 			TryState state = null;
@@ -2247,7 +2244,7 @@ namespace Osprey.Nodes
 			if (Body.IsEndReachable)
 				method.Append(Branch.Leave(endLabel)); // Leave the try block
 
-			if (Catches.Count > 0)
+			if (Catches.Length > 0)
 			{
 				tryCatch.EndBlock(); // End the try-catch block's try part
 
@@ -2417,9 +2414,9 @@ namespace Osprey.Nodes
 	public sealed class ReturnStatement : Statement
 	{
 		public ReturnStatement()
-			: this(new List<Expression>())
+			: this(EmptyArrays.Expressions)
 		{ }
-		public ReturnStatement(List<Expression> returnValues)
+		public ReturnStatement(Expression[] returnValues)
 		{
 			if (returnValues == null)
 				throw new ArgumentNullException("returnValues");
@@ -2427,11 +2424,11 @@ namespace Osprey.Nodes
 		}
 
 		internal ReturnStatement(Expression returnValue)
-			: this(new List<Expression> { returnValue })
+			: this(new[] { returnValue })
 		{ }
 
 		/// <summary>The return values of the return statement.</summary>
-		public List<Expression> ReturnValues;
+		public Expression[] ReturnValues;
 
 		private Field stateField;
 
@@ -2447,7 +2444,7 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < ReturnValues.Count; i++)
+			for (var i = 0; i < ReturnValues.Length; i++)
 				ReturnValues[i] = ReturnValues[i].FoldConstant();
 		}
 
@@ -2456,7 +2453,7 @@ namespace Osprey.Nodes
 			var block = context as BlockSpace;
 			if (block != null)
 			{
-				if (ReturnValues.Count > 0 && block.Method is ClassMemberMethod)
+				if (ReturnValues.Length > 0 && block.Method is ClassMemberMethod)
 				{
 					var member = ((ClassMemberMethod)block.Method).Owner;
 					string error = null;
@@ -2480,7 +2477,7 @@ namespace Osprey.Nodes
 				block.Method.AddReturn(this);
 			}
 
-			for (var i = 0; i < ReturnValues.Count; i++)
+			for (var i = 0; i < ReturnValues.Length; i++)
 				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
 		}
 
@@ -2488,7 +2485,7 @@ namespace Osprey.Nodes
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < ReturnValues.Count; i++)
+			for (var i = 0; i < ReturnValues.Length; i++)
 				ReturnValues[i] = ReturnValues[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			if (forGenerator)
@@ -2515,7 +2512,7 @@ namespace Osprey.Nodes
 				// and then leave the block.
 				if (inGenerator)
 					method.Append(LoadConstant.False());
-				else if (ReturnValues.Count == 0)
+				else if (ReturnValues.Length == 0)
 					method.Append(LoadConstant.Null());
 				else
 					ReturnValues[0].Compile(compiler, method);
@@ -2528,7 +2525,7 @@ namespace Osprey.Nodes
 				method.Append(LoadConstant.False());
 				method.Append(new SimpleInstruction(Opcode.Ret));
 			}
-			else if (ReturnValues.Count == 0 || ReturnValues[0].IsNull)
+			else if (ReturnValues.Length == 0 || ReturnValues[0].IsNull)
 			{
 				method.Append(new SimpleInstruction(Opcode.Retnull));
 			}
@@ -2545,13 +2542,13 @@ namespace Osprey.Nodes
 
 	public sealed class YieldStatement : Statement
 	{
-		public YieldStatement(List<Expression> returnValues)
+		public YieldStatement(Expression[] returnValues)
 		{
 			ReturnValues = returnValues;
 		}
 
 		/// <summary>The return values of the yield statement.</summary>
-		public List<Expression> ReturnValues;
+		public Expression[] ReturnValues;
 
 		public override bool CanYield { get { return true; } }
 
@@ -2566,7 +2563,7 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < ReturnValues.Count; i++)
+			for (var i = 0; i < ReturnValues.Length; i++)
 				ReturnValues[i] = ReturnValues[i].FoldConstant();
 		}
 
@@ -2597,7 +2594,7 @@ namespace Osprey.Nodes
 
 			block.Method.AddYield(this);
 
-			for (var i = 0; i < ReturnValues.Count; i++)
+			for (var i = 0; i < ReturnValues.Length; i++)
 				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
 		}
 
@@ -2605,7 +2602,7 @@ namespace Osprey.Nodes
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < ReturnValues.Count; i++)
+			for (var i = 0; i < ReturnValues.Length; i++)
 				ReturnValues[i] = ReturnValues[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			if (forGenerator)
@@ -2831,7 +2828,6 @@ namespace Osprey.Nodes
 		{
 			VariableName = variableName;
 			Initializer = initializer;
-			Body = body;
 		}
 
 		/// <summary>The name of the variable declared by the statement.</summary>
@@ -2872,13 +2868,16 @@ namespace Osprey.Nodes
 				EndIndex = this.EndIndex,
 				Document = this.Document,
 			};
-			var declaration = new SimpleLocalVariableDeclaration(false, new List<VariableDeclarator> { declarator })
+			var declaration = new SimpleLocalVariableDeclaration(false, new[] { declarator })
 			{
 				StartIndex = this.StartIndex,
 				EndIndex = this.EndIndex,
 				Document = this.Document,
 			};
-			block.Statements.Insert(0, declaration);
+			var stmtCount = block.Statements.Length;
+			Array.Resize(ref block.Statements, stmtCount + 1);
+			Array.Copy(block.Statements, 0, block.Statements, 1, stmtCount);
+			block.Statements[0] = declaration;
 
 			// And now let's initialize the finally clause
 			var ifStmt = new IfStatement(
@@ -2893,7 +2892,7 @@ namespace Osprey.Nodes
 							new LocalVariableAccess(variable, LocalAccessKind.NonCapturing),
 							"close"
 						),
-						new List<Expression>()
+						EmptyArrays.Expressions
 					)
 				) { StartIndex = StartIndex, EndIndex = EndIndex, Document = Document }),
 				null);
@@ -2901,8 +2900,8 @@ namespace Osprey.Nodes
 			ifStmt.EndIndex = this.EndIndex;
 			ifStmt.Document = this.Document;
 
-			block = ((TryStatement)block.Statements[block.Statements.Count - 1]).Finally.Body as Block;
-			block.Statements.Add(ifStmt);
+			block = ((TryStatement)block.Statements[block.Statements.Length - 1]).Finally.Body as Block;
+			block.Statements = new Statement[] { ifStmt };
 
 			base.DeclareNames(parent);
 		}
@@ -2968,17 +2967,17 @@ namespace Osprey.Nodes
 	public sealed class ParallelAssignment : Statement
 	{
 		// 'targets' will have at least two values, otherwise it's not a parallel assignment.
-		public ParallelAssignment(List<AssignableExpression> targets, List<Expression> values)
+		public ParallelAssignment(AssignableExpression[] targets, Expression[] values)
 		{
 			Targets = targets;
 			Values = values;
 		}
 
 		/// <summary>The targets of the assignment.</summary>
-		public List<AssignableExpression> Targets;
+		public AssignableExpression[] Targets;
 
 		/// <summary>The values of the assignment.</summary>
-		public List<Expression> Values;
+		public Expression[] Values;
 
 		public override string ToString(int indent)
 		{
@@ -2987,24 +2986,24 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < Targets.Count; i++)
+			for (var i = 0; i < Targets.Length; i++)
 				Targets[i] = (AssignableExpression)Targets[i].FoldConstant();
-			for (var i = 0; i < Values.Count; i++)
+			for (var i = 0; i < Values.Length; i++)
 				Values[i] = Values[i].FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
-			for (var i = 0; i < Targets.Count; i++)
+			for (var i = 0; i < Targets.Length; i++)
 			{
 				var result = Targets[i].ResolveNames(context, document, ExpressionAccessKind.Write);
 				Targets[i] = AssignmentExpression.EnsureAssignable(result);
 			}
 
-			for (var i = 0; i < Values.Count; i++)
+			for (var i = 0; i < Values.Length; i++)
 				Values[i] = Values[i].ResolveNames(context, document, false, false);
 
-			if (Values.Count == 1 && Values[0].IsTypeKnown(document.Compiler) &&
+			if (Values.Length == 1 && Values[0].IsTypeKnown(document.Compiler) &&
 				!Values[0].GetKnownType(document.Compiler).InheritsFrom(document.Compiler.ListType))
 				throw new CompileTimeException(Values[0],
 					"The value in a parallel assignment must be of type aves.List.");
@@ -3014,17 +3013,17 @@ namespace Osprey.Nodes
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < Targets.Count; i++)
+			for (var i = 0; i < Targets.Length; i++)
 				Targets[i] = (AssignableExpression)Targets[i].TransformClosureLocals(currentBlock, forGenerator);
 
-			for (var i = 0; i < Values.Count; i++)
+			for (var i = 0; i < Values.Length; i++)
 				Values[i] = Values[i].TransformClosureLocals(currentBlock, forGenerator);
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
 			method.PushLocation(this);
-			if (Values.Count == 1)
+			if (Values.Length == 1)
 				CompileOneToMany(compiler, method);
 			else
 				CompileManyToMany(compiler, method);
@@ -3043,7 +3042,7 @@ namespace Osprey.Nodes
 			}
 			else
 			{
-				var count = Targets.Count;
+				var count = Targets.Length;
 				var unpackTargets = new LocalVariable[count];
 				var targetLocals = new LocalVariable[count][];
 
@@ -3096,7 +3095,7 @@ namespace Osprey.Nodes
 					value.Compile(compiler, method);
 
 				// And store them in reverse!
-				for (var i = Targets.Count - 1; i >= 0; i--)
+				for (var i = Targets.Length - 1; i >= 0; i--)
 				{
 					LocalVariable variable;
 					if (Targets[i] is GlobalVariableAccess)
@@ -3109,7 +3108,7 @@ namespace Osprey.Nodes
 			}
 			else
 			{
-				var count = Targets.Count;
+				var count = Targets.Length;
 				var targetLocals = new LocalVariable[count][];
 
 				// First, evaluate the instance expression (if any) of each target
@@ -3119,7 +3118,7 @@ namespace Osprey.Nodes
 				// Then, evaluate each value, storing the result in a local
 				// unless the value can be safely inlined.
 
-				var valueLocals = new LocalVariable[Values.Count];
+				var valueLocals = new LocalVariable[Values.Length];
 				for (var i = 0; i < count; i++)
 					if (!Values[i].CanSafelyInline)
 					{
@@ -3161,7 +3160,7 @@ namespace Osprey.Nodes
 
 		private bool AreAllTargetsLocalAccess()
 		{
-			HashSet<Variable> variables = new HashSet<Variable>();
+			var variables = new HashSet<Variable>();
 			foreach (var e in Targets)
 			{
 				var local = e as LocalVariableAccess;
@@ -3179,7 +3178,7 @@ namespace Osprey.Nodes
 
 	public sealed class ConstructorCall : Statement
 	{
-		public ConstructorCall(List<Expression> arguments, bool hasRefArgs, bool isBaseCtor)
+		public ConstructorCall(Expression[] arguments, bool hasRefArgs, bool isBaseCtor)
 		{
 			Arguments = arguments;
 			HasRefArgs = hasRefArgs;
@@ -3187,7 +3186,7 @@ namespace Osprey.Nodes
 		}
 
 		/// <summary>The arguments passed into the constructor.</summary>
-		public List<Expression> Arguments;
+		public Expression[] Arguments;
 
 		public bool HasRefArgs;
 
@@ -3205,7 +3204,7 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].FoldConstant();
 		}
 
@@ -3221,10 +3220,10 @@ namespace Osprey.Nodes
 				ctorClass = (Class)thisClass.BaseType;
 			}
 
-			var ctor = ctorClass.FindConstructor(this, Arguments.Count, instType: thisClass, fromType: thisClass);
+			var ctor = ctorClass.FindConstructor(this, Arguments.Length, instType: thisClass, fromType: thisClass);
 			if (ctor == null)
 				throw new CompileTimeException(this, string.Format("Could not find a constructor for '{0}' that takes {1} arguments.",
-					ctorClass.FullName, Arguments.Count));
+					ctorClass.FullName, Arguments.Length));
 
 			if (HasRefArgs || ctor.HasRefParams)
 				ctor.VerifyArgumentRefness(Arguments);
@@ -3236,7 +3235,7 @@ namespace Osprey.Nodes
 
 			constructor = ctor.Group;
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 		}
 
@@ -3244,7 +3243,7 @@ namespace Osprey.Nodes
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
 		}
 
@@ -3256,7 +3255,7 @@ namespace Osprey.Nodes
 			foreach (var arg in Arguments) // Evaluate each argument
 				arg.Compile(compiler, method);
 
-			method.Append(new StaticCall(method.Module.GetMethodId(constructor), Arguments.Count)); // Call the base constructor
+			method.Append(new StaticCall(method.Module.GetMethodId(constructor), Arguments.Length)); // Call the base constructor
 			method.Append(new SimpleInstruction(Opcode.Pop));
 			method.PopLocation(); // this
 		}

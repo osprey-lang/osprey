@@ -99,6 +99,7 @@ namespace Osprey
 			// And now we have types, functions and constants
 			ReadTypeDefs(reader, output);
 			if (output.unresolvedConstants != null)
+			{
 				foreach (var constant in output.unresolvedConstants)
 				{
 					Type typeObject;
@@ -106,6 +107,8 @@ namespace Osprey
 					var constValue = ConstantValueFromRaw(constType, output, typeObject, constant.Value);
 					constant.Member.UpdateValue(constValue);
 				}
+				output.unresolvedConstants = null;
+			}
 
 			// Functions
 			ReadFunctionDefs(reader, output);
@@ -270,7 +273,7 @@ namespace Osprey
 			string typeName;
 			if (target.explicitlyImported)
 			{
-				var nameParts = fullName.Split('.');
+				var nameParts = fullName.Split(Compiler.Dot);
 				typeName = nameParts[nameParts.Length - 1];
 			}
 			else
@@ -374,7 +377,8 @@ namespace Osprey
 			}
 		}
 
-		private static ImportedClassConstant ReadClassConstant(ModuleReader reader, Module module, Class target, FieldFlags flags, string name)
+		private static ImportedClassConstant ReadClassConstant(ModuleReader reader,
+			Module module, Class target, FieldFlags flags, string name)
 		{
 			var typeId = reader.ReadUInt32();
 			var value = reader.ReadInt64();
@@ -962,7 +966,7 @@ namespace Osprey
 
 		private static string[] GetPathFromName(string fullName, out string name)
 		{
-			var nameParts = fullName.Split('.');
+			var nameParts = fullName.Split(Compiler.Dot);
 			var lastIndex = nameParts.Length - 1;
 			var result = new string[lastIndex];
 

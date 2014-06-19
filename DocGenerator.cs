@@ -151,7 +151,7 @@ namespace Osprey
 				JsonObject fieldDocs = null;
 
 				foreach (var field in @class.Fields)
-					if (field.DocString != null && field.Declarators.Count == 1)
+					if (field.DocString != null && field.Declarators.Length == 1)
 					{
 						var firstDecl = field.Declarators[0];
 						var member = context.GetMember(firstDecl.Name);
@@ -169,7 +169,7 @@ namespace Osprey
 					}
 
 				foreach (var field in @class.Constants)
-					if (field.DocString != null && field.Declarators.Count == 1)
+					if (field.DocString != null && field.Declarators.Length == 1)
 					{
 						var firstDecl = field.Declarators[0];
 						var constant = context.GetMember(firstDecl.Name);

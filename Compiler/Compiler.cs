@@ -807,28 +807,6 @@ namespace Osprey
 
 		private void BuildProjectNamespace()
 		{
-			// If we're compiling the project as an application, we need to gather up
-			// all the global statements into a main method in this phase too.
-			List<Statement> mainMethodContents = null;
-			if (projectType == ProjectType.Application)
-			{
-				// Pretend there's a main method that belongs to the project namespace.
-				// There isn't, of course, but that won't stop us!
-				// NOTE: This method will never actually be /declared/ in the project namespace;
-				// we just pretend it's in there. The compiler will still output metadata about
-				// the existence of a method with the fully qualified name "<main>", so we can
-				// reference it as the main method of the module.
-
-				Notice("Initializing main method...", CompilerVerbosity.Verbose);
-				mainMethodContents = new List<Statement>();
-				mainMethodBody = new Block(mainMethodContents);
-				mainMethod = new Method(null, DefaultMainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
-
-				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, AccessLevel.Private);
-				mainMethodGroup.AddOverload(mainMethod);
-				AddGlobalFunction(mainMethodGroup); // Always first!
-			}
-
 			for (var i = 0; i < documents.Count; i++)
 				try
 				{
@@ -842,16 +820,38 @@ namespace Osprey
 					throw; // rethrow
 				}
 
+			// If we're compiling the project as an application, we need to gather up
+			// all the global statements into a main method in this phase too.
+			var mainMethodContents = new TempList<Statement>();
+
 			for (var i = 0; i < documents.Count; i++)
 				try
 				{
-					InitializeGlobalVariables(documents[i], mainMethodContents);
+					InitializeGlobalVariables(documents[i], ref mainMethodContents);
 				}
 				catch (CompileTimeException e)
 				{
 					e.Document = documents[i];
 					throw;
 				}
+
+			if (projectType == ProjectType.Application)
+			{
+				// Pretend there's a main method that belongs to the project namespace.
+				// There isn't, of course, but that won't stop us!
+				// NOTE: This method will never actually be /declared/ in the project namespace;
+				// we just pretend it's in there. The compiler will still output metadata about
+				// the existence of a method with the fully qualified name "<main>", so we can
+				// reference it as the main method of the module.
+
+				Notice("Initializing main method...", CompilerVerbosity.Verbose);
+				mainMethodBody = new Block(mainMethodContents.ToArray());
+				mainMethod = new Method(null, DefaultMainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
+
+				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, AccessLevel.Private);
+				mainMethodGroup.AddOverload(mainMethod);
+				AddGlobalFunction(mainMethodGroup); // Always first!
+			}
 
 			// If an explicit main method was specified, we now have enough information
 			// to locate it, so let's try doing that.
@@ -943,8 +943,8 @@ namespace Osprey
 			foreach (var constDecl in nsDecl.Constants)
 			{
 				var declarators = constDecl.Declaration.Declarators;
-				var constants = new GlobalConstant[declarators.Count];
-				for (var i = 0; i < declarators.Count; i++)
+				var constants = new GlobalConstant[declarators.Length];
+				for (var i = 0; i < declarators.Length; i++)
 				{
 					var varDecl = declarators[i];
 					var constant = new GlobalConstant(varDecl.Name, varDecl, constDecl.IsPublic);
@@ -959,9 +959,9 @@ namespace Osprey
 				ProcessNamespaceMembers(subNs, ns);
 		}
 
-		private void InitializeGlobalVariables(Document doc, List<Statement> mainMethodBody)
+		private void InitializeGlobalVariables(Document doc, ref TempList<Statement> mainMethodBody)
 		{
-			if (doc.Statements.Count > 0)
+			if (doc.Statements.Length > 0)
 			{
 				if (projectType == ProjectType.Module)
 					throw new CompileTimeException(doc.Statements[0],
@@ -970,18 +970,19 @@ namespace Osprey
 				foreach (var stmt in doc.Statements)
 				{
 					if (stmt is SimpleLocalVariableDeclaration) // var a = x;
+					{
 						foreach (var decl in ((SimpleLocalVariableDeclaration)stmt).Declarators)
 						{
 							var globalVar = new GlobalVariable(decl.Name, decl, doc);
 							decl.Variable = globalVar;
 							doc.Namespace.DeclareGlobalVariable(globalVar);
-							//AddGlobalVariable(doc, globalVar);
 						}
+					}
 					else if (stmt is ParallelLocalVariableDeclaration) // var (a, b) = list;
 					{
 						var declaration = (ParallelLocalVariableDeclaration)stmt;
-						declaration.Variables = new Variable[declaration.Names.Count];
-						for (var i = 0; i < declaration.Names.Count; i++)
+						declaration.Variables = new Variable[declaration.Names.Length];
+						for (var i = 0; i < declaration.Names.Length; i++)
 						{
 							var name = declaration.Names[i];
 
@@ -994,7 +995,6 @@ namespace Osprey
 								}, doc);
 							declaration.Variables[i] = globalVar;
 							doc.Namespace.DeclareGlobalVariable(globalVar);
-							//AddGlobalVariable(doc, globalVar);
 						}
 					}
 					mainMethodBody.Add(stmt);
@@ -1987,7 +1987,7 @@ namespace Osprey
 
 		private static readonly byte[] DebugSymbolsMagicNumber = { (byte)'O', (byte)'V', (byte)'D', (byte)'S' };
 
-		private static readonly char[] Dot = { '.' };
+		internal static readonly char[] Dot = { '.' };
 
 		private enum NamespaceLookupResult
 		{

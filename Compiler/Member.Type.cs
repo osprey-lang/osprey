@@ -464,7 +464,7 @@ namespace Osprey.Members
 				if (prop is IndexerAccessorDeclaration)
 				{
 					var idxDecl = (IndexerAccessorDeclaration)prop;
-					name = Indexer.MemberName + "`" + idxDecl.Parameters.Count.ToStringInvariant();
+					name = Indexer.MemberName + "`" + idxDecl.Parameters.Length.ToStringInvariant();
 					accessor = new IndexerAccessor(idxDecl);
 				}
 				else
@@ -477,7 +477,7 @@ namespace Osprey.Members
 				if (!properties.TryGetValue(name, out property))
 				{
 					property = prop is IndexerAccessorDeclaration ?
-						new Indexer(this, ((IndexerAccessorDeclaration)prop).Parameters.Count) :
+						new Indexer(this, ((IndexerAccessorDeclaration)prop).Parameters.Length) :
 						new Property(name, this);
 					properties.Add(name, property);
 				}
@@ -1688,11 +1688,11 @@ namespace Osprey.Members
 		protected PropertyAccessor(IndexerAccessorDeclaration node)
 			: base(Indexer.MemberName, node.IsSetter ? MemberKind.IndexerSetter : MemberKind.IndexerGetter, node, node.Access)
 		{
-			var parameters = new Parameter[node.Parameters.Count + (node.IsSetter ? 1 : 0)];
-			for (var i = 0; i < node.Parameters.Count; i++)
+			var parameters = new Parameter[node.Parameters.Length + (node.IsSetter ? 1 : 0)];
+			for (var i = 0; i < node.Parameters.Length; i++)
 				parameters[i] = node.Parameters[i];
 			if (node.IsSetter)
-				parameters[node.Parameters.Count] = new Parameter("value", null)
+				parameters[node.Parameters.Length] = new Parameter("value", null)
 				{
 					StartIndex = node.StartIndex,
 					EndIndex = node.EndIndex,
@@ -1751,7 +1751,7 @@ namespace Osprey.Members
 				if (method.IsGenerator)
 					throw new CompileTimeException(method.Yields[0], "A property setter may not be a generator.");
 
-				Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValues.Count > 0;
+				Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValues.Length > 0;
 				if (method.Returns != null && method.Returns.Any(hasReturnValue))
 					throw new CompileTimeException(method.Returns.First(hasReturnValue),
 						"A property setter can only contain empty return statements.");
@@ -1866,7 +1866,7 @@ namespace Osprey.Members
 		public IndexerAccessor(IndexerAccessorDeclaration node)
 			: base(node)
 		{
-			argCount = node.Parameters.Count;
+			argCount = node.Parameters.Length;
 		}
 
 		internal IndexerAccessor(int argCount, ClassMemberMethod method, bool isSetter)
@@ -1915,8 +1915,8 @@ namespace Osprey.Members
 			};
 			this.IsStatic = node.IsStatic;
 
-			var parameters = new Parameter[node.Parameters.Count];
-			for (var i = 0; i < node.Parameters.Count; i++)
+			var parameters = new Parameter[node.Parameters.Length];
+			for (var i = 0; i < node.Parameters.Length; i++)
 			{
 				var param = node.Parameters[i];
 				method.Body.DeclareVariable(new Variable(param.DeclaredName, param));
@@ -1969,7 +1969,7 @@ namespace Osprey.Members
 			if (method.IsGenerator)
 				throw new CompileTimeException(method.Yields[0], "Constructors are not allowed to be generators.");
 
-			Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValues.Count > 0;
+			Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValues.Length > 0;
 			if (method.Returns != null && method.Returns.Any(hasReturnValue))
 				throw new CompileTimeException(method.Returns.First(hasReturnValue),
 					"Constructors can only contain empty return statements.");
@@ -2224,12 +2224,12 @@ namespace Osprey.Members
 			var baseCtor = BaseType.FindConstructor(null, 0, this, this);
 
 			// Add a statement to this constructor body that calls the base constructor
-			var ctorBody = new List<Statement>
+			var ctorBody = new Statement[]
 			{
 				new ExpressionStatement(
 					new InvocationExpression( // new base();
 						new InstanceMemberAccess(new ThisAccess(), (Class)BaseType, baseCtor.Group), // base.'.new'
-						new List<Expression>() // ()
+						EmptyArrays.Expressions // ()
 					)
 				),
 				new ExpressionStatement(

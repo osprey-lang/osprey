@@ -488,7 +488,7 @@ namespace Osprey.Members
 		}
 		internal Namespace GetNamespace(string name, bool imported)
 		{
-			var parts = name.Split('.');
+			var parts = name.Split(Compiler.Dot);
 
 			return GetNamespace(parts, 0, imported);
 		}
@@ -1379,7 +1379,7 @@ namespace Osprey.Members
 				var closureLocalAccess = new LocalVariableAccess(ClosureVariable, LocalAccessKind.ClosureLocal);
 				closureLocalAccess.IsAssignment = true;
 
-				var newExpr = new ObjectCreationExpression(null, new List<Expression>(), false) { Constructor = ctorMethod };
+				var newExpr = new ObjectCreationExpression(null, EmptyArrays.Expressions, false) { Constructor = ctorMethod };
 				init.Add(new AssignmentExpression(closureLocalAccess, newExpr)
 					{
 						IgnoreValue = true,
@@ -1476,12 +1476,12 @@ namespace Osprey.Members
 			var baseCtor = closure.BaseType.FindConstructor(null, 0, closure, closure);
 
 			// Add a statement to this constructor body that calls the base constructor
-			var ctorBody = new List<Statement>
+			var ctorBody = new Statement[]
 			{
 				new ExpressionStatement(
 					new InvocationExpression( // new base();
 						new InstanceMemberAccess(new ThisAccess(), (Class)closure.BaseType, baseCtor.Group), // base.'.new'
-						new List<Expression>() // ()
+						EmptyArrays.Expressions // ()
 					)
 				)
 			};

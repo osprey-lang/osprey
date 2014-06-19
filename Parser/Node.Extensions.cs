@@ -16,7 +16,7 @@ namespace Osprey.Nodes
 	public sealed class ExternBody : Block
 	{
 		public ExternBody(StringLiteral entryPoint, Expression locals, Expression maxStack)
-			: base((List<Statement>)null)
+			: base((Statement[])null)
 		{
 			EntryPoint = entryPoint;
 			Locals = locals;

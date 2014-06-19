@@ -370,7 +370,7 @@ namespace Osprey.Members
 
 		internal void AddReturn(ReturnStatement value)
 		{
-			if (value.ReturnValues.Count > 0 && Yields != null)
+			if (value.ReturnValues.Length > 0 && Yields != null)
 				throw new CompileTimeException(value,
 					"Generator methods may only contain empty return statements.");
 
@@ -381,7 +381,7 @@ namespace Osprey.Members
 
 		internal void AddYield(YieldStatement value)
 		{
-			Func<ReturnStatement, bool> hasReturnValue = stmt => stmt.ReturnValues.Count > 0;
+			Func<ReturnStatement, bool> hasReturnValue = stmt => stmt.ReturnValues.Length > 0;
 
 			if (Returns != null && Returns.Any(hasReturnValue))
 				throw new CompileTimeException(Returns.First(hasReturnValue),
@@ -393,13 +393,13 @@ namespace Osprey.Members
 			Yields.Add(value);
 		}
 
-		internal void VerifyArgumentRefness(List<Expression> args)
+		internal void VerifyArgumentRefness(Expression[] args)
 		{
 			if (Signature.Splat == Splat.Beginning)
 			{
 				// Parameters that get packed into a list must be by value
 				var ia = 0; // Argument index
-				while (ia < args.Count - Signature.ParameterCount + 1)
+				while (ia < args.Length - Signature.ParameterCount + 1)
 				{
 					if (args[ia] is RefExpression)
 						ErrorWrongRefness(ia, args[ia], false);
@@ -408,7 +408,7 @@ namespace Osprey.Members
 
 				// But required parameters may be by reference
 				var ip = 1; // Parameter index (param 0 is the variadic param)
-				while (ia < args.Count)
+				while (ia < args.Length)
 				{
 					if ((args[ia] is RefExpression) != Parameters[ip].IsByRef)
 						ErrorWrongRefness(ia, args[ia], Parameters[ip].IsByRef);
@@ -427,7 +427,7 @@ namespace Osprey.Members
 					i++;
 				}
 				// But not the parameters that get packed into a list
-				while (i < args.Count)
+				while (i < args.Length)
 				{
 					if (args[i] is RefExpression)
 						ErrorWrongRefness(i, args[i], false);
@@ -439,7 +439,7 @@ namespace Osprey.Members
 				// Skip missing arguments; if we've found this overload
 				// through normal overload resolution, then those arguments
 				// must be optional (and optional params are never by ref).
-				var max = Math.Min(args.Count, Signature.ParameterCount);
+				var max = Math.Min(args.Length, Signature.ParameterCount);
 				for (var i = 0; i < max; i++)
 					if ((args[i] is RefExpression) != Parameters[i].IsByRef)
 						ErrorWrongRefness(i, args[i], Parameters[i].IsByRef);
@@ -694,10 +694,10 @@ namespace Osprey.Members
 			{
 				var generatorLocal = new Variable("<generator>", (VariableDeclarator)null);
 
-				var body = new List<Statement>();
+				var body = new TempList<Statement>();
 				body.Add(new ExpressionStatement(new AssignmentExpression(
 					new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing) { IsAssignment = true },
-					new ObjectCreationExpression(null, new List<Expression>(), false) { Constructor = ctor }
+					new ObjectCreationExpression(null, EmptyArrays.Expressions, false) { Constructor = ctor }
 				) { IgnoreValue = true }));
 
 				if (hasThisField)
@@ -719,13 +719,13 @@ namespace Osprey.Members
 
 				body.Add(new ReturnStatement(new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing)));
 
-				block = new Block(body);
+				block = new Block(body.ToArray());
 			}
 			else
 			{
-				block = new Block(new List<Statement>
+				block = new Block(new Statement[]
 				{
-					new ReturnStatement(new ObjectCreationExpression(null, new List<Expression>(), false) { Constructor = ctor })
+					new ReturnStatement(new ObjectCreationExpression(null, EmptyArrays.Expressions, false) { Constructor = ctor })
 				});
 			}
 
@@ -822,7 +822,7 @@ namespace Osprey.Members
 			if (parameters != null)
 				this.Parameters = (Parameter[])parameters.Clone();
 			else
-				this.Parameters = new Parameter[0];
+				this.Parameters = EmptyArrays.Parameters;
 		}
 
 		// Should only contain labels and instructions

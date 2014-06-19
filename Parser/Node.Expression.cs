@@ -1759,9 +1759,9 @@ namespace Osprey.Nodes
 	{
 		public QualifiedName(string value)
 		{
-			Parts = value.Split('.');
+			Parts = value.Split(Compiler.Dot);
 		}
-		public QualifiedName(IEnumerable<string> parts)
+		public QualifiedName(string[] parts)
 		{
 			Parts = parts.ToArray();
 		}
@@ -1785,7 +1785,7 @@ namespace Osprey.Nodes
 		{
 			IsGlobal = global;
 		}
-		public TypeName(IEnumerable<string> parts, bool global)
+		public TypeName(string[] parts, bool global)
 			: base(parts)
 		{
 			IsGlobal = global;
@@ -1809,7 +1809,7 @@ namespace Osprey.Nodes
 	{
 		// 'body' can be either a Block or an ExpressionStatement.
 		// Note that when compiling, the body is always a Block, which simplifies name resolution.
-		public LambdaExpression(List<Parameter> parameters, Splat splat, Statement body)
+		public LambdaExpression(Parameter[] parameters, Splat splat, Statement body)
 		{
 			Parameters = parameters;
 			Splat = splat;
@@ -1817,7 +1817,7 @@ namespace Osprey.Nodes
 		}
 
 		/// <summary>The parameters of the lambda.</summary>
-		public List<Parameter> Parameters;
+		public Parameter[] Parameters;
 
 		/// <summary>The location of the splat, if any.</summary>
 		public Splat Splat;
@@ -1832,12 +1832,12 @@ namespace Osprey.Nodes
 		{
 			var sb = new StringBuilder("@");
 
-			if (Parameters.Count == 1 && Splat == Splat.None)
+			if (Parameters.Length == 1 && Splat == Splat.None)
 			{
 				sb.Append(Parameters[0]);
 				sb.Append(' ');
 			}
-			else if (Parameters.Count > 0)
+			else if (Parameters.Length > 0)
 			{
 				if (Splat == Splat.Beginning)
 					sb.Append("(...");
@@ -1979,14 +1979,11 @@ namespace Osprey.Nodes
 			var returnValue = new SafeAccess(new LocalVariableAccess(param, LocalAccessKind.NonCapturing));
 			returnValue.Chain = SafeAccessChain; // Overwrite the chain; no need to copy things
 
-			var returnStmt = new ReturnStatement(new List<Expression>(1));
-			returnStmt.ReturnValues.Add(returnValue);
+			var returnStmt = new ReturnStatement(returnValue);
 
-			var bodyBlock = new Block();
-			bodyBlock.Statements.Add(returnStmt);
+			var bodyBlock = new Block(returnStmt);
 
-			var parameters = new List<Parameter> { paramDecl };
-			var funcDecl = new LocalFunctionDeclaration(funcName, parameters, Splat.None, bodyBlock)
+			var funcDecl = new LocalFunctionDeclaration(funcName, new[] { paramDecl }, Splat.None, bodyBlock)
 			{
 				StartIndex = this.StartIndex,
 				EndIndex = this.EndIndex,
@@ -2076,14 +2073,14 @@ namespace Osprey.Nodes
 
 	public sealed class UseInExpression : Expression
 	{
-		public UseInExpression(List<VariableDeclarator> variables, Expression inner)
+		public UseInExpression(VariableDeclarator[] variables, Expression inner)
 		{
 			this.Variables = variables;
 			this.Inner = inner;
 		}
 
 		/// <summary>The variables declared for use in this expression.</summary>
-		private List<VariableDeclarator> Variables;
+		private VariableDeclarator[] Variables;
 		/// <summary>The expression following the 'in' keyword; the result expression.</summary>
 		private Expression Inner;
 
@@ -2140,7 +2137,7 @@ namespace Osprey.Nodes
 				new SimpleLocalVariableDeclaration(false, vars)
 				{
 					StartIndex = vars[0].StartIndex,
-					EndIndex = vars[vars.Count - 1].EndIndex,
+					EndIndex = vars[vars.Length - 1].EndIndex,
 					Document = this.Document
 				}
 			);
@@ -2743,7 +2740,7 @@ namespace Osprey.Nodes
 
 	public sealed class IndexerAccess : AssignableExpression
 	{
-		public IndexerAccess(Expression inner, List<Expression> arguments)
+		public IndexerAccess(Expression inner, Expression[] arguments)
 		{
 			Inner = inner;
 			Arguments = arguments;
@@ -2752,7 +2749,7 @@ namespace Osprey.Nodes
 		/// <summary>The expression whose indexer is being accessed.</summary>
 		public Expression Inner;
 		/// <summary>The arguments for the indexer.</summary>
-		public List<Expression> Arguments;
+		public Expression[] Arguments;
 
 		// This field is only set if the indexer is being accessed non-virtually
 		// through a known type.
@@ -2765,7 +2762,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].FoldConstant();
 
 			return this;
@@ -2806,7 +2803,7 @@ namespace Osprey.Nodes
 					throw new CompileTimeException(Inner, string.Format("The member '{0}' is not accessible in this context.",
 						inaccessibleMember.FullName));
 
-				var argCount = Arguments.Count;
+				var argCount = Arguments.Length;
 				var indexer = indexerMember.Kind == MemberKind.IndexerMember ?
 					((IndexerMember)indexerMember).GetIndexer(argCount) :
 					null;
@@ -2829,7 +2826,7 @@ namespace Osprey.Nodes
 					this.indexer = indexer;
 			}
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 
 			return this;
@@ -2838,7 +2835,7 @@ namespace Osprey.Nodes
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
 			Inner = Inner.TransformClosureLocals(currentBlock, forGenerator);
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
 			return this;
 		}
@@ -2853,9 +2850,9 @@ namespace Osprey.Nodes
 				arg.Compile(compiler, method);
 
 			if (indexer != null)
-				method.Append(new StaticCall(indexer.GetterId, Arguments.Count));
+				method.Append(new StaticCall(indexer.GetterId, Arguments.Length));
 			else
-				method.Append(new LoadIndexer(Arguments.Count));
+				method.Append(new LoadIndexer(Arguments.Length));
 		}
 
 		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
@@ -2889,7 +2886,7 @@ namespace Osprey.Nodes
 		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)
 		{
 			LocalVariable instLocal = null;
-			var argLocals = new LocalVariable[Arguments.Count];
+			var argLocals = new LocalVariable[Arguments.Length];
 
 			Inner.Compile(compiler, method); // Evaluate the instance
 			if (!Inner.CanSafelyInline)
@@ -2899,7 +2896,7 @@ namespace Osprey.Nodes
 				method.Append(new StoreLocal(instLocal)); // Store it temporarily
 			}
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 			{
 				var arg = Arguments[i];
 				arg.Compile(compiler, method); // Evaluate the argument
@@ -2911,7 +2908,7 @@ namespace Osprey.Nodes
 				}
 			}
 
-			method.Append(new LoadIndexer(Arguments.Count)); // inner[args...]
+			method.Append(new LoadIndexer(Arguments.Length)); // inner[args...]
 
 			value.Compile(compiler, method); // Evaluate the value
 			method.Append(SimpleInstruction.FromOperator(op)); // inner[args...] op value = finalValue
@@ -2927,7 +2924,7 @@ namespace Osprey.Nodes
 				instLocal.Done();
 			}
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				if (argLocals[i] == null)
 					Arguments[i].Compile(compiler, method);
 				else
@@ -2944,7 +2941,7 @@ namespace Osprey.Nodes
 
 		public override LocalVariable[] CompileParallelFirstEvaluation(Compiler compiler, MethodBuilder method)
 		{
-			List<LocalVariable> locals = new List<LocalVariable>();
+			var locals = new TempList<LocalVariable>();
 
 			if (!Inner.CanSafelyInline)
 			{
@@ -2995,20 +2992,20 @@ namespace Osprey.Nodes
 		{
 			if (indexer != null)
 			{
-				method.Append(new StaticCall(indexer.SetterId, Arguments.Count + 1));
+				method.Append(new StaticCall(indexer.SetterId, Arguments.Length + 1));
 				method.Append(new SimpleInstruction(Opcode.Pop));
 			}
 			else
-				method.Append(new StoreIndexer(Arguments.Count));
+				method.Append(new StoreIndexer(Arguments.Length));
 		}
 	}
 
 	public sealed class ObjectCreationExpression : Expression
 	{
-		public ObjectCreationExpression(TypeName type, List<Expression> arguments)
+		public ObjectCreationExpression(TypeName type, Expression[] arguments)
 			: this(type, arguments, arguments.HasRefArguments())
 		{ }
-		public ObjectCreationExpression(TypeName type, List<Expression> arguments, bool hasRefArgs)
+		public ObjectCreationExpression(TypeName type, Expression[] arguments, bool hasRefArgs)
 		{
 			Type = type;
 			Arguments = arguments;
@@ -3019,7 +3016,7 @@ namespace Osprey.Nodes
 		public TypeName Type;
 
 		/// <summary>The arguments passed to the constructor.</summary>
-		public List<Expression> Arguments;
+		public Expression[] Arguments;
 
 		public bool HasRefArgs;
 
@@ -3044,7 +3041,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].FoldConstant();
 
 			if (Initializer != null)
@@ -3057,10 +3054,10 @@ namespace Osprey.Nodes
 		{
 			var type = context.GetContainingNamespace().ResolveTypeName(Type, document);
 			bool _;
-			Constructor = type.FindConstructor(Type, Arguments.Count,
+			Constructor = type.FindConstructor(Type, Arguments.Length,
 				instClass: type as Class, fromClass: context.GetContainingClass(out _));
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 
 			if (HasRefArgs || Constructor.HasRefParams)
@@ -3074,7 +3071,7 @@ namespace Osprey.Nodes
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			if (Initializer != null)
@@ -3089,7 +3086,7 @@ namespace Osprey.Nodes
 				arg.Compile(compiler, method);
 
 			var type = Type != null ? Type.Type : Constructor.Group.ParentAsClass;
-			method.Append(new NewObject(method.Module.GetTypeId(type), Arguments.Count));
+			method.Append(new NewObject(method.Module.GetTypeId(type), Arguments.Length));
 
 			if (Initializer != null)
 				Initializer.Compile(compiler, method);
@@ -3098,16 +3095,16 @@ namespace Osprey.Nodes
 
 	public sealed class ObjectInitializer : ParseNode
 	{
-		public ObjectInitializer(List<MemberInitializer> members)
+		public ObjectInitializer(MemberInitializer[] members)
 		{
 			Members = members;
 		}
 
-		public List<MemberInitializer> Members;
+		public MemberInitializer[] Members;
 
 		public override string ToString(int indent)
 		{
-			if (Members.Count == 0)
+			if (Members.Length == 0)
 				return "with { }";
 
 			return "with { " + Members.JoinString(", ", indent + 1) + " }";
@@ -3509,10 +3506,10 @@ namespace Osprey.Nodes
 
 	public sealed class InvocationExpression : Expression
 	{
-		public InvocationExpression(Expression inner, List<Expression> args)
+		public InvocationExpression(Expression inner, Expression[] args)
 			: this(inner, args, args.HasRefArguments())
 		{ }
-		public InvocationExpression(Expression inner, List<Expression> args, bool hasRefArgs)
+		public InvocationExpression(Expression inner, Expression[] args, bool hasRefArgs)
 		{
 			Inner = inner;
 			Arguments = args;
@@ -3523,7 +3520,7 @@ namespace Osprey.Nodes
 		public Expression Inner;
 
 		/// <summary>The argument passed to the function.</summary>
-		public List<Expression> Arguments;
+		public Expression[] Arguments;
 
 		/// <summary>Whether the invocation uses ref arguments.</summary>
 		public bool HasRefArgs;
@@ -3537,7 +3534,7 @@ namespace Osprey.Nodes
 		{
 			Inner = Inner.FoldConstant();
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].FoldConstant();
 
 			return this;
@@ -3554,11 +3551,11 @@ namespace Osprey.Nodes
 				if (access.Member.Kind == MemberKind.MethodGroup)
 				{
 					var method = (MethodGroup)access.Member;
-					var overload = method.FindOverload(Arguments.Count, true);
+					var overload = method.FindOverload(Arguments.Length, true);
 					if (overload == null)
 						throw new CompileTimeException(Inner,
 							string.Format("The method '{0}.{1}' does not contain an overload that takes {2} arguments.",
-								method.ParentAsClass.FullName, method.Name, Arguments.Count));
+								method.ParentAsClass.FullName, method.Name, Arguments.Length));
 					if (access.Inner is BaseAccess && overload.IsAbstract)
 						throw new CompileTimeException(Inner,
 							string.Format("The method '{0}.{1}' is abstract and cannot be called through 'base'.",
@@ -3570,10 +3567,10 @@ namespace Osprey.Nodes
 			else if (Inner is StaticMethodAccess)
 			{
 				var access = (StaticMethodAccess)Inner;
-				var overload = access.Method.FindOverload(Arguments.Count, true);
+				var overload = access.Method.FindOverload(Arguments.Length, true);
 				if (overload == null)
 					throw new CompileTimeException(Inner, string.Format("The method '{0}' does not take {1} arguments.",
-						access.Method.FullName, Arguments.Count));
+						access.Method.FullName, Arguments.Length));
 				if (HasRefArgs || overload.HasRefParams)
 					overload.VerifyArgumentRefness(Arguments);
 			}
@@ -3581,9 +3578,9 @@ namespace Osprey.Nodes
 			{
 				var access = (LocalFunctionAccess)Inner;
 				var method = access.Function.Method;
-				if (!method.Accepts(Arguments.Count))
+				if (!method.Accepts(Arguments.Length))
 					throw new CompileTimeException(Inner, string.Format("The local function '{0}' does not take {1} arguments.",
-						access.Function.Name, Arguments.Count));
+						access.Function.Name, Arguments.Length));
 				if (HasRefArgs || method.HasRefParams)
 					method.VerifyArgumentRefness(Arguments);
 			}
@@ -3620,10 +3617,10 @@ namespace Osprey.Nodes
 					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator.",
 						instType.FullName));
 
-				var invocator = ((MethodGroup)invocators).FindOverload(Arguments.Count, true);
+				var invocator = ((MethodGroup)invocators).FindOverload(Arguments.Length, true);
 				if (invocator == null)
 					throw new CompileTimeException(Inner, string.Format("The class '{0}' does not define an invocator that takes {1} arguments.",
-						instType.FullName, Arguments.Count));
+						instType.FullName, Arguments.Length));
 
 				if (HasRefArgs || invocator.HasRefParams)
 					invocator.VerifyArgumentRefness(Arguments);
@@ -3631,7 +3628,7 @@ namespace Osprey.Nodes
 				Inner = new InstanceMemberAccess(Inner, ((MethodGroup)invocators).ParentAsClass, invocators);
 			}
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 
 			return this;
@@ -3641,7 +3638,7 @@ namespace Osprey.Nodes
 		{
 			Inner = Inner.TransformClosureLocals(currentBlock, forGenerator);
 
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
 
 			return this;
@@ -3655,12 +3652,12 @@ namespace Osprey.Nodes
 				if (access.Member.Kind == MemberKind.MethodGroup)
 				{
 					var methodGroup = (MethodGroup)access.Member;
-					var overload = methodGroup.FindOverload(Arguments.Count, true);
+					var overload = methodGroup.FindOverload(Arguments.Length, true);
 					if (!overload.IsVirtualCall || access.IsBaseAccess)
 					{
 						access.Inner.Compile(compiler, method); // Evaluate the instance
 						CompileArguments(compiler, method); // Evaluate each argument
-						method.Append(new StaticCall(method.Module.GetMethodId(methodGroup), Arguments.Count)); // Call it!
+						method.Append(new StaticCall(method.Module.GetMethodId(methodGroup), Arguments.Length)); // Call it!
 						return; // nothing more to do here
 					}
 				}
@@ -3674,7 +3671,7 @@ namespace Osprey.Nodes
 				var methodGroup = ((StaticMethodAccess)Inner).Method;
 
 				CompileArguments(compiler, method); // Evaluate each argument
-				method.Append(new StaticCall(method.Module.GetMethodId(methodGroup), Arguments.Count)); // Call it!
+				method.Append(new StaticCall(method.Module.GetMethodId(methodGroup), Arguments.Length)); // Call it!
 				return;
 			}
 			else if (Inner is MemberAccess)
@@ -3690,14 +3687,14 @@ namespace Osprey.Nodes
 			// Default compilation
 			Inner.Compile(compiler, method); // Evaluate the invokable expression
 			CompileArguments(compiler, method); // Evaluate each argument
-			method.Append(new Call(Arguments.Count)); // !ti llaC
+			method.Append(new Call(Arguments.Length)); // !ti llaC
 		}
 
 		private void CompileAsMemberCall(Compiler compiler, MethodBuilder method, Expression instance, string memberName)
 		{
 			instance.Compile(compiler, method); // Evaluate the instance expression
 			CompileArguments(compiler, method); // Evaluate each argument
-			method.Append(new CallMember(method.Module.GetStringId(memberName), Arguments.Count)); // Call the member!
+			method.Append(new CallMember(method.Module.GetStringId(memberName), Arguments.Length)); // Call the member!
 			return;
 		}
 
@@ -3724,13 +3721,13 @@ namespace Osprey.Nodes
 
 	public sealed class ListLiteralExpression : ListExpression, ILocalResultExpression
 	{
-		public ListLiteralExpression(List<Expression> values)
+		public ListLiteralExpression(Expression[] values)
 		{
 			Values = values;
 		}
 
 		/// <summary>The values contained in the list.</summary>
-		public List<Expression> Values;
+		public Expression[] Values;
 
 		private LocalVariable target;
 
@@ -3741,7 +3738,7 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			for (var i = 0; i < Values.Count; i++)
+			for (var i = 0; i < Values.Length; i++)
 				Values[i] = Values[i].FoldConstant();
 
 			return this;
@@ -3749,21 +3746,21 @@ namespace Osprey.Nodes
 
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			for (var i = 0; i < Values.Count; i++)
+			for (var i = 0; i < Values.Length; i++)
 				Values[i] = Values[i].ResolveNames(context, document, false, false);
 			return this;
 		}
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < Values.Count; i++)
+			for (var i = 0; i < Values.Length; i++)
 				Values[i] = Values[i].TransformClosureLocals(currentBlock, forGenerator);
 			return this;
 		}
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			if (Values.Count == 0)
+			if (Values.Length == 0)
 			{
 				method.Append(new CreateList(0));
 				if (target != null)
@@ -3774,13 +3771,13 @@ namespace Osprey.Nodes
 				// Create the list
 				var listLocal = target ?? method.GetAnonymousLocal();
 
-				method.Append(new CreateList(unchecked((uint)Values.Count))); // Create the list
+				method.Append(new CreateList(unchecked((uint)Values.Length))); // Create the list
 				method.Append(new StoreLocal(listLocal)); // Store it in the local
 
 				// Get a MethodGroup for aves.List.add
 				var listAdd = (MethodGroup)compiler.ListType.GetMember("add");
 
-				for (var i = 0; i < Values.Count; i++)
+				for (var i = 0; i < Values.Length; i++)
 				{
 					method.Append(new LoadLocal(listLocal)); // Load the list
 					Values[i].Compile(compiler, method); // Evaluate the value
@@ -3946,17 +3943,17 @@ namespace Osprey.Nodes
 
 	public sealed class ListComprehension : ListExpression, ILocalResultExpression
 	{
-		public ListComprehension(List<Expression> expr, List<ListCompPart> parts)
+		public ListComprehension(Expression[] expr, ListCompPart[] parts)
 		{
 			Expressions = expr;
 			Parts = parts;
 		}
 
 		/// <summary>The expressions used to generate values for the comprehension.</summary>
-		public List<Expression> Expressions;
+		public Expression[] Expressions;
 
 		/// <summary>The iterators ("for ... in") and conditions ("where ...") associated with the comprehension.</summary>
-		public List<ListCompPart> Parts;
+		public ListCompPart[] Parts;
 		
 		internal BlockSpace ImplicitBlock;
 
@@ -3970,10 +3967,10 @@ namespace Osprey.Nodes
 
 		public override Expression FoldConstant()
 		{
-			for (var i = 0; i < Expressions.Count; i++)
+			for (var i = 0; i < Expressions.Length; i++)
 				Expressions[i] = Expressions[i].FoldConstant();
 
-			for (var i = 0; i < Parts.Count; i++)
+			for (var i = 0; i < Parts.Length; i++)
 				Parts[i].FoldConstant();
 
 			return this;
@@ -3993,15 +3990,15 @@ namespace Osprey.Nodes
 				else
 					ImplicitBlock = new BlockSpace(new Block(), contextBlock);
 				var additionalAccessStart = Expressions[0].StartIndex;
-				var additionalAccessEnd = Expressions[Expressions.Count - 1].EndIndex;
+				var additionalAccessEnd = Expressions[Expressions.Length - 1].EndIndex;
 				foreach (var iter in Parts)
 					iter.DeclareNames(ImplicitBlock, additionalAccessStart, additionalAccessEnd);
 			}
 
-			for (var i = 0; i < Expressions.Count; i++)
+			for (var i = 0; i < Expressions.Length; i++)
 				Expressions[i] = Expressions[i].ResolveNames(ImplicitBlock, document, false, false);
 
-			for (var i = 0; i < Parts.Count; i++)
+			for (var i = 0; i < Parts.Length; i++)
 				Parts[i].ResolveNames(ImplicitBlock, document);
 
 			return this;
@@ -4009,10 +4006,10 @@ namespace Osprey.Nodes
 
 		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < Expressions.Count; i++)
+			for (var i = 0; i < Expressions.Length; i++)
 				Expressions[i] = Expressions[i].TransformClosureLocals(ImplicitBlock, forGenerator);
 
-			for (var i = 0; i < Parts.Count; i++)
+			for (var i = 0; i < Parts.Length; i++)
 				Parts[i].TransformClosureLocals(ImplicitBlock, forGenerator);
 
 			return this;
@@ -4066,7 +4063,7 @@ namespace Osprey.Nodes
 
 		protected void CompileNext(Compiler compiler, MethodBuilder method, int index, ListComprehension parent, LocalVariable listLoc)
 		{
-			if (index == parent.Parts.Count - 1)
+			if (index == parent.Parts.Length - 1)
 				parent.CompileBody(compiler, method, listLoc);
 			else
 				parent.Parts[index + 1].Compile(compiler, method, index + 1, parent, listLoc);
@@ -4075,14 +4072,14 @@ namespace Osprey.Nodes
 
 	public sealed class ListCompIterator : ListCompPart
 	{
-		public ListCompIterator(List<string> variables, Expression expr)
+		public ListCompIterator(string[] variables, Expression expr)
 		{
 			VariableNames = variables;
 			Expression = expr;
 		}
 
 		/// <summary>The variables to be iterated over.</summary>
-		public List<string> VariableNames;
+		public string[] VariableNames;
 
 		/// <summary>The expression that makes up the list to iterate over.</summary>
 		public Expression Expression;
@@ -4106,8 +4103,8 @@ namespace Osprey.Nodes
 
 		public override void DeclareNames(BlockSpace parent, int additionalAccessStart, int additionalAccessEnd)
 		{
-			Variables = new Variable[VariableNames.Count];
-			for (var i = 0; i < VariableNames.Count; i++)
+			Variables = new Variable[VariableNames.Length];
+			for (var i = 0; i < VariableNames.Length; i++)
 			{
 				var variable = new Variable(VariableNames[i],
 					new VariableDeclarator(VariableNames[i], null)
@@ -4217,7 +4214,7 @@ namespace Osprey.Nodes
 				method.Append(new LoadLocal(iterLoc));
 				method.Append(new LoadMember(method.Module.GetStringId("current")));
 
-				if (VariableNames.Count == 1)
+				if (VariableNames.Length == 1)
 					method.Append(new StoreLocal(method.GetLocal(VariableNames[0])));
 				else
 					compiler.Unpack(method, VariableNames);
@@ -4281,13 +4278,13 @@ namespace Osprey.Nodes
 
 	public sealed class HashLiteralExpression : Expression, ILocalResultExpression
 	{
-		public HashLiteralExpression(List<HashMember> members)
+		public HashLiteralExpression(HashMember[] members)
 		{
 			Members = members;
 		}
 
 		/// <summary>The members of the hash.</summary>
-		public List<HashMember> Members;
+		public HashMember[] Members;
 
 		private LocalVariable target;
 
@@ -4300,7 +4297,7 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			if (Members.Count == 0)
+			if (Members.Length == 0)
 				return "{}";
 			else
 				return "{" + Members.JoinString(", ", indent) + "}";
@@ -4338,7 +4335,7 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			if (Members.Count == 0)
+			if (Members.Length == 0)
 			{
 				method.Append(new CreateHash(0));
 				if (target != null)
@@ -4349,7 +4346,7 @@ namespace Osprey.Nodes
 				// Create the hash
 				var hashLocal = target ?? method.GetAnonymousLocal();
 
-				method.Append(new CreateHash(unchecked((uint)Members.Count))); // Create the hash
+				method.Append(new CreateHash(unchecked((uint)Members.Length))); // Create the hash
 				method.Append(new StoreLocal(hashLocal)); // Store it in the local
 
 				// Get a MethodGroup for aves.Hash.add
@@ -4524,7 +4521,7 @@ namespace Osprey.Nodes
 				foreach (var arg in nextCall.Arguments)
 					arg.Compile(compiler, method); // First, load each argument
 				// Then call the member
-				method.Append(new CallMember(memberId, nextCall.Arguments.Count));
+				method.Append(new CallMember(memberId, nextCall.Arguments.Length));
 				return 2; // skip this and the next
 			}
 
@@ -4535,14 +4532,14 @@ namespace Osprey.Nodes
 
 	public sealed class SafeInvocation : SafeNode
 	{
-		public SafeInvocation(List<Expression> args, bool isSafe)
+		public SafeInvocation(Expression[] args, bool isSafe)
 			: base(isSafe)
 		{
 			Arguments = args;
 		}
 
 		/// <summary>The arguments passed into the call.</summary>
-		public List<Expression> Arguments;
+		public Expression[] Arguments;
 
 		public override string ToString(int indent)
 		{
@@ -4551,19 +4548,19 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
 		}
 
@@ -4571,21 +4568,21 @@ namespace Osprey.Nodes
 		{
 			foreach (var arg in Arguments)
 				arg.Compile(compiler, method);
-			method.Append(new Call(Arguments.Count));
+			method.Append(new Call(Arguments.Length));
 			return 1;
 		}
 	}
 
 	public sealed class SafeIndexerAccess : SafeNode
 	{
-		public SafeIndexerAccess(List<Expression> args, bool isSafe)
+		public SafeIndexerAccess(Expression[] args, bool isSafe)
 			: base(isSafe)
 		{
 			Arguments = args;
 		}
 
 		/// <summary>The arguments passed to the indexer.</summary>
-		public List<Expression> Arguments;
+		public Expression[] Arguments;
 
 		public override string ToString(int indent)
 		{
@@ -4594,19 +4591,19 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
 		}
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < Arguments.Count; i++)
+			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].TransformClosureLocals(currentBlock, forGenerator);
 		}
 
@@ -4614,7 +4611,7 @@ namespace Osprey.Nodes
 		{
 			foreach (var arg in Arguments)
 				arg.Compile(compiler, method);
-			method.Append(new LoadIndexer(Arguments.Count));
+			method.Append(new LoadIndexer(Arguments.Length));
 			return 1;
 		}
 	}

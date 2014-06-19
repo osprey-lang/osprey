@@ -281,16 +281,83 @@ namespace Osprey
 
 		#endregion
 
-		private AssignableExpression EnsureAssignable(Expression expr, Token t)
+		#region Parse error helpers
+
+		internal void ParseError(int tokenIndex, string message)
+		{
+			ParseError(tok[tokenIndex], message);
+		}
+		internal void ParseError(int tokenIndex, string format, object arg0)
+		{
+			ParseError(tok[tokenIndex], format, arg0);
+		}
+		internal void ParseError(int tokenIndex, string format, object arg0, object arg1)
+		{
+			ParseError(tok[tokenIndex], format, arg0, arg1);
+		}
+		internal void ParseError(int tokenIndex, string format, object arg0, object arg1, object arg2)
+		{
+			ParseError(tok[tokenIndex], format, arg0, arg1, arg2);
+		}
+		internal void ParseError(int tokenIndex, string format, params object[] args)
+		{
+			ParseError(tok[tokenIndex], format, args);
+		}
+
+		internal void ParseError(Token token, string message)
+		{
+			throw new ParseException(token, message);
+		}
+		internal void ParseError(Token token, string format, object arg0)
+		{
+			throw new ParseException(token, string.Format(format, arg0));
+		}
+		internal void ParseError(Token token, string format, object arg0, object arg1)
+		{
+			throw new ParseException(token, string.Format(format, arg0, arg1));
+		}
+		internal void ParseError(Token token, string format, object arg0, object arg1, object arg2)
+		{
+			throw new ParseException(token, string.Format(format, arg0, arg1, arg2));
+		}
+		internal void ParseError(Token token, string format, params object[] args)
+		{
+			throw new ParseException(token, string.Format(format, args));
+		}
+
+		internal void ParseError(ParseNode node, string message)
+		{
+			throw new ParseException(node, message);
+		}
+		internal void ParseError(ParseNode node, string format, object arg0)
+		{
+			throw new ParseException(node, string.Format(format, arg0));
+		}
+		internal void ParseError(ParseNode node, string format, object arg0, object arg1)
+		{
+			throw new ParseException(node, string.Format(format, arg0, arg1));
+		}
+		internal void ParseError(ParseNode node, string format, object arg0, object arg1, object arg2)
+		{
+			throw new ParseException(node, string.Format(format, arg0, arg1, arg2));
+		}
+		internal void ParseError(ParseNode node, string format, params object[] args)
+		{
+			throw new ParseException(node, string.Format(format, args));
+		}
+
+		#endregion
+
+		private AssignableExpression EnsureAssignable(Expression expr)
 		{
 			if (expr is ThisAccess)
-				throw new ParseException(t, "Cannot assign to 'this'.");
+				ParseError(expr, "Cannot assign to 'this'.");
 			if (expr is BaseAccess)
-				throw new ParseException(t, "Cannot assign to 'base'.");
+				ParseError(expr, "Cannot assign to 'base'.");
 
 			var assignableExpr = expr as AssignableExpression;
 			if (assignableExpr == null)
-				throw new ParseException(t, "Can only assign to variables, members and indexers.");
+				ParseError(expr, "Can only assign to variables, members and indexers.");
 
 			return assignableExpr;
 		}
@@ -350,13 +417,16 @@ namespace Osprey
 				// [a, b] :: [c, d] => [a, b, c, d]
 				if (op == BinaryOperator.Concatenation)
 				{
-					if (leftInner is ListLiteralExpression && rightInner is ListLiteralExpression)
+					ListLiteralExpression leftList = leftInner as ListLiteralExpression,
+						rightList = rightInner as ListLiteralExpression;
+					if (leftList != null && rightList != null)
 					{
+						var resultValues = new Expression[leftList.Values.Length + rightList.Values.Length];
+						leftList.Values.CopyTo(resultValues, 0);
+						rightList.Values.CopyTo(resultValues, leftList.Values.Length);
 						var result = (ListLiteralExpression)
-							new ListLiteralExpression(new List<Expression>())
+							new ListLiteralExpression(resultValues)
 							.At(left.StartIndex, right.EndIndex, document);
-						result.Values.AddRange(((ListLiteralExpression)leftInner).Values);
-						result.Values.AddRange(((ListLiteralExpression)rightInner).Values);
 						return result;
 					}
 
@@ -454,11 +524,14 @@ namespace Osprey
 					fileNs.Namespaces.Add(ns);
 				}
 				else
-					throw new ParseException(tok[i], "Expected ';' or namespace body.");
+					ParseError(i, "Expected ';' or namespace body.");
 			}
 
+			var statements = new List<Statement>();
 			while (!Accept(i, TokenType.EOF, TokenType.CurlyClose))
-				ParseNamespaceMembers(ref i, fileNs, document.Statements);
+				ParseNamespaceMembers(ref i, fileNs, statements);
+
+			document.Statements = statements.ToArray();
 
 			Expect(i, TokenType.EOF);
 
@@ -473,28 +546,28 @@ namespace Osprey
 
 			// Keep in mind: integer literals cannot be negative!
 
-			Func<Token, int> tokenToField = (tok) =>
+			Func<Parser, Token, int> tokenToField = (_this, tok) =>
 			{
 				var value = IntegerLiteral.ParseToken(tok);
 				if (value.Type != ConstantValueType.Int)
-					throw new ParseException(tok, "Version number field must be of type Int.");
+					_this.ParseError(tok, "Version number field must be of type Int.");
 				if (value.IntValue > int.MaxValue)
-					throw new ParseException(tok, "Version number field out of range.");
+					_this.ParseError(tok, "Version number field out of range.");
 
 				return unchecked((int)value.IntValue);
 			};
 
-			major = tokenToField(Expect(ref i, TokenType.Integer));
+			major = tokenToField(this, Expect(ref i, TokenType.Integer));
 
 			Expect(ref i, TokenType.Colon);
 
-			minor = tokenToField(Expect(ref i, TokenType.Integer));
+			minor = tokenToField(this, Expect(ref i, TokenType.Integer));
 
 			if (Accept(ref i, TokenType.Colon))
-				build = tokenToField(Expect(ref i, TokenType.Integer));
+				build = tokenToField(this, Expect(ref i, TokenType.Integer));
 
 			if (Accept(ref i, TokenType.Colon))
-				revision = tokenToField(Expect(ref i, TokenType.Integer));
+				revision = tokenToField(this, Expect(ref i, TokenType.Integer));
 
 			Expect(ref i, TokenType.Semicolon);
 
@@ -505,7 +578,7 @@ namespace Osprey
 		{
 			int start = tok[i - 1].Index, end = tok[i - 1].EndIndex;
 
-			UseDirective result;
+			UseDirective result = null;
 			if (Accept(i, TokenType.String)) // use "<file name>";
 			{
 				var token = tok[i];
@@ -536,7 +609,7 @@ namespace Osprey
 					result = new UseModuleDirective(name);
 			}
 			else
-				throw new ParseException(tok[i], "Expected identifier, string or 'namespace'.");
+				ParseError(i, "Expected identifier, string or 'namespace'.");
 
 			result.StartIndex = start;
 			result.EndIndex = end;
@@ -553,7 +626,7 @@ namespace Osprey
 				if (Accept(i, TokenType.Public, TokenType.Protected, TokenType.Private))
 				{
 					if (output.Access != AccessLevel.None)
-						throw new ParseException(tok[i], "More than one access level modifier.");
+						ParseError(i, "More than one access level modifier.");
 					output.Access = tok[i].Type == TokenType.Public ? AccessLevel.Public :
 						tok[i].Type == TokenType.Protected ? AccessLevel.Protected :
 						AccessLevel.Private;
@@ -561,31 +634,31 @@ namespace Osprey
 				if (Accept(i, TokenType.Static))
 				{
 					if (output.IsStatic)
-						throw new ParseException(tok[i], "Duplicate static modifier.");
+						ParseError(i, "Duplicate static modifier.");
 					output.IsStatic = true;
 				}
 				if (Accept(i, TokenType.Abstract))
 				{
 					if (output.IsAbstract)
-						throw new ParseException(tok[i], "Duplicate abstract modifier.");
+						ParseError(i, "Duplicate abstract modifier.");
 					output.IsAbstract = true;
 				}
 				if (Accept(i, TokenType.Inheritable))
 				{
 					if (output.IsInheritable)
-						throw new ParseException(tok[i], "Duplicate inheritable modifier.");
+						ParseError(i, "Duplicate inheritable modifier.");
 					output.IsInheritable = true;
 				}
 				if (Accept(i, TokenType.Overridable))
 				{
 					if (output.IsOverridable)
-						throw new ParseException(tok[i], "Duplicate overridable modifier.");
+						ParseError(i, "Duplicate overridable modifier.");
 					output.IsOverridable = true;
 				}
 				if (Accept(i, TokenType.Override))
 				{
 					if (output.IsOverride)
-						throw new ParseException(tok[i], "Duplicate override modifier.");
+						ParseError(i, "Duplicate override modifier.");
 					output.IsOverride = true;
 				}
 				i++;
@@ -617,7 +690,7 @@ namespace Osprey
 				else if (Accept(i, TokenType.Function)) // global function
 				{
 					modifiers.ValidateForGlobal(tok[i]);
-					var func = ParseLocalFunctionDeclaration(ref i);
+					var func = ParseLocalFunctionDeclaration(ref i, isLocal: false);
 					var globalFunc = new GlobalFunctionDeclaration(modifiers.Access == AccessLevel.Public, func);
 					globalFunc.DocString = startTok.Documentation;
 					target.Functions.Add(globalFunc);
@@ -632,17 +705,18 @@ namespace Osprey
 					// which is not constant.
 					var decl = ParseLocalVariableDeclaration(ref i);
 
-					if (!(decl is SimpleLocalVariableDeclaration) || !((SimpleLocalVariableDeclaration)decl).IsConst)
+					var simpleDecl = decl as SimpleLocalVariableDeclaration;
+#if DEBUG
+					if (simpleDecl == null || !simpleDecl.IsConst)
 						throw new ParseException(decl,
 							"Internal error: global constant declaration should be a simple declaration and marked IsConst.");
-
-					var simpleDecl = (SimpleLocalVariableDeclaration)decl;
+#endif
 
 					var constDecl = new GlobalConstantDeclaration(modifiers.Access == AccessLevel.Public, simpleDecl)
-						{
-							Document = document
-						};
-					if (simpleDecl.Declarators.Count == 1)
+					{
+						Document = document
+					};
+					if (simpleDecl.Declarators.Length == 1)
 						constDecl.DocString = startTok.Documentation;
 
 					target.Constants.Add(constDecl);
@@ -650,16 +724,17 @@ namespace Osprey
 				else if (Accept(i, TokenType.Namespace)) // nomspace
 				{
 					if (!modifiers.IsEmpty)
-						throw new ParseException(tok[i], "Namespaces do not accept any modifiers.");
+						ParseError(i, "Namespaces do not accept any modifiers.");
 
 					i++;
 					var name = ParseQualifiedName(ref i);
 
 					var ns = new NamespaceDeclaration(name) { Document = document };
 					if (Accept(i, TokenType.Semicolon))
-						throw new ParseException(tok[i], "The file namespace declaration is only allowed at the beginning of the file, after any use declarations.");
+						ParseError(i,
+							"The file namespace declaration is only allowed at the beginning of the file, after any use declarations.");
 					else if (!Accept(i, TokenType.CurlyOpen))
-						throw new ParseException(tok[i], "Expected namespace body.");
+						ParseError(i, "Expected namespace body.");
 
 					Expect(ref i, TokenType.CurlyOpen);
 
@@ -670,16 +745,15 @@ namespace Osprey
 					target.Namespaces.Add(ns);
 				}
 				else if (!modifiers.IsEmpty)
-					throw new ParseException(tok[i], "Expected class, function or constant declaration.");
+					ParseError(i, "Expected class, function or constant declaration.");
 				else if (stmtList == null)
-					throw new ParseException(tok[i], "Expected class, function, constant or namespace declaration.");
+					ParseError(i, "Expected class, function, constant or namespace declaration.");
 				else
 				{
 					var statement = ParseStatement(ref i);
-					if (statement is SimpleLocalVariableDeclaration)
-						((SimpleLocalVariableDeclaration)statement).IsGlobal = true;
-					else if (statement is ParallelLocalVariableDeclaration)
-						((ParallelLocalVariableDeclaration)statement).IsGlobal = true;
+					var localVarDecl = statement as LocalVariableDeclaration;
+					if (localVarDecl != null)
+						localVarDecl.IsGlobal = true;
 					stmtList.Add(statement);
 				}
 			}
@@ -706,7 +780,7 @@ namespace Osprey
 			{
 				output.IsPrimitive = true;
 				if (output.IsInheritable || output.IsAbstract || output.IsStatic)
-					throw new ParseException(name, "Primitive classes cannot be marked inheritable, abstract or static.");
+					ParseError(name, "Primitive classes cannot be marked inheritable, abstract or static.");
 			}
 
 			Expect(ref i, TokenType.CurlyOpen);
@@ -747,7 +821,7 @@ namespace Osprey
 
 					var isConst = token.Type == TokenType.Const;
 					if (isConst && modifiers.IsStatic)
-						throw new ParseException(token, "A constant cannot be marked static.");
+						ParseError(token, "A constant cannot be marked static.");
 					// Note: ParseFieldDeclaration ignores the var/const keyword.
 					var field = ParseFieldDeclaration(ref i, isConst, modifiers.Access, modifiers.IsStatic);
 					field.StartIndex = token.Index;
@@ -782,11 +856,12 @@ namespace Osprey
 				else if (Accept(i, TokenType.Iter)) // iter declaration
 				{
 					if (!modifiers.IsEmpty)
-						throw new ParseException(tok[i], "Iterator declarations cannot have any modifiers.");
-					else if (target.Iterator != null)
-						throw new ParseException(tok[i], "A class can only declare one iterator.");
-					else if (Accept(i + 1, TokenType.ParenOpen))
-						throw new ParseException(tok[i + 1], "Iterators do not take any parameters.");
+						ParseError(i, "Iterator declarations cannot have any modifiers.");
+					if (target.Iterator != null)
+						ParseError(i, "A class can only declare one iterator.");
+					if (Accept(i + 1, TokenType.ParenOpen))
+						ParseError(i + 1, "Iterators do not take any parameters.");
+
 					int start = tok[i].Index, end = tok[i].EndIndex;
 					i++;
 					target.Iterator = new IteratorDeclaration(ParseBlockOrExtern(ref i))
@@ -817,7 +892,7 @@ namespace Osprey
 					if (Accept(i, TokenType.This))
 					{
 						if (modifiers.IsStatic)
-							throw new ParseException(tok[i], "This member cannot be declared static.");
+							ParseError(i, "This member cannot be declared static.");
 						var method = ParseMethod(ref i, ref modifiers);
 						method.DocString = startTok.Documentation;
 						target.Methods.Add(method);
@@ -856,14 +931,14 @@ namespace Osprey
 					target.Methods.Add(method);
 				}
 				else
-					throw new ParseException(tok[i], "Invalid token in class body.");
+					ParseError(i, "Invalid token in class body.");
 			} // while
 
 			if (SimplifiedTree && !target.IsStatic && target.Constructors.Count == 0)
 			{
 				// Add the default constructor, which is public and parameterless
 				target.Constructors.Add(new ConstructorDeclaration(AccessLevel.Public,
-					new List<ConstructorParam>(), Splat.None, new Block()) { Document = document });
+					EmptyArrays.CtorParameters, Splat.None, new Block()) { Document = document });
 			}
 		}
 
@@ -879,8 +954,8 @@ namespace Osprey
 
 			if (modifiers.IsStatic)
 			{
-				if (parameters.Parameters.Count > 0)
-					throw new ParseException(parameters.Parameters[0], "Static constructors cannot declare any parameters.");
+				if (parameters.Parameters.Length > 0)
+					ParseError(parameters.Parameters[0], "Static constructors cannot declare any parameters.");
 
 				// Note: ParseConstructorBody permits an optional 'new base(...);' as
 				// the first statement, so we can't use that here.
@@ -921,8 +996,8 @@ namespace Osprey
 
 		private ParameterInfo<ConstructorParam> ParseConstructorParameters(ref int i)
 		{
-			var output = new ParameterInfo<ConstructorParam>(new List<ConstructorParam>());
-			output.Splat = Splat.None;
+			var parameters = new TempList<ConstructorParam>();
+			var output = new ParameterInfo<ConstructorParam>(EmptyArrays.CtorParameters);
 
 			if (Accept(i, TokenType.ParenClose))
 				return output;
@@ -938,33 +1013,34 @@ namespace Osprey
 				output.HasRefParams |= isByRef;
 				var thisPrefix = Accept(ref i, TokenType.This);
 
-				Token nameTok;
+				Token nameTok = null;
 				if (thisPrefix) // this.<name> parameter
 				{
 					if (isByRef)
-						throw new ParseException(tok[i], "A 'this' parameter cannot be passed by reference.");
+						ParseError(i, "A 'this' parameter cannot be passed by reference.");
+
 					Expect(ref i, TokenType.Dot);
 					nameTok = Expect(ref i, TokenType.Identifier);
 				}
 				else if (Accept(i, TokenType.Identifier))
 					nameTok = tok[i++];
 				else
-					throw new ParseException(tok[i], "Expected identifier or 'this'.");
+					ParseError(i, "Expected identifier or 'this'.");
 
-				if (isByRef && output.Splat == Splat.Beginning && output.Parameters.Count == 0)
-					throw new ParseException(nameTok, CannotPassVariadicParamByRef);
+				if (isByRef && output.Splat == Splat.Beginning && parameters.Count == 0)
+					ParseError(nameTok, CannotPassVariadicParamByRef);
 
 				if (Accept(i, TokenType.Assign)) // optional parameter
 				{
 					if (output.Splat != Splat.None)
-						throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+						ParseError(i, CannotMixOptionalAndVariadicParams);
 					if (isByRef)
-						throw new ParseException(tok[i], CannotPassOptionalParamByRef);
+						ParseError(i, CannotPassOptionalParamByRef);
 					i++;
 
 					var value = ParseExpression(ref i);
 					// As in ParseParameterList, the default value expression is validated later.
-					output.Parameters.Add(new ConstructorParam(nameTok.Value, thisPrefix, value)
+					parameters.Add(new ConstructorParam(nameTok.Value, thisPrefix, value)
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
@@ -973,9 +1049,9 @@ namespace Osprey
 					output.HasOptionalParams = optionalSeen = true;
 				}
 				else if (optionalSeen)
-					throw new ParseException(nameTok, RequiredParamAfterOptional);
+					ParseError(nameTok, RequiredParamAfterOptional);
 				else
-					output.Parameters.Add(new ConstructorParam(nameTok.Value, thisPrefix, isByRef)
+					parameters.Add(new ConstructorParam(nameTok.Value, thisPrefix, isByRef)
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
@@ -986,15 +1062,16 @@ namespace Osprey
 			if (Accept(i, TokenType.Splat))
 			{
 				if (optionalSeen)
-					throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+					ParseError(i, CannotMixOptionalAndVariadicParams);
 				if (isByRef)
-					throw new ParseException(tok[i], CannotPassVariadicParamByRef);
+					ParseError(i, CannotPassVariadicParamByRef);
 				if (output.Splat != Splat.None)
-					throw new ParseException(tok[i], MoreThanOneVariadicParam);
+					ParseError(i, MoreThanOneVariadicParam);
 				i++;
 				output.Splat = Splat.End;
 			}
 
+			output.Parameters = parameters.ToArray();
 			return output;
 		}
 
@@ -1008,7 +1085,7 @@ namespace Osprey
 			// Block
 			var start = Expect(ref i, TokenType.CurlyOpen).Index;
 
-			var body = new List<Statement>();
+			var body = new TempList<Statement>();
 			if (!Accept(i, TokenType.CurlyClose))
 			{
 				var first = ParseStatement(ref i, allowCtorCall: true);
@@ -1022,7 +1099,7 @@ namespace Osprey
 
 			Expect(i, TokenType.CurlyClose);
 
-			return new Block(body)
+			return new Block(body.ToArray())
 			{
 				StartIndex = start,
 				EndIndex = tok[i++].EndIndex,
@@ -1033,9 +1110,9 @@ namespace Osprey
 		private FieldDeclaration ParseFieldDeclaration(ref int i, bool isConst, AccessLevel access, bool isStatic)
 		{
 			if (Accept(i, TokenType.ParenOpen))
-				throw new ParseException(tok[i], "Parallel declaration is not allowed for fields or constants.");
+				ParseError(i, "Parallel declaration is not allowed for fields or constants.");
 
-			var vars = new List<VariableDeclarator>();
+			var vars = new TempList<VariableDeclarator>();
 			do
 			{
 				Expect(i, TokenType.Identifier);
@@ -1046,7 +1123,7 @@ namespace Osprey
 				if (Accept(ref i, TokenType.Assign))
 					value = ParseExpression(ref i);
 				else if (isConst)
-					throw new ParseException(tok[i], "Constant declaration without value.");
+					ParseError(i, "Constant declaration without value.");
 
 				vars.Add(new VariableDeclarator(nameTok.Value, value)
 				{
@@ -1058,7 +1135,7 @@ namespace Osprey
 
 			Expect(ref i, TokenType.Semicolon);
 
-			return new FieldDeclaration(access, isConst, vars)
+			return new FieldDeclaration(access, isConst, vars.ToArray())
 			{
 				IsStatic = isStatic,
 				Document = document,
@@ -1068,7 +1145,7 @@ namespace Osprey
 		private MethodDeclaration ParseMethod(ref int i, ref MemberModifiers modifiers)
 		{
 			if (!Accept(i, TokenType.Identifier, TokenType.This))
-				throw new ParseException(tok[i], "Expected identifier or 'this'.");
+				ParseError(i, "Expected identifier or 'this'.");
 
 			var nameTok = tok[i++]; // this name may also be 'this', but that's okay
 			modifiers.ValidateForMethodOrProperty(nameTok);
@@ -1077,7 +1154,7 @@ namespace Osprey
 			var parameters = ParseParameterList(ref i);
 			Expect(ref i, TokenType.ParenClose);
 
-			Statement body;
+			Statement body = null;
 			if (Accept(i, TokenType.Semicolon))
 				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 			else if (Accept(i, TokenType.CurlyOpen))
@@ -1085,13 +1162,14 @@ namespace Osprey
 			else if (AcceptExtension(i, "__extern"))
 				body = ParseExternBody(ref i);
 			else
-				throw new ParseException(tok[i], "Expected block or ';'.");
+				ParseError(i, "Expected block or ';'.");
 
-			if (modifiers.IsAbstract && !(body is EmptyStatement))
-				throw new ParseException(nameTok, "Abstract methods cannot have a body.");
-			
-			if (!modifiers.IsAbstract && body is EmptyStatement)
-				throw new ParseException(nameTok, "Non-abstract methods cannot have empty bodies.");
+			if (modifiers.IsAbstract != (body is EmptyStatement))
+			{
+				ParseError(nameTok, modifiers.IsAbstract ?
+					"Abstract methods cannot have a body." :
+					"Non-abstract methods cannot have empty bodies.");
+			}
 
 			return new MethodDeclaration(nameTok.Value, modifiers.Access, parameters.Parameters, parameters.Splat, body)
 				{
@@ -1123,10 +1201,10 @@ namespace Osprey
 				body = ParseBlockOrExtern(ref i);
 
 			if (modifiers.IsAbstract && !(body is EmptyStatement))
-				throw new ParseException(nameTok, "Abstract property accessors cannot have a body.");
+				ParseError(nameTok, "Abstract property accessors cannot have a body.");
 
 			if (!modifiers.IsAbstract && body is EmptyStatement)
-				throw new ParseException(nameTok, "Non-abstract property accessors cannot have empty bodies.");
+				ParseError(nameTok, "Non-abstract property accessors cannot have empty bodies.");
 
 			return new PropertyAccessorDeclaration(nameTok.Value, modifiers.Access, isSetter, body)
 			{
@@ -1146,11 +1224,11 @@ namespace Osprey
 			modifiers.ValidateForIndexer(startTok);
 			Expect(ref i, TokenType.SquareOpen);
 
-			var parameters = ParseParameterList(ref i, null, false, TokenType.SquareClose);
+			var parameters = ParseParameterList(ref i, false, TokenType.SquareClose);
 			if (parameters.HasOptionalParams ||
 				parameters.HasRefParams ||
 				parameters.Splat != Splat.None)
-				throw new ParseException(startTok, "Indexers cannot have any optional, variadic or pass-by-reference parameters.");
+				ParseError(startTok, "Indexers cannot have any optional, variadic or pass-by-reference parameters.");
 
 			Expect(ref i, TokenType.SquareClose);
 
@@ -1166,11 +1244,13 @@ namespace Osprey
 			else
 				body = ParseBlockOrExtern(ref i);
 
-			if (modifiers.IsAbstract && !(body is EmptyStatement))
-				throw new ParseException(startTok, "Abstract indexer accessors cannot have a body.");
-
-			if (!modifiers.IsAbstract && body is EmptyStatement)
-				throw new ParseException(startTok, "Non-abstract indexer accessors cannot have empty bodies.");
+			if (modifiers.IsAbstract != (body is EmptyStatement))
+			{
+				if (modifiers.IsAbstract)
+					ParseError(startTok, modifiers.IsAbstract ?
+						"Abstract indexer accessors cannot have a body." :
+						"Non-abstract indexer accessors cannot have empty bodies.");
+			}
 
 			return new IndexerAccessorDeclaration(modifiers.Access, isSetter, parameters.Parameters, body)
 			{
@@ -1189,7 +1269,7 @@ namespace Osprey
 			Expect(i, TokenType.Operator);
 			var start = tok[i++].Index;
 
-			int expectedCount;
+			int expectedCount = 0;
 			// unambiguously binary operators
 			if (Accept(i, TokenType.OverloadableBinaryOperator))
 				expectedCount = 2;
@@ -1200,7 +1280,7 @@ namespace Osprey
 			else if (Accept(i, TokenType.Plus, TokenType.Minus))
 				expectedCount = -1; // don't know, look at context
 			else
-				throw new ParseException(tok[i], "Expected overloadable operator.");
+				ParseError(i, "Expected overloadable operator.");
 
 			var opTokenIndex = i;
 			var op = tok[i].Type;
@@ -1208,46 +1288,46 @@ namespace Osprey
 
 			Expect(ref i, TokenType.ParenOpen); // opening parenthesis no matter what
 
-			var parameters = ParseParameterList(ref i, null, false);
+			var parameters = ParseParameterList(ref i, false);
 			if (parameters.HasOptionalParams ||
 				parameters.HasRefParams ||
 				parameters.Splat != Splat.None)
-				throw new ParseException(tok[opTokenIndex],
-					"Operator overloads cannot have any optional, variadic or pass-by-reference parameters.");
+				ParseError(opTokenIndex, "Operator overloads cannot have any optional, variadic or pass-by-reference parameters.");
 
 			Expect(ref i, TokenType.ParenClose); // ahem
 
 			var body = ParseBlockOrExtern(ref i);
 
-			if (parameters.Parameters.Count == 1)
+			OperatorOverloadDeclaration result = null;
+			if (parameters.Parameters.Length == 1)
 			{
 				if (expectedCount == 2)
-					throw new ParseException(tok[opTokenIndex], "This is a binary operator; two parameters are required.");
+					ParseError(opTokenIndex, "This is a binary operator; two parameters are required.");
+
 				UnaryOperator uop = op == TokenType.Plus ? UnaryOperator.Plus :
 					op == TokenType.Minus ? UnaryOperator.Minus :
 					UnaryOperator.BitwiseNot;
-				return new UnaryOperatorOverload(uop, parameters.Parameters[0].Name, body)
-					{
-						StartIndex = start,
-						EndIndex = end,
-						Document = document,
-					};
+				result = new UnaryOperatorOverload(uop, parameters.Parameters[0].Name, body);
 			}
-			else if (parameters.Parameters.Count == 2)
+			else if (parameters.Parameters.Length == 2)
 			{
 				if (expectedCount == 1)
-					throw new ParseException(tok[opTokenIndex], "This is a unary operator; one parameter is required.");
-				return new BinaryOperatorOverload(TokenTypeToOperator(op), parameters.Parameters[0].Name,
-					parameters.Parameters[1].Name, body)
-					{
-						StartIndex = start,
-						EndIndex = end,
-						Document = document,
-					};
+					ParseError(opTokenIndex, "This is a unary operator; one parameter is required.");
+
+				result = new BinaryOperatorOverload(TokenTypeToOperator(op),
+					parameters.Parameters[0].Name,
+					parameters.Parameters[1].Name, body);
 			}
 			else
-				throw new ParseException(tok[opTokenIndex], "Wrong number of parameters for operator overload (expected " +
-					(expectedCount == 1 ? "1" : expectedCount == 2 ? "2" : "1 or 2") + ").");
+				ParseError(opTokenIndex, "Wrong number of parameters for operator overload (expected {0}).",
+					expectedCount == 1 ? "1" :
+					expectedCount == 2 ? "2" :
+					"1 or 2");
+
+			result.StartIndex = start;
+			result.EndIndex = end;
+			result.Document = document;
+			return result;
 		}
 
 		private static BinaryOperator TokenTypeToOperator(TokenType type)
@@ -1282,11 +1362,11 @@ namespace Osprey
 			var enumName = Expect(ref i, TokenType.Identifier);
 
 			var @enum = new EnumDeclaration(enumName.Value, isSet, modifiers.Access)
-				{
-					StartIndex = enumName.Index,
-					EndIndex = enumName.EndIndex,
-					Document = document,
-				};
+			{
+				StartIndex = enumName.Index,
+				EndIndex = enumName.EndIndex,
+				Document = document,
+			};
 			Expect(ref i, TokenType.CurlyOpen);
 
 			if (Accept(ref i, TokenType.CurlyClose))
@@ -1303,13 +1383,13 @@ namespace Osprey
 				else if (SimplifiedTree)
 				{
 					if (counter < 0)
-						throw new ParseException(tok[i], "Too many auto-enumerated values in enum; the counter has overflowed.");
+						ParseError(i, "Too many auto-enumerated values in enum; the counter has overflowed.");
 					memberValue = new ConstantExpression(ConstantValue.CreateInt(counter))
-						{
-							StartIndex = memberName.Index,
-							EndIndex = memberName.EndIndex,
-							Document = document,
-						};
+					{
+						StartIndex = memberName.Index,
+						EndIndex = memberName.EndIndex,
+						Document = document,
+					};
 
 					// Both of these may overflow into the sign bit, but that's
 					// not a problem until you try to use the value.
@@ -1320,12 +1400,12 @@ namespace Osprey
 				}
 
 				@enum.Members.Add(new EnumMember(memberName.Value, memberValue)
-					{
-						StartIndex = memberName.Index,
-						EndIndex = memberValue != null ? memberValue.EndIndex : memberName.EndIndex,
-						Document = document,
-						DocString = memberName.Documentation,
-					});
+				{
+					StartIndex = memberName.Index,
+					EndIndex = memberValue != null ? memberValue.EndIndex : memberName.EndIndex,
+					Document = document,
+					DocString = memberName.Documentation,
+				});
 			} while (Accept(ref i, TokenType.Comma) && !Accept(i, TokenType.CurlyClose));
 
 			Expect(ref i, TokenType.CurlyClose);
@@ -1350,20 +1430,18 @@ namespace Osprey
 					Document = expr.Document,
 				};
 
-			var retStmt = new ReturnStatement(new List<Expression>(1))
+			var retStmt = new ReturnStatement(expr)
 			{
 				StartIndex = expr.StartIndex,
 				EndIndex = expr.EndIndex,
 				Document = expr.Document,
 			};
-			retStmt.ReturnValues.Add(expr);
-			var result = new Block(new List<Statement>(1))
+			var result = new Block(retStmt)
 			{
 				StartIndex = expr.StartIndex,
 				EndIndex = expr.EndIndex,
 				Document = expr.Document,
 			};
-			result.Statements.Add(retStmt);
 			return result;
 		}
 
@@ -1372,22 +1450,23 @@ namespace Osprey
 		internal TypeName ParseTypeName(ref int i)
 		{
 			var start = tok[i].Index;
-			var global = false;
-			if (Accept(ref i, TokenType.Global))
-			{
-				global = true;
+			var global = Accept(ref i, TokenType.Global);
+			if (global)
 				Expect(ref i, TokenType.Dot); // always 'global' '.' identifier
-			}
 
 			Expect(i, TokenType.Identifier);
 
-			var idents = new List<string> { tok[i++].Value };
+			var idents = new TempList<string>(1);
+			idents.Add(tok[i++].Value);
 			while (Accept(ref i, TokenType.Dot))
+				idents.Add(Expect(ref i, TokenType.Identifier).Value);
+
+			return new TypeName(idents.ToArray(), global)
 			{
-				Expect(i, TokenType.Identifier);
-				idents.Add(tok[i++].Value);
-			}
-			return new TypeName(idents, global) { StartIndex = start, EndIndex = tok[i - 1].EndIndex, Document = document };
+				StartIndex = start,
+				EndIndex = tok[i - 1].EndIndex,
+				Document = document,
+			};
 		}
 
 		internal QualifiedName ParseQualifiedName(ref int i)
@@ -1396,29 +1475,28 @@ namespace Osprey
 
 			var start = tok[i].Index;
 
-			var idents = new List<string> { tok[i++].Value };
-			while (Accept(i, TokenType.Dot))
+			var idents = new TempList<string>(1);
+			idents.Add(tok[i++].Value);
+			while (Accept(ref i, TokenType.Dot))
+				idents.Add(Expect(ref i, TokenType.Identifier).Value);
+			return new QualifiedName(idents.ToArray())
 			{
-				i++;
-				Expect(i, TokenType.Identifier);
-				idents.Add(tok[i].Value);
-				i++;
-			}
-			return new QualifiedName(idents) { StartIndex = start, EndIndex = tok[i - 1].EndIndex, Document = document };
+				StartIndex = start,
+				EndIndex = tok[i - 1].EndIndex,
+				Document = document,
+			};
 		}
 
-		private ParameterInfo<Parameter> ParseParameterList(ref int i, List<Parameter> parameters = null,
+		private ParameterInfo<Parameter> ParseParameterList(ref int i,
 			bool allowEmpty = true, TokenType end = TokenType.ParenClose)
 		{
-			if (parameters == null)
-				parameters = new List<Parameter>();
-
-			var output = new ParameterInfo<Parameter>(parameters);
+			var parameters = new TempList<Parameter>();
+			var output = new ParameterInfo<Parameter>(EmptyArrays.Parameters);
 
 			if (Accept(i, end))
 			{
 				if (!allowEmpty)
-					throw new ParseException(tok[i], "At least one parameter is needed.");
+					ParseError(i, "At least one parameter is needed.");
 				// Don't skip closing bracket
 				return output;
 			}
@@ -1435,14 +1513,14 @@ namespace Osprey
 				var nameTok = Expect(ref i, TokenType.Identifier);
 
 				if (isByRef && output.Splat == Splat.Beginning && parameters.Count == 0)
-					throw new ParseException(nameTok, CannotPassVariadicParamByRef); 
+					ParseError(nameTok, CannotPassVariadicParamByRef); 
 
 				if (Accept(i, TokenType.Assign)) // optional parameter/argument
 				{
 					if (output.Splat != Splat.None)
-						throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+						ParseError(i, CannotMixOptionalAndVariadicParams);
 					if (isByRef)
-						throw new ParseException(tok[i], CannotPassOptionalParamByRef);
+						ParseError(i, CannotPassOptionalParamByRef);
 					i++;
 
 					var value = ParseExpression(ref i);
@@ -1458,7 +1536,7 @@ namespace Osprey
 					output.HasOptionalParams = optionalSeen = true;
 				}
 				else if (optionalSeen)
-					throw new ParseException(tok[i - 1], RequiredParamAfterOptional);
+					ParseError(i - 1, RequiredParamAfterOptional);
 				else
 					parameters.Add(new Parameter(nameTok.Value, isByRef)
 					{
@@ -1471,15 +1549,16 @@ namespace Osprey
 			if (Accept(i, TokenType.Splat))
 			{
 				if (optionalSeen)
-					throw new ParseException(tok[i], CannotMixOptionalAndVariadicParams);
+					ParseError(i, CannotMixOptionalAndVariadicParams);
 				if (isByRef)
-					throw new ParseException(tok[i], CannotPassVariadicParamByRef);
+					ParseError(i, CannotPassVariadicParamByRef);
 				if (output.Splat != Splat.None)
-					throw new ParseException(tok[i], MoreThanOneVariadicParam);
+					ParseError(i, MoreThanOneVariadicParam);
 				output.Splat = Splat.End;
 				i++;
 			}
 
+			output.Parameters = parameters.ToArray();
 			return output;
 		}
 
@@ -1489,7 +1568,7 @@ namespace Osprey
 		{
 			var stmt = ParseStatementInner(ref i);
 			if (!allowCtorCall && stmt is ConstructorCall)
-				throw new ParseException(stmt, "A constructor call is only allowed as the first statment in a constructor.");
+				ParseError(stmt, "A constructor call is only allowed as the first statment in a constructor.");
 			return stmt;
 		}
 
@@ -1498,7 +1577,7 @@ namespace Osprey
 			if (Accept(i, TokenType.Var, TokenType.Const))
 				return ParseLocalVariableDeclaration(ref i);
 			if (Accept(i, TokenType.Function))
-				return ParseLocalFunctionDeclaration(ref i);
+				return ParseLocalFunctionDeclaration(ref i, isLocal: true);
 			if (Accept(i, TokenType.If))
 				return ParseIfStatement(ref i);
 			if (Accept(i, TokenType.Try))
@@ -1528,7 +1607,7 @@ namespace Osprey
 				return ParseDoWhileStatement(ref i, loopLabel);
 
 			if (loopLabelFound)
-				throw new ParseException(tok[i], "Expected for, while, or do–while loop after label.");
+				ParseError(i, "Expected for, while, or do–while loop after label.");
 
 			// Note: although not technically conforming to the grammar,
 			// ParseExpressionStatement also parses parallel assignments.
@@ -1547,11 +1626,11 @@ namespace Osprey
 			if (Accept(i, TokenType.ParenOpen))
 			{
 				if (isConst)
-					throw new ParseException(tok[i], "Parallel declaration is not allowed for constants.");
+					ParseError(i, "Parallel declaration is not allowed for constants.");
 
 				i++;
 
-				var names = new List<string>();
+				var names = new TempList<string>();
 				do
 				{
 					names.Add(Expect(ref i, TokenType.Identifier).Value);
@@ -1564,15 +1643,15 @@ namespace Osprey
 
 				Expect(ref i, TokenType.Semicolon);
 
-				return new ParallelLocalVariableDeclaration(names, value)
-					{
-						StartIndex = start,
-						EndIndex = end,
-						Document = document,
-					};
+				return new ParallelLocalVariableDeclaration(names.ToArray(), value)
+				{
+					StartIndex = start,
+					EndIndex = end,
+					Document = document,
+				};
 			}
 
-			var vars = new List<VariableDeclarator>();
+			var vars = new TempList<VariableDeclarator>();
 			do
 			{
 				var name = Expect(ref i, TokenType.Identifier);
@@ -1582,7 +1661,7 @@ namespace Osprey
 				if (Accept(ref i, TokenType.Assign))
 					value = ParseExpression(ref i);
 				else if (isConst)
-					throw new ParseException(tok[i], "Constant declaration without value.");
+					ParseError(i, "Constant declaration without value.");
 
 				vars.Add(new VariableDeclarator(name.Value, value)
 				{
@@ -1594,10 +1673,15 @@ namespace Osprey
 
 			Expect(ref i, TokenType.Semicolon);
 
-			return new SimpleLocalVariableDeclaration(isConst, vars) { StartIndex = start, EndIndex = end, Document = document };
+			return new SimpleLocalVariableDeclaration(isConst, vars.ToArray())
+			{
+				StartIndex = start,
+				EndIndex = end,
+				Document = document
+			};
 		}
 
-		private LocalFunctionDeclaration ParseLocalFunctionDeclaration(ref int i)
+		private LocalFunctionDeclaration ParseLocalFunctionDeclaration(ref int i, bool isLocal)
 		{
 			Expect(ref i, TokenType.Function);
 
@@ -1609,21 +1693,25 @@ namespace Osprey
 
 			var end = Expect(ref i, TokenType.ParenClose).EndIndex;
 
-			var body = ParseBlockOrExtern(ref i);
+			Block body;
+			if (isLocal)
+				body = ParseBlock(ref i);
+			else
+				body = ParseBlockOrExtern(ref i);
 
 			return new LocalFunctionDeclaration(nameTok.Value, pi.Parameters, pi.Splat, body)
-				{
-					StartIndex = nameTok.Index,
-					EndIndex = end,
-					Document = document,
-				};
+			{
+				StartIndex = nameTok.Index,
+				EndIndex = end,
+				Document = document,
+			};
 		}
 
 		private Block ParseBlock(ref int i)
 		{
 			int start = Expect(ref i, TokenType.CurlyOpen).Index;
 
-			var statements = new List<Statement>();
+			var statements = new TempList<Statement>();
 
 			while (!Accept(i, TokenType.CurlyClose))
 			{
@@ -1632,12 +1720,12 @@ namespace Osprey
 
 			Expect(ref i, TokenType.CurlyClose);
 
-			return new Block(statements)
-				{
-					StartIndex = start,
-					EndIndex = tok[i - 1].EndIndex,
-					Document = document,
-				};
+			return new Block(statements.ToArray())
+			{
+				StartIndex = start,
+				EndIndex = tok[i - 1].EndIndex,
+				Document = document,
+			};
 		}
 
 		private Statement ParseIfStatement(ref int i)
@@ -1664,21 +1752,21 @@ namespace Osprey
 			{
 				var stmt = ParseStatement(ref i);
 				if (stmt is LocalDeclaration)
-					throw new ParseException(stmt, "Embedded statement cannot be a declaration.");
-				if (!SimplifiedTree)
-					return new EmbeddedStatement(stmt) { Document = document };
+					ParseError(stmt, "Embedded statement cannot be a declaration.");
 
-				var statements = new List<Statement>();
-				statements.Add(stmt);
-				return new Block(statements)
-				{
-					StartIndex = stmt.StartIndex,
-					EndIndex = stmt.EndIndex,
-					Document = document,
-				};
+				Statement result;
+				if (!SimplifiedTree)
+					result = new EmbeddedStatement(stmt);
+				else
+					result = new Block(new[] { stmt });
+
+				result.StartIndex = stmt.StartIndex;
+				result.EndIndex = stmt.EndIndex;
+				result.Document = document;
+				return result;
 			}
 			if (!Accept(i, TokenType.CurlyOpen))
-				throw new ParseException(tok[i], "Expected ': <statement>' or block.");
+				ParseError(i, "Expected ': <statement>' or block.");
 
 			return ParseBlock(ref i);
 		}
@@ -1688,25 +1776,25 @@ namespace Osprey
 			Expect(i, TokenType.Else);
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
+			Statement body;
 			if (Accept(i, TokenType.CurlyOpen))
-				return new ElseClause(ParseBlock(ref i)) { Document = document };
-
-			Accept(ref i, TokenType.Colon); // Optional ':'
-
-			var body = ParseStatement(ref i);
-			if (body is LocalDeclaration)
-				throw new ParseException(body, "Embedded statement cannot be a declaration.");
-			// Force the embedded statement into a block
-			if (SimplifiedTree)
+				body = ParseBlock(ref i);
+			else
 			{
-				var statements = new List<Statement>(1);
-				statements.Add(body);
-				body = new Block(statements)
-				{
-					StartIndex = body.StartIndex,
-					EndIndex = body.EndIndex,
-					Document = document,
-				};
+				Accept(ref i, TokenType.Colon); // Optional ':'
+
+				body = ParseStatement(ref i);
+				if (body is LocalDeclaration)
+					ParseError(body, "Embedded statement cannot be a declaration.");
+
+				if (SimplifiedTree)
+					// Force the embedded statement into a block
+					body = new Block(new[] { body })
+					{
+						StartIndex = body.StartIndex,
+						EndIndex = body.EndIndex,
+						Document = document,
+					};
 			}
 
 			return new ElseClause(body) { Document = document };
@@ -1718,7 +1806,7 @@ namespace Osprey
 
 			var body = ParseBlock(ref i);
 
-			var catches = new List<CatchClause>();
+			var catches = new TempList<CatchClause>();
 			var genericCatchSeen = false;
 
 			while (Accept(i, TokenType.Catch))
@@ -1736,18 +1824,23 @@ namespace Osprey
 						varName = Expect(ref i, TokenType.Identifier).Value;
 
 					catches.Add(new SpecificCatchClause(type, varName, ParseBlock(ref i))
-						{
-							StartIndex = catchStart,
-							EndIndex = catchEnd,
-							Document = document,
-						});
+					{
+						StartIndex = catchStart,
+						EndIndex = catchEnd,
+						Document = document,
+					});
 				}
 				else if (Accept(i, TokenType.CurlyOpen)) // generic catch clause
 				{
 					if (genericCatchSeen)
 						throw new ParseException(tok[i], "There can only be one generic catch clause per try-catch.");
 
-					catches.Add(new CatchClause(ParseBlock(ref i)) { StartIndex = catchStart, EndIndex = catchEnd, Document = document });
+					catches.Add(new CatchClause(ParseBlock(ref i))
+					{
+						StartIndex = catchStart,
+						EndIndex = catchEnd,
+						Document = document,
+					});
 					genericCatchSeen = true;
 				}
 				else
@@ -1758,38 +1851,43 @@ namespace Osprey
 			if (Accept(i, TokenType.Finally))
 			{
 				int finStart = tok[i].Index, finEnd = tok[i++].EndIndex;
-				fin = new FinallyClause(ParseBlock(ref i)) { StartIndex = finStart, EndIndex = finEnd, Document = document };
+				fin = new FinallyClause(ParseBlock(ref i))
+				{
+					StartIndex = finStart,
+					EndIndex = finEnd,
+					Document = document,
+				};
 			}
 
 			if (catches.Count == 0 && fin == null)
 				throw new ParseException(startTok, "A try statement must have at least one catch or finally clause.");
 
-			return new TryStatement(body, catches, fin)
-				{
-					StartIndex = startTok.Index,
-					EndIndex = startTok.EndIndex,
-					Document = document
-				};
+			return new TryStatement(body, catches.ToArray(), fin)
+			{
+				StartIndex = startTok.Index,
+				EndIndex = startTok.EndIndex,
+				Document = document
+			};
 		}
 
 		private Statement ParseTransferStatement(ref int i)
 		{
 			var isYield = tok[i].Type == TokenType.Yield;
 			if (!Accept(i, TokenType.Return, TokenType.Yield))
-				throw new ParseException(tok[i], "Internal error: expected 'return' or 'yield'");
+				ParseError(i, "Internal error: expected 'return' or 'yield'");
 
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
 			if (Accept(i, TokenType.Semicolon))
 				if (isYield)
-					throw new ParseException(tok[i], "Empty yield statement is not allowed. Use 'return;' to stop a generator.");
+					ParseError(i, "Empty yield statement is not allowed. Use 'return;' to stop a generator.");
 				else
 				{
 					i++;
 					return new ReturnStatement() { StartIndex = start, EndIndex = end, Document = document };
 				}
 
-			var values = new List<Expression>();
+			var values = new TempList<Expression>(1);
 			do
 			{
 				try { values.Add(ParseExpression(ref i)); }
@@ -1800,19 +1898,25 @@ namespace Osprey
 
 			if (values.Count > 1 && SimplifiedTree)
 			{
-				var list = new ListLiteralExpression(values)
+				var list = new ListLiteralExpression(values.ToNewArray())
 				{
 					StartIndex = values[0].StartIndex,
 					EndIndex = values[values.Count - 1].EndIndex,
 					Document = document,
 				};
-				values = new List<Expression> { list };
+				values.Clear();
+				values.Add(list);
 			}
 
+			Statement result;
 			if (isYield)
-				return new YieldStatement(values) { StartIndex = start, EndIndex = end, Document = document };
+				result = new YieldStatement(values.ToArray());
 			else
-				return new ReturnStatement(values) { StartIndex = start, EndIndex = end, Document = document };
+				result = new ReturnStatement(values.ToArray());
+			result.StartIndex = start;
+			result.EndIndex = end;
+			result.Document = document;
+			return result;
 		}
 
 		private Statement ParseLoopFlowStatement(ref int i)
@@ -1820,7 +1924,7 @@ namespace Osprey
 			var isBreak = Accept(i, TokenType.Break);
 
 			if (!Accept(i, TokenType.Break, TokenType.Next))
-				throw new ParseException(tok[i], "Internal error: expected 'break' or 'next'.");
+				ParseError(i, "Internal error: expected 'break' or 'next'.");
 
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
@@ -1848,12 +1952,13 @@ namespace Osprey
 			Expect(i, TokenType.Throw);
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
-			if (Accept(ref i, TokenType.Semicolon))
-				return new ThrowStatement(null) { StartIndex = start, EndIndex = end, Document = document };
+			Expression value = null;
+			if (!Accept(ref i, TokenType.Semicolon))
+			{
+				value = ParseExpression(ref i);
 
-			var value = ParseExpression(ref i);
-
-			Expect(ref i, TokenType.Semicolon);
+				Expect(ref i, TokenType.Semicolon);
+			}
 
 			return new ThrowStatement(value) { StartIndex = start, EndIndex = end, Document = document };
 		}
@@ -1863,7 +1968,7 @@ namespace Osprey
 			Expect(i, TokenType.For);
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
-			var vars = new List<string>();
+			var vars = new TempList<string>(1);
 			do
 			{
 				vars.Add(Expect(ref i, TokenType.Identifier).Value);
@@ -1878,12 +1983,12 @@ namespace Osprey
 			if (Accept(i, TokenType.Else))
 				@else = ParseElseClause(ref i);
 
-			return new ForStatement(label, vars, expr, body, @else)
-				{
-					StartIndex = start,
-					EndIndex = end,
-					Document = document,
-				};
+			return new ForStatement(label, vars.ToArray(), expr, body, @else)
+			{
+				StartIndex = start,
+				EndIndex = end,
+				Document = document,
+			};
 		}
 
 		private Statement ParseWhileStatement(ref int i, string label = null)
@@ -1893,7 +1998,7 @@ namespace Osprey
 
 			Expression cond;
 			try { cond = ParseExpression(ref i); }
-			catch (ParseException e) { throw new ParseException(e.Token, "Expected expression.", e); }
+			catch (ParseException e) { throw e.Extend("Expected expression."); }
 
 			var body = ParseControlBody(ref i);
 
@@ -1939,7 +2044,7 @@ namespace Osprey
 				// declare and initialize the 'with' variable in the surrounding block.
 				// Code will be injected later into the finally clause.
 				var @try = new TryStatement((Block)body,
-					catches: new List<CatchClause>(),
+					catches: EmptyArrays.CatchClauses,
 					fin: new FinallyClause(new Block()) { StartIndex = start, EndIndex = end, Document = document })
 				{
 					StartIndex = start,
@@ -1984,12 +2089,17 @@ namespace Osprey
 			{
 				Expect(ref i, TokenType.Semicolon);
 				((AssignmentExpression)expr).IgnoreValue = true;
-				return new ExpressionStatement(expr) { StartIndex = start, EndIndex = expr.EndIndex, Document = document };
+				return new ExpressionStatement(expr)
+				{
+					StartIndex = start,
+					EndIndex = expr.EndIndex,
+					Document = document,
+				};
 			}
 
 			if (Accept(i, TokenType.CompoundAssign))
 			{
-				var assignableExpr = EnsureAssignable(expr, tok[i]);
+				var assignableExpr = EnsureAssignable(expr);
 
 				var op = GetCompoundAssignmentOp(tok[i].Type);
 				i++;
@@ -2023,7 +2133,12 @@ namespace Osprey
 				throw new ParseException(expr,
 					"Only invocation, function application, assignment and object creation can be used as a statement.");
 
-			return new ExpressionStatement(expr) { StartIndex = start, EndIndex = end, Document = document };
+			return new ExpressionStatement(expr)
+			{
+				StartIndex = start,
+				EndIndex = end,
+				Document = document,
+			};
 		}
 
 		private static BinaryOperator GetCompoundAssignmentOp(TokenType type)
@@ -2051,7 +2166,7 @@ namespace Osprey
 
 		private ParallelAssignment ParseParallelAssignment(ref int i, Expression expr, int startIndex)
 		{
-			var targets = new List<Expression>(4) { expr };
+			var targets = new TempList<Expression>(4) { expr };
 			while (Accept(ref i, TokenType.Comma))
 			{
 				expr = ParseNullCoalescingExpr(ref i); // ParseExpression(ref i) would gobble up assignments
@@ -2063,14 +2178,15 @@ namespace Osprey
 			}
 
 			if (Accept(i, TokenType.CompoundAssign))
-				throw new ParseException(tok[i], "Compound assignment operators are not allowed in parallel assignment.");
+				ParseError(i, "Compound assignment operators are not allowed in parallel assignment.");
 
-			Expect(ref i, TokenType.Assign, "Expected '='. If parallel assignment was not intended, use ';' rather than ',' to separate statements.");
+			Expect(ref i, TokenType.Assign,
+				"Expected '='. If parallel assignment was not intended, use ';' rather than ',' to separate statements.");
 
 			foreach (var ex in targets)
-				EnsureAssignable(ex, null);
+				EnsureAssignable(ex);
 
-			List<Expression> values = new List<Expression>();
+			var values = new TempList<Expression>();
 			do
 			{
 				values.Add(ParseExpression(ref i));
@@ -2080,11 +2196,10 @@ namespace Osprey
 			var end = tok[i - 2].EndIndex;
 
 			if (values.Count != 1 && values.Count != targets.Count)
-				throw new ParseException(tok[i - 1],
-					string.Format("Wrong number of values in parallel assignment (expected 1 or {0}, got {1}).",
-						targets.Count.ToStringInvariant(), values.Count.ToStringInvariant()));
+				ParseError(i - 1, "Wrong number of values in parallel assignment (expected 1 or {0}, got {1}).",
+						targets.Count.ToStringInvariant(), values.Count.ToStringInvariant());
 
-			return new ParallelAssignment(targets.Cast<AssignableExpression>().ToList(), values)
+			return new ParallelAssignment(targets.Cast<AssignableExpression>().ToArray(), values.ToArray())
 			{
 				StartIndex = startIndex,
 				EndIndex = end,
@@ -2132,7 +2247,7 @@ namespace Osprey
 					stack = ParseExpression(ref i);
 				}
 				else
-					throw new ParseException(name, string.Format("Unknown __extern parameter '{0}'; expected 'locals' or 'stack'.", name));
+					ParseError(name, "Unknown __extern parameter '{0}'; expected 'locals' or 'stack'.", name);
 			}
 
 			if (SimplifiedTree)
@@ -2167,7 +2282,7 @@ namespace Osprey
 			var left = ParseConditionalExpr(ref i);
 			if (Accept(i, TokenType.Assign))
 			{
-				var leftAssignable = EnsureAssignable(left, tok[i]);
+				var leftAssignable = EnsureAssignable(left);
 				i++;
 
 				var value = ParseExpression(ref i);
@@ -2277,7 +2392,7 @@ namespace Osprey
 					}
 					catch (ParseException e)
 					{
-						throw new ParseException(tok[i], "'is'/'is not' must be followed by a type name or 'null'.", e);
+						throw e.Extend("'is'/'is not' must be followed by a type name or 'null'.");
 					}
 				}
 				else if (Accept(i, TokenType.DoubleEqual, TokenType.NotEqual))
@@ -2447,20 +2562,20 @@ namespace Osprey
 					if (Accept(i, TokenType.Iter))
 					{
 						if (left is BaseAccess)
-							throw new ParseException(tok[i], "'base' cannot be used in an iterator lookup expression.");
+							ParseError(i, "'base' cannot be used in an iterator lookup expression.");
 						left = new IteratorLookup(left).At(left.StartIndex, tok[i++].EndIndex, document);
 					}
 					else if (Accept(i, TokenType.Identifier))
 						left = new MemberAccess(left, tok[i].Value).At(left.StartIndex, tok[i++].EndIndex, document);
 					else
-						throw new ParseException(tok[i], "Expected identifier or 'iter'.");
+						ParseError(i, "Expected identifier or 'iter'.");
 				}
 				else if (type == TokenType.SafeAccess ||
 					type == TokenType.ParenOpenSafe ||
 					type == TokenType.SquareOpenSafe) // safe access
 				{
 					if (left is BaseAccess)
-						throw new ParseException(tok[i], "'base' cannot be used in a safe access.");
+						ParseError(i, "'base' cannot be used in a safe access.");
 
 					var access = new SafeAccess(left);
 					ParseSafeAccessChain(ref i, access.Chain);
@@ -2494,7 +2609,7 @@ namespace Osprey
 			// If 'base' is followed by an assignment operator, let this error be caught
 			// with the slightly better "Can't assign to 'base'" message.
 			if (left is BaseAccess && !Accept(i, TokenType.Assign, TokenType.CompoundAssign))
-				throw new ParseException(tok[i - 1], "'base' cannot be an expression on its own");
+				ParseError(i - 1, "'base' cannot be an expression on its own");
 			return left;
 		}
 
@@ -2563,7 +2678,7 @@ namespace Osprey
 			if (Accept(i, TokenType.Literal))
 			{
 				var t = tok[i++];
-				Expression result;
+				Expression result = null;
 				switch (t.Type)
 				{
 					case TokenType.Null: result = new NullLiteral(); break;
@@ -2574,7 +2689,8 @@ namespace Osprey
 					case TokenType.String: result = new StringLiteral((StringToken)t); break;
 					case TokenType.Character: result = new CharacterLiteral((CharToken)t); break;
 					default:
-						throw new ParseException(t, "Invalid/unknown literal type");
+						ParseError(t, "Invalid/unknown literal type");
+						break;
 				}
 				result.At(start, t.EndIndex, document);
 				return result;
@@ -2634,10 +2750,9 @@ namespace Osprey
 
 				return expr;
 			}
+
 			if (Accept(i, TokenType.Async))
-				throw new ParseException(tok[i], "The keyword 'async' is reserved for future use.");
-			if (Accept(i, TokenType.Ref))
-				throw new ParseException(tok[i], "The keyword 'ref' is reserved for future use.");
+				ParseError(i, "The keyword 'async' is reserved for future use.");
 
 			throw new ParseException(tok[i]);
 		}
@@ -2647,7 +2762,7 @@ namespace Osprey
 			var startIndex = tok[i].Index;
 
 			if (Expect(i, TokenType.Identifier).Value != "__named_const")
-				throw new ParseException(tok[i], "Expected identifier '__named_const'; got " + tok[i].ToString());
+				ParseError(i, "Expected identifier '__named_const'; got {0}.", tok[i]);
 			i++;
 
 			Expect(ref i, TokenType.ParenOpen);
@@ -2669,10 +2784,10 @@ namespace Osprey
 
 			TypeName type;
 			try { type = ParseTypeName(ref i); }
-			catch (ParseException e) { throw new ParseException(e.Token, "Expected type name", e); }
+			catch (ParseException e) { throw e.Extend("Expected type name."); }
 
 			bool hasRefArgs = false;
-			List<Expression> args;
+			Expression[] args;
 			bool requireInitializer = false;
 			if (Accept(ref i, TokenType.ParenOpen))
 			{
@@ -2682,7 +2797,7 @@ namespace Osprey
 			}
 			else
 			{
-				args = new List<Expression>();
+				args = EmptyArrays.Expressions;
 				requireInitializer = true;
 			}
 
@@ -2690,7 +2805,7 @@ namespace Osprey
 			if (Accept(i, TokenType.With))
 				initializer = ParseObjectInitializer(ref i);
 			else if (requireInitializer)
-				throw new ParseException(tok[i], "An object initializer is required if there are no arguments to the constructor.");
+				ParseError(i, "An object initializer is required if there are no arguments to the constructor.");
 
 			return new ObjectCreationExpression(type, args, hasRefArgs)
 				{ Initializer = initializer }
@@ -2702,15 +2817,15 @@ namespace Osprey
 			var start = Expect(ref i, TokenType.With).Index;
 			Expect(ref i, TokenType.CurlyOpen);
 
-			var members = new List<MemberInitializer>();
 			if (Accept(ref i, TokenType.CurlyClose))
-				return new ObjectInitializer(members)
+				return new ObjectInitializer(EmptyArrays.MemberInitializers)
 					{
 						StartIndex = start,
 						EndIndex = tok[i - 1].EndIndex,
 						Document = document,
 					};
 
+			var members = new TempList<MemberInitializer>();
 			var memberNames = new HashSet<string>();
 			do
 			{
@@ -2733,7 +2848,7 @@ namespace Osprey
 
 			Expect(ref i, TokenType.CurlyClose);
 
-			return new ObjectInitializer(members)
+			return new ObjectInitializer(members.ToArray())
 				{
 					StartIndex = start,
 					EndIndex = tok[i - 1].EndIndex,
@@ -2741,20 +2856,20 @@ namespace Osprey
 				};
 		}
 
-		private List<Expression> ParseArgumentList(ref int i, out bool hasRefs,
+		private Expression[] ParseArgumentList(ref int i, out bool hasRefs,
 			bool allowEmpty = true, bool allowRefs = true,
 			TokenType closing = TokenType.ParenClose)
 		{
 			hasRefs = false;
-			var args = new List<Expression>();
 
 			if (Accept(i, closing)) // no expressions :(
 			{
 				if (!allowEmpty)
-					throw new ParseException(tok[i], "At least one argument is needed.");
-				return args;
+					ParseError(i, "At least one argument is needed.");
+				return EmptyArrays.Expressions;
 			}
 
+			var args = new TempList<Expression>();
 			do
 			{
 				if (allowRefs && Accept(i, TokenType.Ref))
@@ -2773,19 +2888,18 @@ namespace Osprey
 					args.Add(ParseExpression(ref i));
 			} while (Accept(ref i, TokenType.Comma) && !Accept(i, closing));
 
-			return args;
+			return args.ToArray();
 		}
 
 		private Expression ParseListCreationExpr(ref int i)
 		{
 			var start = Expect(ref i, TokenType.SquareOpen).Index;
 
-			var items = new List<Expression>();
-
 			if (Accept(i, TokenType.SquareClose)) // empty list
-				return new ListLiteralExpression(items)
+				return new ListLiteralExpression(EmptyArrays.Expressions)
 					.At(start, tok[i++].EndIndex, document);
-			
+
+			var items = new TempList<Expression>();
 			// [,] is an illegal list in Osprey: trailing commas are allowed only if
 			// there is at least one item.
 			// At least one expression is needed now, even in a list comprehension;
@@ -2798,7 +2912,6 @@ namespace Osprey
 				items.Add(ParseExpression(ref i));
 
 				Expression step = null;
-
 				if (Accept(ref i, TokenType.Comma)) // step
 					step = ParseExpression(ref i);
 
@@ -2816,50 +2929,53 @@ namespace Osprey
 			}
 
 			if (Accept(i, TokenType.For) || tok[i].Value == "where") // List comprehension
-			{
-				var parts = new List<ListCompPart>();
-				while (Accept(i, TokenType.For) || tok[i].Value == "where")
-				{
-					if (Accept(ref i, TokenType.For))
-					{
-						if (!Accept(i, TokenType.Identifier))
-							throw new ParseException(tok[i], "For clause without variables in list comprehension.");
-
-						List<string> vars = new List<string>();
-						vars.Add(tok[i].Value);
-						i++;
-
-						while (Accept(ref i, TokenType.Comma))
-						{
-							Expect(i, TokenType.Identifier);
-							vars.Add(tok[i].Value);
-							i++;
-						}
-
-						Expect(ref i, TokenType.In);
-
-						parts.Add(new ListCompIterator(vars, ParseExpression(ref i)));
-					}
-					else // where
-					{
-						i++;
-						parts.Add(new ListCompCondition(ParseExpression(ref i)));
-					}
-				}
-
-				if (Accept(i, TokenType.Comma))
-					throw new ParseException(tok[i], "Trailing commas are not allowed in list comprehensions.");
-				Expect(i, TokenType.SquareClose);
-
-				return new ListComprehension(items, parts)
-					.At(start, tok[i++].EndIndex, document);
-			}
+				return ParseListComprehension(ref i, start, ref items);
 
 			Accept(ref i, TokenType.Comma); // trailing comma; if it were followed by anything but ], it would have been caught above
 
 			Expect(i, TokenType.SquareClose);
 
-			return new ListLiteralExpression(items)
+			return new ListLiteralExpression(items.ToArray())
+				.At(start, tok[i++].EndIndex, document);
+		}
+
+		private Expression ParseListComprehension(ref int i, int start, ref TempList<Expression> items)
+		{
+			var parts = new TempList<ListCompPart>(1);
+			while (Accept(i, TokenType.For) || tok[i].Value == "where")
+			{
+				if (Accept(ref i, TokenType.For))
+				{
+					if (!Accept(i, TokenType.Identifier))
+						ParseError(i, "For clause without variables in list comprehension.");
+
+					var vars = new TempList<string>(1);
+					vars.Add(tok[i].Value);
+					i++;
+
+					while (Accept(ref i, TokenType.Comma))
+					{
+						Expect(i, TokenType.Identifier);
+						vars.Add(tok[i].Value);
+						i++;
+					}
+
+					Expect(ref i, TokenType.In);
+
+					parts.Add(new ListCompIterator(vars.ToArray(), ParseExpression(ref i)));
+				}
+				else // where
+				{
+					i++;
+					parts.Add(new ListCompCondition(ParseExpression(ref i)));
+				}
+			}
+
+			if (Accept(i, TokenType.Comma))
+				ParseError(i, "Trailing commas are not allowed in list comprehensions.");
+			Expect(i, TokenType.SquareClose);
+
+			return new ListComprehension(items.ToArray(), parts.ToArray())
 				.At(start, tok[i++].EndIndex, document);
 		}
 
@@ -2868,15 +2984,16 @@ namespace Osprey
 			Expect(i, TokenType.CurlyOpen);
 			var start = tok[i++].Index;
 
-			List<HashMember> members = new List<HashMember>();
-
 			if (Accept(i, TokenType.CurlyClose)) // empty hash
-				return new HashLiteralExpression(members).At(start, tok[i++].EndIndex, document);
+				return new HashLiteralExpression(EmptyArrays.HashMembers)
+					.At(start, tok[i++].EndIndex, document);
+
+			var members = new TempList<HashMember>();
 
 			// {,} is not a valid hash: trailing commas are only allowed if there's at least one member
 			do
 			{
-				Expression key;
+				Expression key = null;
 				if (Accept(i, TokenType.Identifier))
 				{
 					if (SimplifiedTree)
@@ -2911,7 +3028,7 @@ namespace Osprey
 					key.StartIndex = startParen;
 				}
 				else
-					throw new ParseException(tok[i], "The hash key must be an identifier, string, integer, character or parenthesized expression.");
+					ParseError(i, "The hash key must be an identifier, string, integer, character or parenthesized expression.");
 
 				key.EndIndex = tok[i++].EndIndex;
 				key.Document = document;
@@ -2926,7 +3043,7 @@ namespace Osprey
 
 			Expect(i, TokenType.CurlyClose);
 
-			return new HashLiteralExpression(members)
+			return new HashLiteralExpression(members.ToArray())
 				.At(start, tok[i++].EndIndex, document);
 		}
 
@@ -2936,39 +3053,47 @@ namespace Osprey
 
 			if (Accept(i, TokenType.LambdaOperator))
 			{
+				// @op
 				var lambdaOp = TokenTypeToLambdaOperator(tok[i].Type);
 				return new LambdaOperatorExpression(lambdaOp)
 					.At(start, tok[i++].EndIndex, document);
 			}
 			else if (Accept(i, TokenType.Dot, TokenType.SafeAccess))
 			{
+				// @.blah... or @?.blah...
 				var lambda = new LambdaMemberExpression();
 				ParseSafeAccessChain(ref i, lambda.SafeAccessChain);
 				lambda.At(start, tok[i - 1].EndIndex, document);
 				return lambda;
 			}
-			var parameters = new List<Parameter>();
+
+			Parameter[] parameters = EmptyArrays.Parameters;
 			var splat = Splat.None;
-			if (Accept(i, TokenType.Identifier)) // single parameter
+			if (Accept(i, TokenType.Identifier))
 			{
-				parameters.Add(new Parameter(tok[i].Value, null)
-				{
-					StartIndex = start,
-					EndIndex = tok[i++].EndIndex,
-					Document = document,
-				});
+				// @identifier
+				parameters = new[] {
+					new Parameter(tok[i].Value, null)
+					{
+						StartIndex = start,
+						EndIndex = tok[i++].EndIndex,
+						Document = document,
+					}
+				};
 			}
 			else if (Accept(i, TokenType.ParenOpen))
 			{
+				// @(parameter-list)
 				i++;
-				var paramInfo = ParseParameterList(ref i, parameters);
+				var paramInfo = ParseParameterList(ref i);
 
 				Expect(ref i, TokenType.ParenClose);
 
 				splat = paramInfo.Splat;
+				parameters = paramInfo.Parameters;
 			}
 
-			Statement body;
+			Statement body = null;
 			if (Accept(ref i, TokenType.Assign)) // single expression as body
 			{
 				var inner = ParseExpression(ref i);
@@ -2977,7 +3102,7 @@ namespace Osprey
 			else if (Accept(i, TokenType.CurlyOpen)) // block
 				body = ParseBlock(ref i);
 			else
-				throw new ParseException(tok[i], "Unexpected token " + tok[i] + ". Expected lambda expression body.");
+				ParseError(i, "Unexpected token {0}. Expected lambda expression body.", tok[i]);
 
 			return new LambdaExpression(parameters, splat, body)
 				.At(start, tok[i - 1].EndIndex, document);
@@ -2987,7 +3112,7 @@ namespace Osprey
 		{
 			var useTok = Expect(ref i, TokenType.Use);
 
-			var variables = new List<VariableDeclarator>();
+			var variables = new TempList<VariableDeclarator>(1);
 			do
 			{
 				var name = Expect(ref i, TokenType.Identifier);
@@ -3005,7 +3130,7 @@ namespace Osprey
 			Expect(ref i, TokenType.In);
 
 			var inner = ParseExpression(ref i);
-			return new UseInExpression(variables, inner)
+			return new UseInExpression(variables.ToArray(), inner)
 			{
 				StartIndex = useTok.Index,
 				EndIndex = useTok.EndIndex,
@@ -3136,7 +3261,7 @@ namespace Osprey
 		/// </summary>
 		private struct ParameterInfo<T> where T : Parameter
 		{
-			public ParameterInfo(List<T> parameters)
+			public ParameterInfo(T[] parameters)
 			{
 				Parameters = parameters;
 				Splat = Splat.None;
@@ -3144,7 +3269,7 @@ namespace Osprey
 				HasRefParams = false;
 			}
 
-			public List<T> Parameters;
+			public T[] Parameters;
 			public Splat Splat;
 			public bool HasOptionalParams;
 			public bool HasRefParams;
