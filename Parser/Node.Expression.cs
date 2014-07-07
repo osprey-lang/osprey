@@ -2850,7 +2850,10 @@ namespace Osprey.Nodes
 				arg.Compile(compiler, method);
 
 			if (indexer != null)
-				method.Append(new StaticCall(indexer.GetterId, Arguments.Length));
+			{
+				var getterMethod = indexer.IndexerGetter.Method;
+				method.Append(new StaticCall(method.Module.GetMethodId(getterMethod.Group), Arguments.Length));
+			}
 			else
 				method.Append(new LoadIndexer(Arguments.Length));
 		}
@@ -2992,7 +2995,8 @@ namespace Osprey.Nodes
 		{
 			if (indexer != null)
 			{
-				method.Append(new StaticCall(indexer.SetterId, Arguments.Length + 1));
+				var setterMethod = indexer.IndexerSetter.Method;
+				method.Append(new StaticCall(method.Module.GetMethodId(setterMethod.Group), Arguments.Length + 1));
 				method.Append(new SimpleInstruction(Opcode.Pop));
 			}
 			else
