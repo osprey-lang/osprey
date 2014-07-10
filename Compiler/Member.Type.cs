@@ -1051,7 +1051,7 @@ namespace Osprey.Members
 						// So, we've successfully overridden an inherited method. Good job!
 						hasOverridden = true;
 						method.OverriddenBaseMethod = overrideCandidate;
-						if (overrideCandidate.IsAbstract)
+						if (overrideCandidate.IsAbstract && !this.IsAbstract)
 							inheritedAbstractMethods.Remove(overrideCandidate);
 						// Now it's basically safe to assume the override candidate is a validly
 						// declared method, in which case we don't need to check any base types
