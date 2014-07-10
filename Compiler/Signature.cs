@@ -115,15 +115,15 @@ namespace Osprey
 			// If a is variadic, then b must not have more than a.paramCount - 1 required params.
 			// E.g.:
 			//    foo(a, b, c, d...)  paramCount = 4
-			//    foo(a, b)           OK    (2 < 3 == true)
-			//    foo()               OK    (0 < 3 == true)
-			//    foo(a, b, c)        Error (3 < 3 == false)
-			//    foo(a, b, c=0, d=0) Error (5 < 3 == false)
+			//    foo(a, b)           OK    (2 >= 3 == false)
+			//    foo()               OK    (0 >= 3 == false)
+			//    foo(a, b, c)        Error (3 >= 3 == true)
+			//    foo(a, b, c=0, d=0) Error (5 >= 3 == true)
 			if (a.splat != Splat.None)
-				return b.paramCount < a.paramCount - 1;
+				return b.paramCount >= a.paramCount - 1;
 			// If b is variadic, then the reverse is true.
 			if (b.splat != Splat.None)
-				return a.paramCount < b.paramCount - 1;
+				return a.paramCount >= b.paramCount - 1;
 
 			// Otherwise, we calculate a range of possible values for each
 			// signature, and see if those ranges overlap at all.
