@@ -3229,7 +3229,8 @@ namespace Osprey.Nodes
 			else
 			{
 				// Must be a writable instance property, so call the property setter
-				method.Append(new StaticCall(((Property)Member).SetterId, 1));
+				var setter = ((Property)Member).Setter;
+				method.Append(new StaticCall(method.Module.GetMethodId(setter.Method.Group), 1));
 				method.Append(new SimpleInstruction(Opcode.Pop));
 			}
 		}

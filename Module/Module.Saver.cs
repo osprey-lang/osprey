@@ -589,8 +589,8 @@ namespace Osprey
 		private FieldFlags GetFieldFlags(Field field)
 		{
 			return (field.Access == AccessLevel.Public ? FieldFlags.Public :
-				field.Access == AccessLevel.Private ? FieldFlags.Private :
-				FieldFlags.Protected)
+				field.Access == AccessLevel.Protected ? FieldFlags.Protected :
+				FieldFlags.Private)
 				|
 				(field.IsStatic ? 0 : FieldFlags.Instance);
 		}
@@ -598,8 +598,8 @@ namespace Osprey
 		private FieldFlags GetFieldFlags(ClassConstant constant)
 		{
 			return (constant.Access == AccessLevel.Public ? FieldFlags.Public :
-				constant.Access == AccessLevel.Private ? FieldFlags.Private :
-				FieldFlags.Protected)
+				constant.Access == AccessLevel.Protected ? FieldFlags.Protected :
+				FieldFlags.Private)
 				|
 				FieldFlags.HasValue;
 		}
@@ -607,8 +607,8 @@ namespace Osprey
 		private MethodFlags GetMethodFlags(MethodGroup method)
 		{
 			var flags = method.Access == AccessLevel.Public ? MethodFlags.Public :
-				method.Access == AccessLevel.Private ? MethodFlags.Private :
-				MethodFlags.Protected;
+				method.Access == AccessLevel.Protected ? MethodFlags.Protected :
+				MethodFlags.Private;
 			if (!method.IsStatic)
 				flags |= MethodFlags.Instance;
 			if (method.Name == Constructor.InstanceCtorName || method.Name == Constructor.StaticCtorName)
