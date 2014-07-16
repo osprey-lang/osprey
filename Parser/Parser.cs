@@ -2493,7 +2493,7 @@ namespace Osprey
 					tok[i].Type == TokenType.Mod ? BinaryOperator.Modulo :
 					BinaryOperator.BitwiseAnd;
 				i++;
-				var right = ParseUnaryExpr(ref i);
+				var right = ParseConcatenationExpr(ref i);
 				left = GetBinaryOperatorExpression(left, right, op);
 			}
 			return left;
