@@ -2320,10 +2320,7 @@ namespace Osprey.Nodes
 							prop.EnsureReadable(this);
 						if (access.IsWrite())
 							prop.EnsureWritable(this);
-						if (prop.IsAbstract)
-							throw new CompileTimeException(this,
-								string.Format("The property '{0}' is abstract and cannot be accessed through 'base'.",
-									member.FullName));
+						// Abstract property through base is checked below
 					}
 				}
 				else if (member.Kind == MemberKind.MethodGroup)
@@ -2340,7 +2337,7 @@ namespace Osprey.Nodes
 				if (throughBase)
 					if (member.Kind == MemberKind.Property && ((Property)member).IsAbstract)
 						throw new CompileTimeException(this,
-							string.Format("The member '{0}' is abstract and cannot be accessed through 'base'.",
+							string.Format("The property '{0}' is abstract and cannot be accessed through 'base'.",
 								member.FullName));
 					else if (!IsInvocation && member.Kind == MemberKind.MethodGroup &&
 						((MethodGroup)member).Any(o => o.IsAbstract))
