@@ -1360,6 +1360,7 @@ namespace Osprey.Members
 				if (member.Kind == MemberKind.Variable && ((Variable)member).IsCaptured)
 					closure.DeclareVariableField((Variable)member);
 
+			// As well as captured blocks
 			if (capturedBlocks != null)
 				foreach (var block in capturedBlocks)
 					closure.DeclareBlockField(block);
@@ -1369,6 +1370,9 @@ namespace Osprey.Members
 			return closure;
 		}
 
+		// Note: This does not add an initializer for the "<>this" field.
+		// We don't know yet if we'll need one. It's added on demand when
+		// DeclareThisField is called on the ClosureClass.
 		private void AddInitializers(ClosureClass closure)
 		{
 			var init = new List<AssignmentExpression>(2 + (capturedBlocks == null ? 0 : capturedBlocks.Count));
@@ -1384,26 +1388,6 @@ namespace Osprey.Members
 					{
 						IgnoreValue = true,
 					});
-			}
-
-			if (closure.ThisField != null)
-			{
-				var target = new InstanceMemberAccess(new LocalVariableAccess(ClosureVariable, LocalAccessKind.ClosureLocal),
-					closure, closure.ThisField);
-				target.IsAssignment = true;
-
-				Expression value;
-				if (this.Method is LocalMethod)
-				{
-					// If this is inside a local function, then the block declaring the local function
-					// will have a closure class with a ThisField. That's where we get our instance from.
-					var methodClosure = ((LocalMethod)Method).Function.Parent.closure;
-					value = new InstanceMemberAccess(new ThisAccess(), methodClosure, methodClosure.ThisField);
-				}
-				else
-					value = new ThisAccess();
-
-				init.Add(new AssignmentExpression(target, value) { IgnoreValue = true });
 			}
 
 			if (capturedBlocks != null)
@@ -1468,6 +1452,40 @@ namespace Osprey.Members
 					}
 
 			this.Node.Initializer = init;
+		}
+
+		/// <summary>
+		/// This method is called from ClosureClass.DeclareThisField, to ensure that the
+		/// closure class actually has an initializer for the “&lt;&gt;this” field.
+		/// </summary>
+		/// <param name="thisField">The field that contains the “this” value.</param>
+		/// <remarks>
+		/// This method is needed because the block does not know at the time it constructs
+		/// the closure class whether it will contain a “this” field. Previously, the
+		/// <see cref="AddInitializers"/> method added this initializer if closure.ThisField
+		/// was not null, but it was always null.
+		/// </remarks>
+		internal void AddClosureThisFieldInitializer(Field thisField)
+		{
+			if (closure == null)
+				throw new InvalidOperationException("Cannot call AddClosureThisFieldInitializer with no closure class.");
+
+			var target = new InstanceMemberAccess(new LocalVariableAccess(ClosureVariable, LocalAccessKind.ClosureLocal),
+				closure, closure.ThisField);
+			target.IsAssignment = true;
+
+			Expression value;
+			if (this.Method is LocalMethod)
+			{
+				// If this is inside a local function, then the block declaring the local function
+				// will have a closure class with a ThisField. That's where we get our instance from.
+				var methodClosure = ((LocalMethod)Method).Function.Parent.closure;
+				value = new InstanceMemberAccess(new ThisAccess(), methodClosure, methodClosure.ThisField);
+			}
+			else
+				value = new ThisAccess();
+
+			this.Node.Initializer.Add(new AssignmentExpression(target, value) { IgnoreValue = true });
 		}
 
 		private Method AddClosureConstructor(ClosureClass closure)

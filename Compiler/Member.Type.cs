@@ -2064,8 +2064,10 @@ namespace Osprey.Members
 
 		public Field GetBlockField(BlockSpace block)
 		{
-			if (blockToField != null && blockToField.ContainsKey(block))
-					return blockToField[block];
+			Field field;
+			if (blockToField != null &&
+				blockToField.TryGetValue(block, out field))
+				return field;
 
 			return null;
 		}
@@ -2120,6 +2122,7 @@ namespace Osprey.Members
 					IsStatic = false,
 				};
 				DeclareField(thisField);
+				parentBlock.AddClosureThisFieldInitializer(thisField);
 			}
 
 			return thisField;
