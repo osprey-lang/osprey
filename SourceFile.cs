@@ -188,6 +188,11 @@ namespace Osprey
 			return new SourceFile(fileName, fileText, hash);
 		}
 
+		public static SourceFile CreateAnonymous(string source)
+		{
+			return new SourceFile("<anonymous>", source, null);
+		}
+
 		[DebuggerDisplay("Line #{LineNumber} from {StartIndex} to {EndIndex}")]
 		private struct LineInfo
 		{

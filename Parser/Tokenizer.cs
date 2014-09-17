@@ -43,7 +43,7 @@ namespace Osprey
 				throw new ArgumentNullException("fileSource");
 
 			this.flags = flags;
-			this.file = new SourceFile("<anonymous>", fileSource);
+			this.file = SourceFile.CreateAnonymous(fileSource);
 			this.source = fileSource;
 		}
 
