@@ -519,7 +519,8 @@ namespace Osprey.Nodes
 						if (!(value is ILocalResultExpression))
 							method.Append(new StoreLocal(variable));
 					}
-					method.PopLocation(); // decl.Initializer
+					if (decl.Initializer.Document != null)
+						method.PopLocation(); // decl.Initializer
 				}
 				else if (!decl.Variable.IsCaptured)
 				{

@@ -684,7 +684,7 @@ namespace Osprey
 					if (sourceFiles.TryGetValue(fileName, out doc) && doc != null)
 						continue;
 
-					var sourceFile = ReadFileAndHash(fileName);
+					var sourceFile = SourceFile.Open(fileName, computeHash: UseDebugSymbols);
 
 					doc = Parser.Parse(sourceFile, ParserOptions);
 
@@ -701,7 +701,7 @@ namespace Osprey
 
 					sourceFiles[fileName] = doc; // Add first, to avoid self-dependency issues
 					documents.Add(doc);
-					ProcessImports(newNewFiles, importedModules, fileName, doc);
+					ProcessImports(newNewFiles, importedModules, doc);
 				}
 				newFiles = newNewFiles;
 			}
@@ -738,35 +738,9 @@ namespace Osprey
 			}
 		}
 
-		private SourceFile ReadFileAndHash(string fileName)
+		private void ProcessImports(HashSet<string> newFiles, HashSet<string> modules, Document doc)
 		{
-			byte[] hash = null;
-
-			string fileText;
-			if (UseDebugSymbols)
-				using (var fs = File.OpenRead(fileName))
-				{
-					if (!fs.CanSeek)
-						throw new IOException(string.Format("The source file '{0}' must be seekable.", fileName));
-
-					// First, hash the entire file
-					using (var sha1 = SHA1.Create())
-						hash = sha1.ComputeHash(fs);
-
-					// Then, seek back to the beginning and use StreamReader
-					// to read the text contents of the file
-					fs.Seek(0, SeekOrigin.Begin);
-					using (var sr = new StreamReader(fs, detectEncodingFromByteOrderMarks: true))
-						fileText = sr.ReadToEnd();
-				}
-			else
-				fileText = File.ReadAllText(fileName);
-
-			return new SourceFile(fileName, fileText) { FileHash = hash };
-		}
-
-		private void ProcessImports(HashSet<string> newFiles, HashSet<string> modules, string docFile, Document doc)
-		{
+			var docFile = doc.SourceFile.FileName;
 			foreach (var use in doc.Uses)
 				if (use is UseFileDirective)
 				{
@@ -789,11 +763,13 @@ namespace Osprey
 					//     use "b.osp";
 					//   b.osp:
 					//     use "a.osp";
-					if (realFile == doc.SourceFile.FileName)
+					if (realFile == docFile)
 						throw new CompileTimeException(use, "A source file may not include itself.");
 					if (!sourceFiles.ContainsKey(realFile))
 					{
-						Notice(CompilerVerbosity.ExtraVerbose, "Adding source file '{0}' to project, referenced in '{1}'", realFile, docFile);
+						Notice(CompilerVerbosity.ExtraVerbose,
+							"Adding source file '{0}' to project, referenced in '{1}'",
+							realFile, docFile);
 						newFiles.Add(realFile);
 					}
 				}
@@ -801,7 +777,9 @@ namespace Osprey
 				{
 					var modName = ((UseModuleDirective)use).Name.Parts.JoinString(".");
 					modules.Add(modName);
-					Notice(CompilerVerbosity.ExtraVerbose, "Adding reference to module '{0}', from '{1}'", modName, docFile);
+					Notice(CompilerVerbosity.ExtraVerbose,
+						"Adding reference to module '{0}', from '{1}'",
+						modName, docFile);
 				}
 		}
 

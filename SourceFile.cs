@@ -1,14 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Osprey
 {
 	public class SourceFile
 	{
-		public SourceFile(string fileName, string source)
+		private SourceFile(string fileName, string source, byte[] hash)
 		{
 			if (fileName == null)
 				throw new ArgumentNullException("fileName");
@@ -17,6 +19,7 @@ namespace Osprey
 
 			this.fileName = fileName;
 			this.source = source;
+			this.FileHash = hash;
 		}
 
 		private string fileName;
@@ -151,6 +154,38 @@ namespace Osprey
 
 			column = col + 1;
 			return line;
+		}
+
+		public static SourceFile Open(string fileName)
+		{
+			return Open(fileName, computeHash: false);
+		}
+
+		public static SourceFile Open(string fileName, bool computeHash)
+		{
+			byte[] hash = null;
+
+			string fileText;
+			if (computeHash)
+				using (var fs = File.OpenRead(fileName))
+				{
+					if (!fs.CanSeek)
+						throw new IOException(string.Format("The source file '{0}' must be seekable.", fileName));
+
+					// First, hash the entire file
+					using (var sha1 = SHA1.Create())
+						hash = sha1.ComputeHash(fs);
+
+					// Then, seek back to the beginning and use StreamReader
+					// to read the text contents of the file
+					fs.Seek(0, SeekOrigin.Begin);
+					using (var sr = new StreamReader(fs, detectEncodingFromByteOrderMarks: true))
+						fileText = sr.ReadToEnd();
+				}
+			else
+				fileText = File.ReadAllText(fileName);
+
+			return new SourceFile(fileName, fileText, hash);
 		}
 
 		[DebuggerDisplay("Line #{LineNumber} from {StartIndex} to {EndIndex}")]
