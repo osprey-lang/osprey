@@ -2993,53 +2993,17 @@ namespace Osprey
 			// {,} is not a valid hash: trailing commas are only allowed if there's at least one member
 			do
 			{
-				Expression key = null;
-				if (Accept(i, TokenType.Identifier))
-				{
-					if (SimplifiedTree)
-						key = new ConstantExpression(ConstantValue.CreateString(tok[i].Value));
-					else
-						key = new SimpleNameExpression(tok[i].Value);
-
-					key.StartIndex = tok[i].Index;
-				}
-				else if (Accept(i, TokenType.String))
-					key = new StringLiteral((StringToken)tok[i])
-					{
-						StartIndex = tok[i].Index,
-					};
-				else if (Accept(i, TokenType.Integer))
-					key = new IntegerLiteral(tok[i])
-					{
-						StartIndex = tok[i].Index,
-					};
-				else if (Accept(i, TokenType.Character))
-					key = new CharacterLiteral((CharToken)tok[i])
-					{
-						StartIndex = tok[i].Index,
-					};
-				else if (Accept(i, TokenType.ParenOpen)) // parenthesised expression as key
-				{
-					var startParen = tok[i++].Index;
-					key = new ParenthesizedExpression(ParseExpression(ref i));
-
-					Expect(i, TokenType.ParenClose);
-
-					key.StartIndex = startParen;
-				}
-				else
-					ParseError(i, "The hash key must be an identifier, string, integer, character or parenthesized expression.");
-
-				key.EndIndex = tok[i++].EndIndex;
-				key.Document = document;
-
+				Expression key = ParseExpression(ref i);
 				Expect(ref i, TokenType.Colon);
+				Expression value = ParseExpression(ref i);
 
-				members.Add(new HashMember(key, ParseExpression(ref i)));
-			} while (Accept(i++, TokenType.Comma) && !Accept(i /*+ 1*/, TokenType.CurlyClose));
-			i--; // the condition above skips a token otherwise
-
-			Accept(ref i, TokenType.Comma); // trailing comma
+				members.Add(new HashMember(key, value)
+				{
+					StartIndex = key.StartIndex,
+					EndIndex = value.EndIndex,
+					Document = this.document
+				});
+			} while (Accept(ref i, TokenType.Comma) && !Accept(i, TokenType.CurlyClose));
 
 			Expect(i, TokenType.CurlyClose);
 
