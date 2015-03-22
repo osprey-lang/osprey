@@ -169,7 +169,8 @@ namespace Osprey
 			if (ch == '\'')
 				return ScanCharLiteral(ref i);
 
-			if (ch == '_' || char.IsLetter(source, i) ||
+			if (ch == '\\' || // escaped identifier
+				ch == '_' || char.IsLetter(source, i) ||
 				char.GetUnicodeCategory(source, i) == UnicodeCategory.LetterNumber)
 				return ScanIdentifier(ref i);
 
@@ -554,13 +555,18 @@ namespace Osprey
 
 		private Token ScanIdentifier(ref int i)
 		{
+			var escaped = source[i] == '\\';
+			if (escaped)
+				i++;
+
+			// Note: does not include the \ prefix, if any
 			var startIndex = i;
 
-#if DEBUG
 			if (IsEOF(i) || !char.IsLetter(source, i) && source[i] != '_' &&
 				char.GetUnicodeCategory(source, i) != UnicodeCategory.LetterNumber)
-				throw new Exception("Internal error: ScanIdentifier called without valid identifier-start-character at i.");
-#endif
+				// This can only happen if a backslash is not followed by an identifier-start-character
+				throw new ParseException(GetErrorToken(i - 1, 1),
+					"Expected an identifier or keyword after backslash ('\\').");
 
 			var hasFormatChars = false;
 			while (!IsEOF(i))
@@ -583,10 +589,14 @@ namespace Osprey
 			}
 
 			var ident = source.Substring(startIndex, i - startIndex);
-			TokenType type;
-			if (ident.Length > LongestKeywordLength ||
-				!IdentToKeyword.TryGetValue(ident, out type))
+			TokenType type = TokenType.Identifier;
+			var isKeyword = !escaped &&
+				ident.Length <= LongestKeywordLength &&
+				IdentToKeyword.TryGetValue(ident, out type);
+			if (!isKeyword)
 			{
+				// TryGetValue sets the value to default(TokenType),
+				// so gotta reassign it.
 				type = TokenType.Identifier;
 				if (NormalizeIdentifiers)
 					ident = NormalizeIdentifier(ident, hasFormatChars);
