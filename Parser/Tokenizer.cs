@@ -593,16 +593,13 @@ namespace Osprey
 			var isKeyword = !escaped &&
 				ident.Length <= LongestKeywordLength &&
 				IdentToKeyword.TryGetValue(ident, out type);
-			if (!isKeyword)
-			{
-				// TryGetValue sets the value to default(TokenType),
-				// so gotta reassign it.
-				type = TokenType.Identifier;
-				if (NormalizeIdentifiers)
-					ident = NormalizeIdentifier(ident, hasFormatChars);
-			}
+			if (isKeyword)
+				return new Token(file, ident, type, startIndex);
 
-			return new Token(file, ident, type, startIndex);
+			if (NormalizeIdentifiers)
+				ident = NormalizeIdentifier(ident, hasFormatChars);
+
+			return new Identifier(file, ident, escaped, startIndex);
 		}
 
 		private Token ScanPunctuation(ref int i)

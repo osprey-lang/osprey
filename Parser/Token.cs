@@ -141,6 +141,22 @@ namespace Osprey
 		}
 	}
 
+	public class Identifier : Token
+	{
+		public Identifier(SourceFile source, string value, bool escaped, int index)
+			: base(source, value, TokenType.Identifier, index)
+		{
+			this.escaped = escaped;
+		}
+
+		private bool escaped;
+		/// <summary>
+		/// Gets a value that indicates whether the identifier is escaped
+		/// (that is, it has the '\' prefix).
+		/// </summary>
+		public bool Escaped { get { return escaped; } }
+	}
+
 	/// <summary>
 	/// Represents a string literal token. The tokenizer "parses" string literals,
 	/// turning escape sequences into the characters they actually refer to, and

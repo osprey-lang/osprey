@@ -189,23 +189,32 @@ namespace Osprey
 			return false;
 		}
 
-		public bool AcceptExtension(int index, string keyword)
+		public bool AcceptContextual(int index, string keyword)
 		{
-			if (UseExtensions &&
-				tok[index].Match(TokenType.Identifier) &&
-				tok[index].Value == keyword)
+			var token = tok[index] as Identifier;
+			if (token != null && !token.Escaped && token.Value == keyword)
 				return true;
 			return false;
 		}
 
-		public bool AcceptExtension(ref int index, string keyword)
+		public bool AcceptContextual(ref int index, string keyword)
 		{
-			if (AcceptExtension(index, keyword))
+			if (AcceptContextual(index, keyword))
 			{
 				index++;
 				return true;
 			}
 			return false;
+		}
+
+		public bool AcceptExtension(int index, string keyword)
+		{
+			return UseExtensions && AcceptContextual(index, keyword);
+		}
+
+		public bool AcceptExtension(ref int index, string keyword)
+		{
+			return UseExtensions && AcceptContextual(ref index, keyword);
 		}
 
 		#endregion
@@ -499,7 +508,8 @@ namespace Osprey
 
 			var i = 0;
 
-			if (Accept(i, TokenType.Identifier) && tok[i].Value == "version")
+			if (AcceptContextual(i, "version") &&
+				Accept(i + 1, TokenType.Integer))
 				document.Version = ParseVersion(ref i);
 
 			// parse all use directives first
@@ -2697,16 +2707,21 @@ namespace Osprey
 			}
 			if (Accept(i, TokenType.Identifier))
 			{
-				if (UseExtensions)
+				var ident = (Identifier)tok[i];
+				if (UseExtensions && !ident.Escaped)
 				{
-					if (tok[i].Value == "__named_const")
+					if (ident.Value == "__named_const")
 						return ParseNamedConstExpr(ref i);
-					if (tok[i].Value == "__get_argc")
-						return new GetArgumentCount() { StartIndex = start, EndIndex = tok[i++].EndIndex, Document = document };
+					if (ident.Value == "__get_argc")
+					{
+						i++;
+						return new GetArgumentCount() { StartIndex = start, EndIndex = ident.EndIndex, Document = document };
+					}
 				}
 
-				return new SimpleNameExpression(tok[i].Value)
-					.At(start, tok[i++].EndIndex, document);
+				i++;
+				return new SimpleNameExpression(ident.Value)
+					.At(start, ident.EndIndex, document);
 			}
 
 			if (Accept(i, TokenType.This))
@@ -2906,9 +2921,8 @@ namespace Osprey
 			// [for i in [1 to 10]] is not allowed, and neither is [where true].
 			items.Add(ParseExpression(ref i));
 
-			if (tok[i].Value == "to") // range expression, e.g. [1 to 10] or [something.length - x() to 12 + hi/mom];
+			if (AcceptContextual(ref i, "to")) // range expression, e.g. [1 to 10] or [something.length - x() to 12 + hi/mom];
 			{
-				i++;
 				items.Add(ParseExpression(ref i));
 
 				Expression step = null;
@@ -2942,7 +2956,7 @@ namespace Osprey
 		private Expression ParseListComprehension(ref int i, int start, ref TempList<Expression> items)
 		{
 			var parts = new TempList<ListCompPart>(1);
-			while (Accept(i, TokenType.For) || tok[i].Value == "where")
+			while (Accept(i, TokenType.For) || AcceptContextual(i, "where"))
 			{
 				if (Accept(ref i, TokenType.For))
 				{
