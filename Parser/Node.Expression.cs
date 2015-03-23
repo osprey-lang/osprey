@@ -3054,9 +3054,15 @@ namespace Osprey.Nodes
 		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
 		{
 			var type = context.GetContainingNamespace().ResolveTypeName(Type, document);
+			var @class = type as Class;
+			if (@class != null && (@class.IsAbstract || @class.IsStatic))
+				throw new CompileTimeException(this,
+					string.Format("Cannot construct an instance of '{0}': the type is abstract or static.",
+						@class.FullName));
+
 			bool _;
 			Constructor = type.FindConstructor(Type, Arguments.Length,
-				instClass: type as Class, fromClass: context.GetContainingClass(out _));
+				instClass: @class, fromClass: context.GetContainingClass(out _));
 
 			for (var i = 0; i < Arguments.Length; i++)
 				Arguments[i] = Arguments[i].ResolveNames(context, document, false, false);
@@ -3065,7 +3071,7 @@ namespace Osprey.Nodes
 				Constructor.VerifyArgumentRefness(Arguments);
 
 			if (Initializer != null)
-				Initializer.ResolveNames(context, document, (Class)type);
+				Initializer.ResolveNames(context, document, @class);
 
 			return this;
 		}
