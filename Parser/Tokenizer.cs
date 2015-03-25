@@ -94,10 +94,10 @@ namespace Osprey
 		{
 			get
 			{
-				// Note: EnsureMinIndex updates 'tokens' and, if it returns false, 'eof'. Mmm, side-effective.
 				if (index < 0)
 					throw new ArgumentOutOfRangeException("index");
 
+				// Note: EnsureMinIndex updates 'tokens' and, if it returns false, 'eof'. Mmm, side-effective.
 				if (EnsureMinIndex(index))
 					return tokens[index];
 				else
@@ -112,14 +112,16 @@ namespace Osprey
 		/// <returns>true if the input string has enough tokens to reach <paramref name="index"/>; otherwise, false.</returns>
 		private bool EnsureMinIndex(int index)
 		{
+			if (index < tokenCount)
+				return true;
 			if (eof != null && index >= tokenCount)
 				return false; // we've already determined that there are no more tokens to read
 
-			while (tokenCount < index + 1)
+			while (tokenCount <= index + ExtraTokens)
 				if (!MoveNext())
-					return false;
+					break;
 
-			return true;
+			return index < tokenCount;
 		}
 
 		#region Token scanner
@@ -904,6 +906,10 @@ namespace Osprey
 		#endregion
 
 		#region Static members
+
+		// When trying to read a token, scan up to this number of tokens
+		// past the requested index. This somewhat improves performance.
+		private const int ExtraTokens = 25;
 
 		private static string NormalizeIdentifier(string ident, bool hasFormatChars)
 		{
