@@ -4,7 +4,7 @@ The language that this compiler actually compiles, as well as the bytecode forma
 
 ## Command-line options
 
-The documentation for these has been moved to the wiki! Please see [Command-Line Parameters](https://bitbucket.org/Heurlinius/osprey/wiki/Command-Line%20Parameters) instead.
+The documentation for these has been moved to the wiki! Please see [Command-Line Parameters](https://bitbucket.org/OspreyLang/osprey/wiki/Command-Line%20Parameters) instead.
 
 ## Command-line output
 
