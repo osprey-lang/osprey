@@ -1294,6 +1294,7 @@ namespace Osprey.Members
 				var overrideCandidate = ((MethodGroup)baseMember).FindOverload(method.Signature);
 				method.IsOverride = overrideCandidate != null &&
 					(overrideCandidate.IsAbstract || overrideCandidate.IsOverridable);
+				method.OverriddenBaseMethod = overrideCandidate;
 			}
 		}
 

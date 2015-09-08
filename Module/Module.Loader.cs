@@ -294,7 +294,6 @@ namespace Osprey
 				output = ReadClassDef(reader, target, flags, typeName, baseType, sharedType,
 					ref fieldCounter, ref methodCounter);
 			output.Module = target;
-			output.BaseType = baseType;
 
 			if (target.explicitlyImported && output.Access == AccessLevel.Public)
 			{
@@ -317,6 +316,7 @@ namespace Osprey
 			var output = new Class(typeName,
 				(flags & TypeFlags.Private) == TypeFlags.Private ? AccessLevel.Private : AccessLevel.Public,
 				parent: target.explicitlyImported ? target.pool.Namespace : null);
+			output.BaseType = baseType;
 
 			output.IsPrimitive = (flags & TypeFlags.Primitive) == TypeFlags.Primitive;
 			if ((flags & TypeFlags.Static) == TypeFlags.Static) // static = sealed | abstract
@@ -685,6 +685,7 @@ namespace Osprey
 		{
 			var output = new Enum(typeName, GetAccessibility(reader, typeFlags), isSet,
 				parent: target.explicitlyImported ? target.pool.Namespace : null);
+			output.BaseType = baseType;
 
 			// Fields
 			var size = reader.ReadUInt32();
