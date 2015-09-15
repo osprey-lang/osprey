@@ -553,7 +553,6 @@ namespace Osprey
 		public enum OverloadFlags : uint
 		{
 			VarEnd = 0x01,
-			VarStart = 0x02,
 			Native = 0x04,
 			ShortHeader = 0x08,
 			Virtual = 0x10,

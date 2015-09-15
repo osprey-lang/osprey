@@ -1326,8 +1326,6 @@ namespace Osprey.Members
 					needSep = true;
 				sb.Append(m.Group.FullName);
 				sb.Append('(');
-				if (m.Signature.Splat == Splat.Beginning)
-					sb.Append("...");
 				sb.Append(string.Join(", ", m.Parameters.Select(p => p.Name)));
 				if (m.Signature.Splat == Splat.End)
 					sb.Append("...");

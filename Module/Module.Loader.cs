@@ -496,7 +496,6 @@ namespace Osprey
 					reader.Seek(8,  SeekOrigin.Current);
 
 				var signature = new Signature(paramCount, optionalParamCount,
-					(flags & OverloadFlags.VarStart) == OverloadFlags.VarStart ? Splat.Beginning :
 					(flags & OverloadFlags.VarEnd) == OverloadFlags.VarEnd ? Splat.End :
 					Splat.None);
 

@@ -733,10 +733,7 @@ namespace Osprey.Nodes
 			sb.Append('\t', indent);
 			sb.Append("function ");
 			sb.Append(Name);
-			if (Splat == Splat.Beginning)
-				sb.Append("(...");
-			else
-				sb.Append("(");
+			sb.Append("(");
 			sb.Append(Parameters.JoinString(", "));
 			if (Splat == Splat.End)
 				sb.Append("...) ");
@@ -793,7 +790,7 @@ namespace Osprey.Nodes
 		public override void Compile(Compiler compiler, MethodBuilder method) { }
 	}
 
-	public enum Splat { None, Beginning, End }
+	public enum Splat { None, End }
 
 	public sealed class ExpressionStatement : Statement
 	{

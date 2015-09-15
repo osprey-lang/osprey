@@ -870,8 +870,6 @@ namespace Osprey.Nodes
 
 			sb.Append("new(");
 
-			if (Splat == Splat.Beginning)
-				sb.Append("...");
 			sb.Append(Parameters.JoinString(", "));
 			if (Splat == Splat.End)
 				sb.Append("...");
@@ -1109,10 +1107,7 @@ namespace Osprey.Nodes
 				sb.Append("function ");
 
 			sb.Append(Name);
-			if (Splat == Splat.Beginning)
-				sb.Append("(...");
-			else
-				sb.Append("(");
+			sb.Append("(");
 
 			sb.Append(Parameters.JoinString(", "));
 

@@ -1012,9 +1012,6 @@ namespace Osprey
 			if (Accept(i, TokenType.ParenClose))
 				return output;
 
-			if (Accept(ref i, TokenType.Splat))
-				output.Splat = Splat.Beginning;
-
 			var optionalSeen = false;
 			bool isByRef;
 			do
@@ -1037,13 +1034,8 @@ namespace Osprey
 				else
 					ParseError(i, "Expected identifier or 'this'.");
 
-				if (isByRef && output.Splat == Splat.Beginning && parameters.Count == 0)
-					ParseError(nameTok, CannotPassVariadicParamByRef);
-
 				if (Accept(i, TokenType.Assign)) // optional parameter
 				{
-					if (output.Splat != Splat.None)
-						ParseError(i, CannotMixOptionalAndVariadicParams);
 					if (isByRef)
 						ParseError(i, CannotPassOptionalParamByRef);
 					i++;
@@ -1075,8 +1067,6 @@ namespace Osprey
 					ParseError(i, CannotMixOptionalAndVariadicParams);
 				if (isByRef)
 					ParseError(i, CannotPassVariadicParamByRef);
-				if (output.Splat != Splat.None)
-					ParseError(i, MoreThanOneVariadicParam);
 				i++;
 				output.Splat = Splat.End;
 			}
@@ -1511,9 +1501,6 @@ namespace Osprey
 				return output;
 			}
 
-			if (Accept(ref i, TokenType.Splat))
-				output.Splat = Splat.Beginning;
-
 			var optionalSeen = false;
 			bool isByRef;
 			do
@@ -1522,13 +1509,8 @@ namespace Osprey
 				output.HasRefParams |= isByRef;
 				var nameTok = Expect(ref i, TokenType.Identifier);
 
-				if (isByRef && output.Splat == Splat.Beginning && parameters.Count == 0)
-					ParseError(nameTok, CannotPassVariadicParamByRef); 
-
 				if (Accept(i, TokenType.Assign)) // optional parameter/argument
 				{
-					if (output.Splat != Splat.None)
-						ParseError(i, CannotMixOptionalAndVariadicParams);
 					if (isByRef)
 						ParseError(i, CannotPassOptionalParamByRef);
 					i++;
@@ -1562,8 +1544,6 @@ namespace Osprey
 					ParseError(i, CannotMixOptionalAndVariadicParams);
 				if (isByRef)
 					ParseError(i, CannotPassVariadicParamByRef);
-				if (output.Splat != Splat.None)
-					ParseError(i, MoreThanOneVariadicParam);
 				output.Splat = Splat.End;
 				i++;
 			}

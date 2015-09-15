@@ -622,9 +622,7 @@ namespace Osprey
 		{
 			var flags = overload.Body is ExternBlockSpace ? OverloadFlags.Native : 0;
 
-			if (overload.Signature.Splat == Nodes.Splat.Beginning)
-				flags |= OverloadFlags.VarStart;
-			else if (overload.Signature.Splat == Nodes.Splat.End)
+			if (overload.Signature.Splat == Nodes.Splat.End)
 				flags |= OverloadFlags.VarEnd;
 			if (overload.IsOverridable)
 				flags |= OverloadFlags.Virtual;

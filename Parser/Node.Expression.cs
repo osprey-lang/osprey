@@ -1839,10 +1839,7 @@ namespace Osprey.Nodes
 			}
 			else if (Parameters.Length > 0)
 			{
-				if (Splat == Splat.Beginning)
-					sb.Append("(...");
-				else
-					sb.Append("(");
+				sb.Append("(");
 
 				sb.Append(Parameters.JoinString(", ", indent));
 

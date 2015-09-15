@@ -395,28 +395,7 @@ namespace Osprey.Members
 
 		internal void VerifyArgumentRefness(Expression[] args)
 		{
-			if (Signature.Splat == Splat.Beginning)
-			{
-				// Parameters that get packed into a list must be by value
-				var ia = 0; // Argument index
-				while (ia < args.Length - Signature.ParameterCount + 1)
-				{
-					if (args[ia] is RefExpression)
-						ErrorWrongRefness(ia, args[ia], false);
-					ia++;
-				}
-
-				// But required parameters may be by reference
-				var ip = 1; // Parameter index (param 0 is the variadic param)
-				while (ia < args.Length)
-				{
-					if ((args[ia] is RefExpression) != Parameters[ip].IsByRef)
-						ErrorWrongRefness(ia, args[ia], Parameters[ip].IsByRef);
-					ia++;
-					ip++;
-				}
-			}
-			else if (Signature.Splat == Splat.End)
+			if (Signature.Splat == Splat.End)
 			{
 				var i = 0;
 				// Required parameters may be by reference
