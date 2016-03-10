@@ -97,6 +97,7 @@
     <Compile Include="Parser\ParseException.cs" />
     <Compile Include="Parser\Parser.cs" />
     <Compile Include="Parser\TokenFacts.cs" />
+    <Compile Include="Parser\TokenType.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Compiler\Signature.cs" />
