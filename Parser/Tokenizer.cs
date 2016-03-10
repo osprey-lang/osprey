@@ -593,8 +593,8 @@ namespace Osprey
 			var ident = source.Substring(startIndex, i - startIndex);
 			TokenType type = TokenType.Identifier;
 			var isKeyword = !escaped &&
-				ident.Length <= LongestKeywordLength &&
-				IdentToKeyword.TryGetValue(ident, out type);
+				ident.Length <= TokenFacts.LongestKeywordLength &&
+				TokenFacts.IdentToKeyword.TryGetValue(ident, out type);
 			if (isKeyword)
 				return new Token(file, ident, type, startIndex);
 
@@ -937,68 +937,6 @@ namespace Osprey
 
 			return ident;
 		}
-
-		static Tokenizer()
-		{
-			KeywordToString = new Dictionary<TokenType, string>(IdentToKeyword.Count);
-			foreach (var kvp in IdentToKeyword)
-				KeywordToString.Add(kvp.Value, kvp.Key);
-
-			PunctToString = new Dictionary<TokenType, string>(PunctToType.Count);
-			foreach (var kvp in PunctToType)
-				PunctToString.Add(kvp.Value, kvp.Key);
-		}
-
-		internal static readonly Dictionary<string, TokenType> IdentToKeyword = new Dictionary<string, TokenType>
-		{
-			{"abstract", TokenType.Abstract}, {"and", TokenType.And}, {"async", TokenType.Async},
-			{"base", TokenType.Base}, {"break", TokenType.Break},
-			{"catch", TokenType.Catch}, {"class", TokenType.Class}, {"const", TokenType.Const},
-			{"do", TokenType.Do},
-			{"else", TokenType.Else}, {"enum", TokenType.Enum},
-			{"false", TokenType.False}, {"finally", TokenType.Finally}, {"for", TokenType.For}, {"function", TokenType.Function},
-			{"get", TokenType.Get}, {"global", TokenType.Global},
-			{"if", TokenType.If}, {"in", TokenType.In}, {"inheritable", TokenType.Inheritable}, {"is", TokenType.Is}, {"iter", TokenType.Iter},
-			{"namespace", TokenType.Namespace}, {"new", TokenType.New}, {"next", TokenType.Next}, {"not", TokenType.Not},
-			{"null", TokenType.Null},
-			{"operator", TokenType.Operator}, {"or", TokenType.Or}, {"overridable", TokenType.Overridable}, {"override", TokenType.Override},
-			{"private", TokenType.Private}, {"protected", TokenType.Protected}, {"public", TokenType.Public},
-			{"ref", TokenType.Ref}, {"refeq", TokenType.Refeq}, {"return", TokenType.Return},
-			{"set", TokenType.Set}, {"static", TokenType.Static},
-			{"this", TokenType.This}, {"throw", TokenType.Throw}, {"true", TokenType.True},
-			{"try", TokenType.Try}, {"typeof", TokenType.Typeof},
-			{"use", TokenType.Use}, {"var", TokenType.Var},
-			{"while", TokenType.While}, {"with", TokenType.With}, {"xor", TokenType.Xor}, {"yield", TokenType.Yield},
-		};
-		internal static readonly Dictionary<string, TokenType> PunctToType = new Dictionary<string, TokenType>
-		{
-			{"{", TokenType.CurlyOpen}, {"}", TokenType.CurlyClose},
-			{"[", TokenType.SquareOpen}, {"]", TokenType.SquareClose},
-			{"(", TokenType.ParenOpen}, {")", TokenType.ParenClose},
-			{".", TokenType.Dot}, {",", TokenType.Comma},
-			{":", TokenType.Colon}, {";", TokenType.Semicolon}, {"~", TokenType.Tilde},
-			{"<", TokenType.Less}, {"<=", TokenType.LessEqual}, {">", TokenType.Greater}, {">=", TokenType.GreaterEqual},
-			{"==", TokenType.DoubleEqual}, {"!=", TokenType.NotEqual}, {"?", TokenType.Question},
-			{"??", TokenType.NullCoalescing}, {"?!", TokenType.NullOr}, {"->", TokenType.FuncApplication},
-			{"+", TokenType.Plus}, {"-", TokenType.Minus}, {"|", TokenType.Pipe},
-			{"*", TokenType.Multiply}, {"/", TokenType.Divide}, {"%", TokenType.Mod}, {"&", TokenType.Ampersand},
-			{"^", TokenType.Caret}, {"::", TokenType.Concatenation},
-			{"<<", TokenType.ShiftLeft}, {">>", TokenType.ShiftRight},
-			{"**", TokenType.Power}, {"#", TokenType.Hash}, {"$", TokenType.Dollar},
-			{"=", TokenType.Assign},
-			{"+=", TokenType.PlusAssign}, {"-=", TokenType.MinusAssign}, {"|=", TokenType.PipeAssign},
-			{"*=", TokenType.MulAssign}, {"/=", TokenType.DivAssign}, {"%=", TokenType.ModAssign}, {"&=", TokenType.AmpAssign},
-			{"^=", TokenType.CaretAssign}, {"::=", TokenType.ConcatAssign},
-			{"<<=", TokenType.ShiftLeftAssign}, {">>=", TokenType.ShiftRightAssign},
-			{"**=", TokenType.PowerAssign}, {"#=", TokenType.HashAssign}, {"$=", TokenType.DollarAssign},
-			{"@", TokenType.At}, {"...", TokenType.Splat}, {"?.", TokenType.SafeAccess}, {"<=>", TokenType.Compare},
-			{"?(", TokenType.ParenOpenSafe}, {"?[", TokenType.SquareOpenSafe}
-		};
-
-		internal static readonly Dictionary<TokenType, string> KeywordToString;
-		internal static readonly Dictionary<TokenType, string> PunctToString;
-
-		private const int LongestKeywordLength = 11; // inheritable/overridable
 
 		#endregion
 	}

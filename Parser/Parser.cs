@@ -276,12 +276,12 @@ namespace Osprey
 		internal string FormatTokenType(TokenType type)
 		{
 			if ((type & TokenType.Punctuation) == TokenType.Punctuation)
-				return string.Format("'{0}' ({1})", Tokenizer.PunctToString[type],
+				return string.Format("'{0}' ({1})", TokenFacts.PunctToString[type],
 					System.Enum.GetName(typeof(TokenType), type));
 			else if (type == TokenType.Identifier)
 				return "identifier";
 			else if ((type & TokenType.Keyword) == TokenType.Keyword)
-				return string.Format("keyword '{0}'", Tokenizer.KeywordToString[type]);
+				return string.Format("keyword '{0}'", TokenFacts.KeywordToString[type]);
 			else if (type == TokenType.EOF)
 				return "end of file";
 			else
