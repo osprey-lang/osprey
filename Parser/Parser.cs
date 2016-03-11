@@ -192,7 +192,7 @@ namespace Osprey
 		public bool AcceptContextual(int index, ContextualType contextualType)
 		{
 			var token = tok[index] as Identifier;
-			if (token != null && !token.Escaped && token.ContextualType == contextualType)
+			if (token != null && token.ContextualType == contextualType)
 				return true;
 			return false;
 		}
