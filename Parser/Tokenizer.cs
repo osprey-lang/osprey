@@ -591,17 +591,22 @@ namespace Osprey
 			}
 
 			var ident = source.Substring(startIndex, i - startIndex);
-			TokenType type = TokenType.Identifier;
+			var type = TokenType.Identifier;
 			var isKeyword = !escaped &&
 				ident.Length <= TokenFacts.LongestKeywordLength &&
 				TokenFacts.IdentToKeyword.TryGetValue(ident, out type);
 			if (isKeyword)
 				return new Token(file, ident, type, startIndex);
 
+			var contextualType = ContextualType.None;
+			if (!escaped &&
+				ident.Length <= TokenFacts.LongestContextualLength)
+				TokenFacts.IdentToContextual.TryGetValue(ident, out contextualType);
+
 			if (NormalizeIdentifiers)
 				ident = NormalizeIdentifier(ident, hasFormatChars);
 
-			return new Identifier(file, ident, escaped, startIndex);
+			return new Identifier(file, ident, escaped, startIndex, contextualType);
 		}
 
 		private Token ScanPunctuation(ref int i)

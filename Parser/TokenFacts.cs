@@ -61,6 +61,18 @@ namespace Osprey
 			{"yield", TokenType.Yield},
 		};
 
+		internal static readonly Dictionary<string, ContextualType> IdentToContextual = new Dictionary<string, ContextualType>
+		{
+			{"to", ContextualType.To},
+			{"where", ContextualType.Where},
+			{"version", ContextualType.Version},
+			{"__primitive", ContextualType.Primitive},
+			{"__init_type", ContextualType.InitType},
+			{"__extern", ContextualType.Extern},
+			{"__named_const", ContextualType.NamedConst},
+			{"__get_argc", ContextualType.GetArgc},
+		};
+
 		internal static readonly Dictionary<string, TokenType> PunctToType = new Dictionary<string, TokenType>
 		{
 			{"{", TokenType.CurlyOpen},
@@ -130,6 +142,9 @@ namespace Osprey
 		// Assigned by static constructor
 		internal static readonly int LongestKeywordLength;
 
+		// Assigned by static constructor
+		internal static readonly int LongestContextualLength;
+
 		static TokenFacts()
 		{
 			var longestKeywordLength = 0;
@@ -146,6 +161,10 @@ namespace Osprey
 			PunctToString = new Dictionary<TokenType, string>(PunctToType.Count);
 			foreach (var kvp in PunctToType)
 				PunctToString.Add(kvp.Value, kvp.Key);
+
+			LongestContextualLength = IdentToContextual.Keys
+				.Select(k => k.Length)
+				.Aggregate(0, Math.Max);
 		}
 	}
 }

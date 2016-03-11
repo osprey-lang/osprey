@@ -189,17 +189,17 @@ namespace Osprey
 			return false;
 		}
 
-		public bool AcceptContextual(int index, string keyword)
+		public bool AcceptContextual(int index, ContextualType contextualType)
 		{
 			var token = tok[index] as Identifier;
-			if (token != null && !token.Escaped && token.Value == keyword)
+			if (token != null && !token.Escaped && token.ContextualType == contextualType)
 				return true;
 			return false;
 		}
 
-		public bool AcceptContextual(ref int index, string keyword)
+		public bool AcceptContextual(ref int index, ContextualType contextualType)
 		{
-			if (AcceptContextual(index, keyword))
+			if (AcceptContextual(index, contextualType))
 			{
 				index++;
 				return true;
@@ -207,14 +207,14 @@ namespace Osprey
 			return false;
 		}
 
-		public bool AcceptExtension(int index, string keyword)
+		public bool AcceptExtension(int index, ContextualType contextualType)
 		{
-			return UseExtensions && AcceptContextual(index, keyword);
+			return UseExtensions && AcceptContextual(index, contextualType);
 		}
 
-		public bool AcceptExtension(ref int index, string keyword)
+		public bool AcceptExtension(ref int index, ContextualType contextualType)
 		{
-			return UseExtensions && AcceptContextual(ref index, keyword);
+			return UseExtensions && AcceptContextual(ref index, contextualType);
 		}
 
 		#endregion
@@ -508,7 +508,7 @@ namespace Osprey
 
 			var i = 0;
 
-			if (AcceptContextual(i, "version") &&
+			if (AcceptContextual(i, ContextualType.Version) &&
 				Accept(i + 1, TokenType.Integer))
 				document.Version = ParseVersion(ref i);
 
@@ -786,7 +786,7 @@ namespace Osprey
 
 			if (Accept(ref i, TokenType.Is)) // base class thing
 				output.BaseClass = ParseTypeName(ref i);
-			else if (AcceptExtension(ref i, "__primitive"))
+			else if (AcceptExtension(ref i, ContextualType.Primitive))
 			{
 				output.IsPrimitive = true;
 				if (output.IsInheritable || output.IsAbstract || output.IsStatic)
@@ -795,7 +795,7 @@ namespace Osprey
 
 			Expect(ref i, TokenType.CurlyOpen);
 
-			if (AcceptExtension(ref i, "__init_type"))
+			if (AcceptExtension(ref i, ContextualType.InitType))
 			{
 				// Type initializer! Must be the very first thing in the class.
 				Expect(ref i, TokenType.ParenOpen);
@@ -1079,7 +1079,7 @@ namespace Osprey
 		{
 			ctorCall = null;
 
-			if (AcceptExtension(i, "__extern"))
+			if (AcceptExtension(i, ContextualType.Extern))
 				return ParseExternBody(ref i);
 
 			// Block
@@ -1159,7 +1159,7 @@ namespace Osprey
 				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 			else if (Accept(i, TokenType.CurlyOpen))
 				body = ParseBlock(ref i);
-			else if (AcceptExtension(i, "__extern"))
+			else if (AcceptExtension(i, ContextualType.Extern))
 				body = ParseExternBody(ref i);
 			else
 				ParseError(i, "Expected block or ';'.");
@@ -2199,7 +2199,7 @@ namespace Osprey
 
 		private Block ParseBlockOrExtern(ref int i)
 		{
-			if (AcceptExtension(i, "__extern"))
+			if (AcceptExtension(i, ContextualType.Extern))
 				return ParseExternBody(ref i);
 
 			return ParseBlock(ref i);
@@ -2207,7 +2207,7 @@ namespace Osprey
 
 		private ExternBody ParseExternBody(ref int i)
 		{
-			if (Expect(i, TokenType.Identifier).Value != "__extern")
+			if (!AcceptContextual(i, ContextualType.Extern))
 				throw new ParseException(tok[i], "Expected identifier '__extern', got " + tok[i].ToString());
 
 			var start = tok[i++];
@@ -2690,9 +2690,9 @@ namespace Osprey
 				var ident = (Identifier)tok[i];
 				if (UseExtensions && !ident.Escaped)
 				{
-					if (ident.Value == "__named_const")
+					if (ident.ContextualType == ContextualType.NamedConst)
 						return ParseNamedConstExpr(ref i);
-					if (ident.Value == "__get_argc")
+					if (ident.ContextualType == ContextualType.GetArgc)
 					{
 						i++;
 						return new GetArgumentCount() { StartIndex = start, EndIndex = ident.EndIndex, Document = document };
@@ -2756,7 +2756,7 @@ namespace Osprey
 		{
 			var startIndex = tok[i].Index;
 
-			if (Expect(i, TokenType.Identifier).Value != "__named_const")
+			if (!AcceptContextual(i, ContextualType.NamedConst))
 				ParseError(i, "Expected identifier '__named_const'; got {0}.", tok[i]);
 			i++;
 
@@ -2901,7 +2901,7 @@ namespace Osprey
 			// [for i in [1 to 10]] is not allowed, and neither is [where true].
 			items.Add(ParseExpression(ref i));
 
-			if (AcceptContextual(ref i, "to")) // range expression, e.g. [1 to 10] or [something.length - x() to 12 + hi/mom];
+			if (AcceptContextual(ref i, ContextualType.To)) // range expression, e.g. [1 to 10] or [something.length - x() to 12 + hi/mom];
 			{
 				items.Add(ParseExpression(ref i));
 
@@ -2936,7 +2936,7 @@ namespace Osprey
 		private Expression ParseListComprehension(ref int i, int start, ref TempList<Expression> items)
 		{
 			var parts = new TempList<ListCompPart>(1);
-			while (Accept(i, TokenType.For) || AcceptContextual(i, "where"))
+			while (Accept(i, TokenType.For) || AcceptContextual(i, ContextualType.Where))
 			{
 				if (Accept(ref i, TokenType.For))
 				{

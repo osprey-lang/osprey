@@ -143,10 +143,11 @@ namespace Osprey
 
 	public class Identifier : Token
 	{
-		public Identifier(SourceFile source, string value, bool escaped, int index)
+		public Identifier(SourceFile source, string value, bool escaped, int index, ContextualType contextualType)
 			: base(source, value, TokenType.Identifier, index)
 		{
 			this.escaped = escaped;
+			this.contextualType = contextualType;
 		}
 
 		private bool escaped;
@@ -155,6 +156,12 @@ namespace Osprey
 		/// (that is, it has the '\' prefix).
 		/// </summary>
 		public bool Escaped { get { return escaped; } }
+
+		private ContextualType contextualType;
+		/// <summary>
+		/// Gets the contextual token type of this identifier.
+		/// </summary>
+		public ContextualType ContextualType { get { return contextualType; } }
 	}
 
 	/// <summary>
