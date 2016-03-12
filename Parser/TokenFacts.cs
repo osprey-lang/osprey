@@ -24,7 +24,6 @@ namespace Osprey
 			{"finally", TokenType.Finally},
 			{"for", TokenType.For},
 			{"function", TokenType.Function},
-			{"get", TokenType.Get},
 			{"global", TokenType.Global},
 			{"if", TokenType.If},
 			{"in", TokenType.In},
@@ -46,7 +45,6 @@ namespace Osprey
 			{"ref", TokenType.Ref},
 			{"refeq", TokenType.Refeq},
 			{"return", TokenType.Return},
-			{"set", TokenType.Set},
 			{"static", TokenType.Static},
 			{"this", TokenType.This},
 			{"throw", TokenType.Throw},
@@ -63,6 +61,8 @@ namespace Osprey
 
 		internal static readonly Dictionary<string, ContextualType> IdentToContextual = new Dictionary<string, ContextualType>
 		{
+			{"get", ContextualType.Get},
+			{"set", ContextualType.Set},
 			{"to", ContextualType.To},
 			{"where", ContextualType.Where},
 			{"version", ContextualType.Version},

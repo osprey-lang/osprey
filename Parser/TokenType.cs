@@ -83,8 +83,6 @@ namespace Osprey
 		For = 14 | Keyword,
 		/// <summary>function</summary>
 		Function = 15 | Keyword,
-		/// <summary>get</summary>
-		Get = 16 | Keyword,
 		/// <summary>global</summary>
 		Global = 17 | Keyword,
 		/// <summary>if</summary>
@@ -125,8 +123,6 @@ namespace Osprey
 		Refeq = 35 | Keyword,
 		/// <summary>return</summary>
 		Return = 36 | Keyword,
-		/// <summary>set</summary>
-		Set = 37 | Keyword,
 		/// <summary>static</summary>
 		Static = 38 | Keyword | MemberModifier,
 		/// <summary>this</summary>

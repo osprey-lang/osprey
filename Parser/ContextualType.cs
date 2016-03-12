@@ -15,21 +15,25 @@ namespace Osprey
 	{
 		/// <summary>The identifier is not a contextual keyword.</summary>
 		None = 0,
+		/// <summary>get</summary>
+		Get = 1,
+		/// <summary>set</summary>
+		Set = 2,
 		/// <summary>to</summary>
-		To = 1,
+		To = 3,
 		/// <summary>where</summary>
-		Where = 2,
+		Where = 4,
 		/// <summary>version</summary>
-		Version = 3,
+		Version = 5,
 		/// <summary>__primitive</summary>
-		Primitive = 4,
+		Primitive = 6,
 		/// <summary>__init_type</summary>
-		InitType = 5,
+		InitType = 7,
 		/// <summary>__extern</summary>
-		Extern = 6,
+		Extern = 8,
 		/// <summary>__named_const</summary>
-		NamedConst = 7,
+		NamedConst = 9,
 		/// <summary>__get_argc</summary>
-		GetArgc = 8,
+		GetArgc = 10,
 	}
 }

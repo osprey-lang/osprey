@@ -850,9 +850,10 @@ namespace Osprey
 					method.DocString = startTok.Documentation;
 					target.Methods.Add(method);
 				}
-				else if (Accept(i, TokenType.Get, TokenType.Set)) // property accessor
+				else if ((AcceptContextual(i, ContextualType.Get) || AcceptContextual(i, ContextualType.Set)) &&
+					Accept(i + 1, TokenType.Identifier, TokenType.This)) // property accessor
 				{
-					var isSetter = tok[i++].Type == TokenType.Set;
+					var isSetter = ((Identifier)tok[i++]).ContextualType == ContextualType.Set;
 
 					PropertyAccessorDeclaration decl;
 					if (Accept(i, TokenType.This))
@@ -1357,7 +1358,12 @@ namespace Osprey
 		{
 			Expect(ref i, TokenType.Enum);
 
-			bool isSet = Accept(ref i, TokenType.Set);
+			var isSet = false;
+			if (AcceptContextual(i, ContextualType.Set) && Accept(i + 1, TokenType.Identifier))
+			{
+				i++; // Skip 'set'
+				isSet = true;
+			}
 
 			var enumName = Expect(ref i, TokenType.Identifier);
 
