@@ -191,8 +191,7 @@ namespace Osprey
 
 		public bool AcceptContextual(int index, ContextualType contextualType)
 		{
-			var token = tok[index] as Identifier;
-			if (token != null && token.ContextualType == contextualType)
+			if (tok[index].ContextualType == contextualType)
 				return true;
 			return false;
 		}
@@ -853,7 +852,7 @@ namespace Osprey
 				else if ((AcceptContextual(i, ContextualType.Get) || AcceptContextual(i, ContextualType.Set)) &&
 					Accept(i + 1, TokenType.Identifier, TokenType.This)) // property accessor
 				{
-					var isSetter = ((Identifier)tok[i++]).ContextualType == ContextualType.Set;
+					var isSetter = tok[i++].ContextualType == ContextualType.Set;
 
 					PropertyAccessorDeclaration decl;
 					if (Accept(i, TokenType.This))
@@ -2693,8 +2692,8 @@ namespace Osprey
 			}
 			if (Accept(i, TokenType.Identifier))
 			{
-				var ident = (Identifier)tok[i];
-				if (UseExtensions && !ident.Escaped)
+				var ident = tok[i];
+				if (UseExtensions)
 				{
 					if (ident.ContextualType == ContextualType.NamedConst)
 						return ParseNamedConstExpr(ref i);

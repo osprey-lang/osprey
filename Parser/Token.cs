@@ -79,6 +79,11 @@ namespace Osprey
 		/// </summary>
 		public TokenType Type { get { return type; } }
 
+		/// <summary>
+		/// Gets the contextual type of the token, if the token can be used as a contextual keyword.
+		/// </summary>
+		public virtual ContextualType ContextualType { get { return ContextualType.None; } }
+
 		private int index;
 		/// <summary>
 		/// Gets the index in the source script at which the token appears.
@@ -158,10 +163,7 @@ namespace Osprey
 		public bool Escaped { get { return escaped; } }
 
 		private ContextualType contextualType;
-		/// <summary>
-		/// Gets the contextual token type of this identifier.
-		/// </summary>
-		public ContextualType ContextualType { get { return contextualType; } }
+		public override ContextualType ContextualType { get { return contextualType; } }
 	}
 
 	/// <summary>
