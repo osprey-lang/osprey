@@ -744,14 +744,6 @@ namespace Osprey
 					type = TokenType.Caret;
 					AcceptEquals(ref i, ref type, TokenType.CaretAssign);
 					break;
-				case '#':
-					type = TokenType.Hash;
-					AcceptEquals(ref i, ref type, TokenType.HashAssign);
-					break;
-				case '$':
-					type = TokenType.Dollar;
-					AcceptEquals(ref i, ref type, TokenType.DollarAssign);
-					break;
 				case '=':
 					type = TokenType.Assign;
 					AcceptEquals(ref i, ref type, TokenType.DoubleEqual);

@@ -446,8 +446,6 @@ namespace Osprey
 				case LambdaOperator.Modulo: return Opcode.Mod;
 				case LambdaOperator.BitwiseAnd: return Opcode.And;
 				case LambdaOperator.Exponentiation: return Opcode.Pow;
-				case LambdaOperator.Hash: return Opcode.Hashop;
-				case LambdaOperator.Dollar: return Opcode.Dollar;
 				case LambdaOperator.ShiftLeft: return Opcode.Shl;
 				case LambdaOperator.ShiftRight: return Opcode.Shr;
 				case LambdaOperator.Equality: return Opcode.Eq;
@@ -1943,8 +1941,6 @@ namespace Osprey
 			{LambdaOperator.Modulo, "λ<mod>"},
 			{LambdaOperator.BitwiseAnd, "λ<and>"},
 			{LambdaOperator.Exponentiation, "λ<exp>"},
-			{LambdaOperator.Hash, "λ<hash>"},
-			{LambdaOperator.Dollar, "λ<dollar>"},
 			{LambdaOperator.ShiftLeft, "λ<shiftLeft>"},
 			{LambdaOperator.ShiftRight, "λ<shiftRight>"},
 			{LambdaOperator.Equality, "λ<equality>"},

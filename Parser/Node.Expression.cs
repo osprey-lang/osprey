@@ -507,8 +507,6 @@ namespace Osprey.Nodes
 				case BinaryOperator.LessEqual: return "<=";
 				case BinaryOperator.GreaterThan: return ">";
 				case BinaryOperator.GreaterEqual: return ">=";
-				case BinaryOperator.Hash: return "#";
-				case BinaryOperator.Dollar: return "$";
 				case BinaryOperator.ShiftLeft: return "<<";
 				case BinaryOperator.ShiftRight: return ">>";
 				case BinaryOperator.Addition: return "+";
@@ -1204,7 +1202,7 @@ namespace Osprey.Nodes
 	public enum BinaryOperator
 	{
 		NullCoalescing, NullOr, Or, Xor, And, Equality, Inequality,
-		LessThan, LessEqual, GreaterThan, GreaterEqual, Hash, Dollar,
+		LessThan, LessEqual, GreaterThan, GreaterEqual,
 		ShiftLeft, ShiftRight, Addition, Subtraction, BitwiseOr, BitwiseXor,
 		Multiplication, Division, Modulo, BitwiseAnd, Exponentiation,
 		FunctionApplication, Concatenation, Comparison, ReferenceEquality,
@@ -2035,8 +2033,6 @@ namespace Osprey.Nodes
 				case LambdaOperator.Modulo: return "%";
 				case LambdaOperator.BitwiseAnd: return "&";
 				case LambdaOperator.Exponentiation: return "**";
-				case LambdaOperator.Hash: return "#";
-				case LambdaOperator.Dollar: return "$";
 				case LambdaOperator.ShiftLeft: return "<<";
 				case LambdaOperator.ShiftRight: return ">>";
 				case LambdaOperator.Equality: return "==";
@@ -2176,7 +2172,7 @@ namespace Osprey.Nodes
 	public enum LambdaOperator
 	{
 		Plus, Minus, BitwiseOr, BitwiseXor, Multiplication, Division,
-		Modulo, BitwiseAnd, Exponentiation, Hash, Dollar, ShiftLeft, ShiftRight,
+		Modulo, BitwiseAnd, Exponentiation, ShiftLeft, ShiftRight,
 		Equality, Inequality, Comparison, Less, Greater, LessEquals, GreaterEquals,
 		BitwiseNot, FuncApplication, Concatenation, Not, Or, Xor, And,
 	}

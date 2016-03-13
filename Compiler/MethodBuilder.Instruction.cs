@@ -212,8 +212,8 @@ namespace Osprey.Instructions
 		Pow = 0x55,
 		Shl = 0x56,
 		Shr = 0x57,
-		Hashop = 0x58,
-		Dollar = 0x59,
+		// Reserved (0x58)
+		// Reserved (0x59)
 		Plus = 0x5a,
 		Neg = 0x5b,
 		Not = 0x5c,
@@ -351,8 +351,6 @@ namespace Osprey.Instructions
 					case Opcode.Pow:
 					case Opcode.Shl:
 					case Opcode.Shr:
-					case Opcode.Hashop:
-					case Opcode.Dollar:
 					case Opcode.Eq:
 					case Opcode.Cmp:
 					case Opcode.Lt:
@@ -400,8 +398,6 @@ namespace Osprey.Instructions
 				case BinaryOperator.LessEqual: opcode = Opcode.Lte; break;
 				case BinaryOperator.GreaterThan: opcode = Opcode.Gt; break;
 				case BinaryOperator.GreaterEqual: opcode = Opcode.Gte; break;
-				case BinaryOperator.Hash: opcode = Opcode.Hashop; break;
-				case BinaryOperator.Dollar: opcode = Opcode.Dollar; break;
 				case BinaryOperator.ShiftLeft: opcode = Opcode.Shl; break;
 				case BinaryOperator.ShiftRight: opcode = Opcode.Shr; break;
 				case BinaryOperator.Addition: opcode = Opcode.Add; break;
@@ -456,8 +452,6 @@ namespace Osprey.Instructions
 				case Opcode.Pow: return "pow";
 				case Opcode.Shl: return "shl";
 				case Opcode.Shr: return "shr";
-				case Opcode.Hashop: return "hashop";
-				case Opcode.Dollar: return "dollar";
 				case Opcode.Plus: return "plus";
 				case Opcode.Neg: return "neg";
 				case Opcode.Not: return "not";

@@ -1346,8 +1346,6 @@ namespace Osprey
 				case TokenType.ShiftLeft: return BinaryOperator.ShiftLeft;
 				case TokenType.ShiftRight: return BinaryOperator.ShiftRight;
 				case TokenType.Power: return BinaryOperator.Exponentiation;
-				case TokenType.Hash: return BinaryOperator.Hash;
-				case TokenType.Dollar: return BinaryOperator.Dollar;
 				case TokenType.Compare: return BinaryOperator.Comparison;
 				default: throw new ArgumentException("Internal error: invalid overloadable binary operator.", "type");
 			}
@@ -2152,8 +2150,6 @@ namespace Osprey
 				case TokenType.ShiftLeftAssign: return BinaryOperator.ShiftLeft;
 				case TokenType.ShiftRightAssign: return BinaryOperator.ShiftRight;
 				case TokenType.PowerAssign: return BinaryOperator.Exponentiation;
-				case TokenType.HashAssign: return BinaryOperator.Hash;
-				case TokenType.DollarAssign: return BinaryOperator.Dollar;
 				default:
 					throw new ArgumentException("Internal error: invalid compound assignment operator.", "type");
 			}
@@ -2411,7 +2407,7 @@ namespace Osprey
 
 		private Expression ParseRelationalExpr(ref int i)
 		{
-			var left = ParseUnreservedExpr(ref i);
+			var left = ParseShiftExpr(ref i);
 			while (Accept(i, relationalOps))
 			{
 				var op = tok[i].Type == TokenType.Less ? BinaryOperator.LessThan :
@@ -2419,19 +2415,6 @@ namespace Osprey
 					tok[i].Type == TokenType.Greater ? BinaryOperator.GreaterThan :
 					tok[i].Type == TokenType.GreaterEqual ? BinaryOperator.GreaterEqual :
 					BinaryOperator.Comparison;
-				i++;
-				var right = ParseUnreservedExpr(ref i);
-				left = GetBinaryOperatorExpression(left, right, op);
-			}
-			return left;
-		}
-
-		private Expression ParseUnreservedExpr(ref int i)
-		{
-			var left = ParseShiftExpr(ref i);
-			while (Accept(i, TokenType.Hash, TokenType.Dollar))
-			{
-				var op = tok[i].Type == TokenType.Hash ? BinaryOperator.Hash : BinaryOperator.Dollar;
 				i++;
 				var right = ParseShiftExpr(ref i);
 				left = GetBinaryOperatorExpression(left, right, op);
@@ -3114,8 +3097,6 @@ namespace Osprey
 				case TokenType.Mod: return LambdaOperator.Modulo;
 				case TokenType.Ampersand: return LambdaOperator.BitwiseAnd;
 				case TokenType.Power: return LambdaOperator.Exponentiation;
-				case TokenType.Hash: return LambdaOperator.Hash;
-				case TokenType.Dollar: return LambdaOperator.Dollar;
 				case TokenType.ShiftLeft: return LambdaOperator.ShiftLeft;
 				case TokenType.ShiftRight: return LambdaOperator.ShiftRight;
 				case TokenType.DoubleEqual: return LambdaOperator.Equality;

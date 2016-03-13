@@ -229,52 +229,44 @@ namespace Osprey
 		ShiftRight = 32 | Punctuation | OverloadableBinaryOperator | LambdaOperator,
 		/// <summary>**</summary>
 		Power = 33 | Punctuation | OverloadableBinaryOperator | LambdaOperator,
-		/// <summary>#</summary>
-		Hash = 34 | Punctuation | OverloadableBinaryOperator | LambdaOperator,
-		/// <summary>$</summary>
-		Dollar = 35 | Punctuation | OverloadableBinaryOperator | LambdaOperator,
 		/// <summary>=</summary>
-		Assign = 36 | Punctuation,
+		Assign = 34 | Punctuation,
 		/// <summary>+=</summary>
-		PlusAssign = 37 | Punctuation | CompoundAssign,
+		PlusAssign = 35 | Punctuation | CompoundAssign,
 		/// <summary>-=</summary>
-		MinusAssign = 38 | Punctuation | CompoundAssign,
+		MinusAssign = 36 | Punctuation | CompoundAssign,
 		/// <summary>|=</summary>
-		PipeAssign = 39 | Punctuation | CompoundAssign,
+		PipeAssign = 37 | Punctuation | CompoundAssign,
 		/// <summary>*=</summary>
-		MulAssign = 40 | Punctuation | CompoundAssign,
+		MulAssign = 38 | Punctuation | CompoundAssign,
 		/// <summary>/=</summary>
-		DivAssign = 41 | Punctuation | CompoundAssign,
+		DivAssign = 39 | Punctuation | CompoundAssign,
 		/// <summary>%=</summary>
-		ModAssign = 42 | Punctuation | CompoundAssign,
+		ModAssign = 40 | Punctuation | CompoundAssign,
 		/// <summary>&amp;=</summary>
-		AmpAssign = 43 | Punctuation | CompoundAssign,
+		AmpAssign = 41 | Punctuation | CompoundAssign,
 		/// <summary>^=</summary>
-		CaretAssign = 44 | Punctuation | CompoundAssign,
+		CaretAssign = 42 | Punctuation | CompoundAssign,
 		/// <summary>::=</summary>
-		ConcatAssign = 45 | Punctuation | CompoundAssign,
+		ConcatAssign = 43 | Punctuation | CompoundAssign,
 		/// <summary>&lt;&lt;=</summary>
-		ShiftLeftAssign = 46 | Punctuation | CompoundAssign,
+		ShiftLeftAssign = 44 | Punctuation | CompoundAssign,
 		/// <summary>&gt;gt;=</summary>
-		ShiftRightAssign = 47 | Punctuation | CompoundAssign,
+		ShiftRightAssign = 45 | Punctuation | CompoundAssign,
 		/// <summary>**=</summary>
-		PowerAssign = 48 | Punctuation | CompoundAssign,
+		PowerAssign = 46 | Punctuation | CompoundAssign,
 		/// <summary>#=</summary>
-		HashAssign = 49 | Punctuation | CompoundAssign,
-		/// <summary>$=</summary>
-		DollarAssign = 50 | Punctuation | CompoundAssign,
-		/// <summary>@</summary>
-		At = 51 | Punctuation,
+		At = 47 | Punctuation,
 		/// <summary>...</summary>
-		Splat = 52 | Punctuation,
+		Splat = 48 | Punctuation,
 		/// <summary>?.</summary>
-		SafeAccess = 53 | Punctuation,
+		SafeAccess = 49 | Punctuation,
 		/// <summary>&lt;=&gt;</summary>
-		Compare = 54 | Punctuation | OverloadableBinaryOperator | LambdaOperator,
+		Compare = 50 | Punctuation | OverloadableBinaryOperator | LambdaOperator,
 		/// <summary>?(</summary>
-		ParenOpenSafe = 55 | Punctuation,
+		ParenOpenSafe = 51 | Punctuation,
 		/// <summary>?[</summary>
-		SquareOpenSafe = 56 | Punctuation,
+		SquareOpenSafe = 52 | Punctuation,
 		#endregion
 	}
 }

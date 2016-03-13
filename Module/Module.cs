@@ -585,8 +585,8 @@ namespace Osprey
 			Power = 0x08,
 			ShiftLeft = 0x09,
 			ShiftRight = 0x0A,
-			Hashop = 0x0B,
-			Dollar = 0x0C,
+			// Reserved: 0x0B
+			// Reserved: 0x0C
 			Plus = 0x0D,
 			Negate = 0x0E,
 			Not = 0x0F,

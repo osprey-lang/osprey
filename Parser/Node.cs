@@ -1307,24 +1307,24 @@ namespace Osprey.Nodes
 	 * 
 	 * enum class Operator : uint8_t
 	 * {
-	 *     ADD,    // The binary + operator.  ( 0)
-	 *     SUB,    // The binary - operator.  ( 1)
-	 *     OR,     // The | operator.	     ( 2)
-	 *     XOR,    // The ^ operator.	     ( 3)
-	 *     MUL,    // The * operator.	     ( 4)
-	 *     DIV,    // The / operator.	     ( 5)
-	 *     MOD,    // The % operator.	     ( 6)
-	 *     AND,    // The & operator.	     ( 7)
-	 *     POW,    // The ** operator.	     ( 8)
-	 *     SHL,    // The << operator.	     ( 9)
-	 *     SHR,    // The >> operator.	     (10)
-	 *     HASHOP, // The # operator.	     (11)
-	 *     DOLLAR, // The $ operator.	     (12)
-	 *     PLUS,   // The unary + operator.   (13)
-	 *     NEG,    // The unary - operator.   (14)
-	 *     NOT,    // The ~ operator.	     (15)
-	 *     EQ,     // The == operator.	     (16)
-	 *     CMP,    // The <=> operator.	     (17)
+	 *     ADD =   0,    // The binary + operator.
+	 *     SUB =   1,    // The binary - operator.
+	 *     OR  =   2,    // The | operator.
+	 *     XOR =   3,    // The ^ operator.
+	 *     MUL =   4,    // The * operator.
+	 *     DIV =   5,    // The / operator.
+	 *     MOD =   6,    // The % operator.
+	 *     AND =   7,    // The & operator.
+	 *     POW =   8,    // The ** operator.
+	 *     SHL =   9,    // The << operator.
+	 *     SHR =  10,    // The >> operator.
+	 *     // RESERVED (11)
+	 *     // RESERVED (12)
+	 *     PLUS = 13,    // The unary + operator.
+	 *     NEG  = 14,    // The unary - operator.
+	 *     NOT  = 15,    // The ~ operator.
+	 *     EQ   = 16,    // The == operator.
+	 *     CMP  = 17,    // The <=> operator.
 	 * };
 	 * 
 	 * These are the indices that OperatorOverloadDeclaration.GetIndex()
@@ -1454,8 +1454,6 @@ namespace Osprey.Nodes
 			switch (Operator)
 			{
 				case BinaryOperator.Equality:       return "op:Equals";
-				case BinaryOperator.Hash:           return "op:Hash";
-				case BinaryOperator.Dollar:         return "op:Dollar";
 				case BinaryOperator.ShiftLeft:      return "op:ShiftLeft";
 				case BinaryOperator.ShiftRight:     return "op:ShiftRight";
 				case BinaryOperator.Addition:       return "op:Add";
@@ -1488,8 +1486,6 @@ namespace Osprey.Nodes
 				case BinaryOperator.Exponentiation: return 8;
 				case BinaryOperator.ShiftLeft:      return 9;
 				case BinaryOperator.ShiftRight:     return 10;
-				case BinaryOperator.Hash:           return 11;
-				case BinaryOperator.Dollar:         return 12;
 				case BinaryOperator.Equality:       return 16;
 				case BinaryOperator.Comparison:     return 17;
 				default:
