@@ -15,12 +15,11 @@ namespace Osprey.Nodes
 	/// </summary>
 	public sealed class ExternBody : Block
 	{
-		public ExternBody(StringLiteral entryPoint, Expression locals, Expression maxStack)
+		public ExternBody(StringLiteral entryPoint, Expression locals)
 			: base((Statement[])null)
 		{
 			EntryPoint = entryPoint;
 			Locals = locals;
-			MaxStack = maxStack;
 		}
 
 		/// <summary>
@@ -31,19 +30,13 @@ namespace Osprey.Nodes
 		/// The number of managed locals the method uses.
 		/// </summary>
 		public Expression Locals;
-		/// <summary>
-		/// The maximum number of stack slots used by the method.
-		/// </summary>
-		public Expression MaxStack;
 
 		public override string ToString(int indent)
 		{
 			string localString = Locals != null ? ", locals=" + Locals.ToString(indent + 1) : "";
 
-			string stackString = MaxStack != null ? ", stack=" + MaxStack.ToString(indent + 1) : "";
-
-			return string.Format("__extern({0}{1}{2});",
-				EntryPoint.ToString(indent + 1), localString, stackString);
+			return string.Format("__extern({0}{1});",
+				EntryPoint.ToString(indent + 1), localString);
 		}
 
 		// do nothing with the contents of the body; Statements is null
@@ -53,16 +46,11 @@ namespace Osprey.Nodes
 			Locals = Locals.FoldConstant();
 			if (!(Locals is ConstantExpression) || ((ConstantExpression)Locals).Value.Type != ConstantValueType.Int)
 				throw new CompileTimeException(Locals, "The __extern 'locals' parameter must be a constant expression of type Int.");
-
-			MaxStack = MaxStack.FoldConstant();
-			if (!(MaxStack is ConstantExpression) || ((ConstantExpression)MaxStack).Value.Type != ConstantValueType.Int)
-				throw new CompileTimeException(MaxStack, "The __extern 'stack' parameter must be a constant expression of type Int.");
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			Locals = Locals.ResolveNames(context, document, false, false);
-			MaxStack = MaxStack.ResolveNames(context, document, false, false);
 		}
 
 		public override void DeclareNames(BlockSpace parent) { }

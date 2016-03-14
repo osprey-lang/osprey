@@ -441,7 +441,6 @@ namespace Osprey.Members
 				CompiledMethod = new CompiledMethodData
 				{
 					LocalCount = (int)((ConstantExpression)externBody.Locals).Value.IntValue,
-					MaxStack = (int)((ConstantExpression)externBody.MaxStack).Value.IntValue,
 				};
 				return; // No body to initialize
 			}

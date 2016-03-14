@@ -2219,7 +2219,7 @@ namespace Osprey
 			var entryPointStr = Expect(ref i, TokenType.String);
 			entryPoint = new StringLiteral((StringToken)entryPointStr);
 
-			Expression locals = null, stack = null;
+			Expression locals = null;
 			while (Accept(ref i, TokenType.Comma))
 			{
 				var name = Expect(ref i, TokenType.Identifier);
@@ -2230,29 +2230,20 @@ namespace Osprey
 					Expect(ref i, TokenType.Assign);
 					locals = ParseExpression(ref i);
 				}
-				else if (name.Value == "stack")
-				{
-					if (stack != null)
-						throw new ParseException(name, "Duplicate 'stack' parameter");
-					Expect(ref i, TokenType.Assign);
-					stack = ParseExpression(ref i);
-				}
 				else
-					ParseError(name, "Unknown __extern parameter '{0}'; expected 'locals' or 'stack'.", name);
+					ParseError(name, "Unknown __extern parameter '{0}'; expected 'locals'.", name);
 			}
 
 			if (SimplifiedTree)
 			{
 				if (locals == null)
 					locals = new ConstantExpression(ConstantValue.CreateInt(0));
-				if (stack == null)
-					stack = new ConstantExpression(ConstantValue.CreateInt(8));
 			}
 
 			Expect(ref i, TokenType.ParenClose);
 			Expect(ref i, TokenType.Semicolon);
 
-			return new ExternBody(entryPoint, locals, stack)
+			return new ExternBody(entryPoint, locals)
 			{
 				StartIndex = start.Index,
 				EndIndex = start.EndIndex,
