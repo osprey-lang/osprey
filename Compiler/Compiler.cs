@@ -18,7 +18,7 @@ namespace Osprey
 {
 	public partial class Compiler : IDisposable
 	{
-		private Compiler(ref CompilerOptions options, Dictionary<string, bool> constants, params string[] sourceFiles)
+		private Compiler(ref CompilerOptions options, Dictionary<string, bool> constants, IEnumerable<string> imports, params string[] sourceFiles)
 		{
 			if (sourceFiles == null)
 				throw new ArgumentNullException("sourceFiles");
@@ -41,6 +41,10 @@ namespace Osprey
 
 			if (constants != null && constants.Count > 0)
 				extraConstants = new Dictionary<string, bool>(constants);
+			if (imports != null)
+				importedModules = new HashSet<string>(imports, StringComparer.Ordinal);
+			else
+				importedModules = new HashSet<string>(StringComparer.Ordinal);
 
 			if (options.NativeLibrary != null)
 				this.nativeLibrary = NativeLibrary.Open(options.NativeLibrary);
@@ -657,8 +661,7 @@ namespace Osprey
 			Notice("Parsing source files and adding dependent modules...", CompilerVerbosity.Verbose);
 
 			var projectNs = new Namespace();
-			var importedModules = new HashSet<string>();
-			this.importedModules = importedModules;
+			var importedModules = this.importedModules;
 			var modules = new ModulePool(libraryPath, projectNs, this);
 
 			Version foundVersion = null;
@@ -1904,12 +1907,17 @@ namespace Osprey
 
 		public static void Compile(ref CompilerOptions options, string targetPath, params string[] sourceFiles)
 		{
-			Compile(ref options, targetPath, null, sourceFiles);
+			Compile(ref options, targetPath, null, null, sourceFiles);
 		}
 
 		public static void Compile(ref CompilerOptions options, string targetPath, Dictionary<string, bool> constants, params string[] sourceFiles)
 		{
-			using (var c = new Compiler(ref options, constants, sourceFiles))
+			Compile(ref options, targetPath, constants, null, sourceFiles);
+		}
+
+		public static void Compile(ref CompilerOptions options, string targetPath, Dictionary<string, bool> constants, IEnumerable<string> imports, params string[] sourceFiles)
+		{
+			using (var c = new Compiler(ref options, constants, imports, sourceFiles))
 			{
 				c.Compile(targetPath);
 				if (c.nativeLibrary != null)

@@ -21,12 +21,13 @@ namespace Osprey
 			CompilerOptions compilerOptions;
 			ProgramOptions programOptions;
 			Dictionary<string, bool> constants;
+			HashSet<string> imports;
 			List<string> sourceFiles;
 			try
 			{
 				var sourceFileIndex = ParseArguments(args,
 					out compilerOptions, out programOptions,
-					out constants);
+					out constants, out imports);
 
 				sourceFiles = new List<string>();
 				if (sourceFileIndex != -1)
@@ -72,7 +73,7 @@ namespace Osprey
 			var err = compilerOptions.ErrorToStdout ? Console.Out : Console.Error;
 			try
 			{
-				Compiler.Compile(ref compilerOptions, programOptions.OutFile, constants, sourceFiles.ToArray());
+				Compiler.Compile(ref compilerOptions, programOptions.OutFile, constants, imports, sourceFiles.ToArray());
 			}
 			catch (ParseException e)
 			{
@@ -284,7 +285,7 @@ namespace Osprey
 		/// <param name="outFile">The output file, or null if none was specified.</param>
 		/// <returns>The index of the first source file within <paramref name="args"/>.</returns>
 		private static int ParseArguments(string[] args, out CompilerOptions compilerOptions,
-			out ProgramOptions programOptions, out Dictionary<string, bool> constants)
+			out ProgramOptions programOptions, out Dictionary<string, bool> constants, out HashSet<string> imports)
 		{
 			compilerOptions = new CompilerOptions();
 			compilerOptions.UseExtensions = true; // Use extensions by default
@@ -294,6 +295,7 @@ namespace Osprey
 			var seenSwitches = new HashSet<string>();
 
 			constants = new Dictionary<string, bool>();
+			imports = new HashSet<string>();
 
 			var argc = args.Length;
 			for (var i = 0; i < argc; i++)
@@ -442,6 +444,16 @@ namespace Osprey
 								if (constants.ContainsKey(name))
 									throw new ArgumentException("Each '/const' declaration must have a unique name.");
 								constants.Add(name, args[++i] == "true");
+							}
+							continue; // Don't add the switch to the set!
+
+						case "import":
+							if (i == argc - 1)
+								throw new ArgumentException("'/import' must be followed by a module name.");
+
+							{
+								var module = args[++i].Trim();
+								imports.Add(module);
 							}
 							continue; // Don't add the switch to the set!
 
