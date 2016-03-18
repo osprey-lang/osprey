@@ -774,14 +774,6 @@ namespace Osprey
 						newFiles.Add(realFile);
 					}
 				}
-				else if (use is UseModuleDirective)
-				{
-					var modName = ((UseModuleDirective)use).Name.Parts.JoinString(".");
-					modules.Add(modName);
-					Notice(CompilerVerbosity.ExtraVerbose,
-						"Adding reference to module '{0}', from '{1}'",
-						modName, docFile);
-				}
 		}
 
 		private void BuildProjectNamespace()
