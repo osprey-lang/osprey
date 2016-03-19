@@ -595,12 +595,6 @@ namespace Osprey
 				Expect(ref i, TokenType.Semicolon);
 				result = new UseFileDirective(new StringLiteral((StringToken)token));
 			}
-			else if (Accept(ref i, TokenType.Namespace)) // use namespace foo.bar.baz;
-			{
-				var name = ParseQualifiedName(ref i);
-				Expect(ref i, TokenType.Semicolon);
-				result = new UseNamespaceDirective(name);
-			}
 			else if (Accept(i, TokenType.Identifier)) // use foo.bar.baz;  or  use alias = foo.bar.baz;
 			{
 				string aliasName = null;
@@ -615,10 +609,10 @@ namespace Osprey
 				if (aliasName != null)
 					result = new UseAliasDirective(aliasName, name);
 				else
-					result = new UseModuleDirective(name);
+					result = new UseNamespaceDirective(name);
 			}
 			else
-				ParseError(i, "Expected identifier, string or 'namespace'.");
+				ParseError(i, "Expected identifier or string.");
 
 			result.StartIndex = start;
 			result.EndIndex = end;

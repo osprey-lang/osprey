@@ -112,22 +112,6 @@ namespace Osprey.Nodes
 		public virtual bool ResolveNames(Namespace globalNamespace, bool firstPass) { return false; }
 	}
 
-	public sealed class UseModuleDirective : UseDirective
-	{
-		public UseModuleDirective(QualifiedName name)
-		{
-			Name = name;
-		}
-
-		/// <summary>The name of the module to import.</summary>
-		public QualifiedName Name;
-
-		public override string ToString(int indent)
-		{
-			return new string('\t', indent) + "use " + Name + ";";
-		}
-	}
-
 	public sealed class UseFileDirective : UseDirective
 	{
 		public UseFileDirective(StringLiteral name)
@@ -159,7 +143,7 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			return new string('\t', indent) + "use namespace " + Name + ";";
+			return new string('\t', indent) + "use " + Name + ";";
 		}
 
 		public override bool ResolveNames(Namespace globalNamespace, bool firstPass)
