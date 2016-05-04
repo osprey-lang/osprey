@@ -267,6 +267,8 @@ namespace Osprey
 		ParenOpenSafe = 51 | Punctuation,
 		/// <summary>?[</summary>
 		SquareOpenSafe = 52 | Punctuation,
+		/// <summary>=&gt;</summary>
+		FatArrow = 53 | Punctuation,
 		#endregion
 	}
 }

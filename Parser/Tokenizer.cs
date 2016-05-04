@@ -746,7 +746,13 @@ namespace Osprey
 					break;
 				case '=':
 					type = TokenType.Assign;
-					AcceptEquals(ref i, ref type, TokenType.DoubleEqual);
+					if (!IsEOF(i) && source[i] == '>') // =>
+					{
+						type = TokenType.FatArrow;
+						i++;
+					}
+					else
+						AcceptEquals(ref i, ref type, TokenType.DoubleEqual);
 					break;
 				case '!':
 					if (IsEOF(i) || source[i] != '=')

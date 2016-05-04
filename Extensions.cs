@@ -82,7 +82,7 @@ namespace Osprey
 			// Examples:
 			//   class C {
 			//      public x = "chirp";          context: Class
-			//      public y = @= "birds";       context: LocalMethod <- Class
+			//      public y = @ => "birds";     context: LocalMethod <- Class
 			//      public z() {                 context: Method <- Class
 			//         function i() {            context: LocalMethod <- Method <- Class
 			//            return "feathers";

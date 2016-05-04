@@ -3025,7 +3025,7 @@ namespace Osprey
 			}
 
 			Statement body = null;
-			if (Accept(ref i, TokenType.Assign)) // single expression as body
+			if (Accept(ref i, TokenType.FatArrow)) // single expression as body
 			{
 				var inner = ParseExpression(ref i);
 				body = ExpressionToStatement(inner);

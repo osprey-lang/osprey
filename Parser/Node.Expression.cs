@@ -1848,7 +1848,7 @@ namespace Osprey.Nodes
 			}
 
 			if (Body is ExpressionStatement)
-				sb.AppendFormat("= {0}", ((ExpressionStatement)Body).Expression.ToString(indent));
+				sb.AppendFormat("=> {0}", ((ExpressionStatement)Body).Expression.ToString(indent));
 			else
 				sb.Append(Body.ToString(indent));
 

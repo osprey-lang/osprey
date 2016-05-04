@@ -127,6 +127,7 @@ namespace Osprey
 			{"<=>", TokenType.Compare},
 			{"?(", TokenType.ParenOpenSafe},
 			{"?[", TokenType.SquareOpenSafe},
+			{"=>", TokenType.FatArrow},
 		};
 
 		// Assigned by static constructor

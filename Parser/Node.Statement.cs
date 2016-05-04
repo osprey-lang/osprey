@@ -323,7 +323,7 @@ namespace Osprey.Nodes
 					// the iterator class now, rather than an actual parameter).
 					// To elaborate, if you have the following function:
 					//    function i(x) {
-					//        yield @= x;
+					//        yield @ => x;
 					//    }
 					// the parameter x is copied like this:
 					//    i(x): x -> I.'$x'
