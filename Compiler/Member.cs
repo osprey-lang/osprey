@@ -612,9 +612,10 @@ namespace Osprey.Members
 				Type result = null;
 
 				NamedMember member = members[first];
-				for (var i = 1; i < name.Parts.Length; i++)
+				var i = 1;
+				for (; i < name.Parts.Length; i++)
 				{
-					// Note: this loop is only entered if name.Parts.Count > 1
+					// Note: this loop is only entered if name.Parts.Length > 1
 					if (member.Kind != MemberKind.Namespace)
 						break;
 
@@ -622,7 +623,7 @@ namespace Osprey.Members
 						break;
 				}
 
-				if (member != null)
+				if (member != null && i == name.Parts.Length)
 				{
 					if (member.Kind == MemberKind.Class ||
 						member.Kind == MemberKind.Enum)
