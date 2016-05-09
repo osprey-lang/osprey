@@ -8,8 +8,8 @@ namespace Osprey
 	/// <summary>
 	/// Represents the contextual type of an identifier token. In addition to being a plain
 	/// identifier, some sequences of characters are used contextually as keywords. The standard
-	/// language includes contextual keywords "to", "where" and "version". Extension keywords
-	/// are also implemented as contextual keywords.
+	/// language includes contextual keywords "to" and "version". Extension keywords are also
+	/// implemented as contextual keywords.
 	/// </summary>
 	public enum ContextualType
 	{
@@ -21,19 +21,17 @@ namespace Osprey
 		Set = 2,
 		/// <summary>to</summary>
 		To = 3,
-		/// <summary>where</summary>
-		Where = 4,
 		/// <summary>version</summary>
-		Version = 5,
+		Version = 4,
 		/// <summary>__primitive</summary>
-		Primitive = 6,
+		Primitive = 5,
 		/// <summary>__init_type</summary>
-		InitType = 7,
+		InitType = 6,
 		/// <summary>__extern</summary>
-		Extern = 8,
+		Extern = 7,
 		/// <summary>__named_const</summary>
-		NamedConst = 9,
+		NamedConst = 8,
 		/// <summary>__get_argc</summary>
-		GetArgc = 10,
+		GetArgc = 9,
 	}
 }

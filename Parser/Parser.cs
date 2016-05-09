@@ -2870,8 +2870,9 @@ namespace Osprey
 			var items = new TempList<Expression>();
 			// [,] is an illegal list in Osprey: trailing commas are allowed only if
 			// there is at least one item.
-			// At least one expression is needed now, even in a list comprehension;
-			// [for i in [1 to 10]] is not allowed, and neither is [where true].
+			// At least one expression is needed now:
+			//   [for i in [1 to 10]]
+			// is not allowed
 			items.Add(ParseExpression(ref i));
 
 			if (AcceptContextual(ref i, ContextualType.To)) // range expression, e.g. [1 to 10] or [something.length - x() to 12 + hi/mom];
@@ -2895,54 +2896,11 @@ namespace Osprey
 				items.Add(ParseExpression(ref i));
 			}
 
-			if (Accept(i, TokenType.For) || tok[i].Value == "where") // List comprehension
-				return ParseListComprehension(ref i, start, ref items);
-
 			Accept(ref i, TokenType.Comma); // trailing comma; if it were followed by anything but ], it would have been caught above
 
 			Expect(i, TokenType.SquareClose);
 
 			return new ListLiteralExpression(items.ToArray())
-				.At(start, tok[i++].EndIndex, document);
-		}
-
-		private Expression ParseListComprehension(ref int i, int start, ref TempList<Expression> items)
-		{
-			var parts = new TempList<ListCompPart>(1);
-			while (Accept(i, TokenType.For) || AcceptContextual(i, ContextualType.Where))
-			{
-				if (Accept(ref i, TokenType.For))
-				{
-					if (!Accept(i, TokenType.Identifier))
-						ParseError(i, "For clause without variables in list comprehension.");
-
-					var vars = new TempList<string>(1);
-					vars.Add(tok[i].Value);
-					i++;
-
-					while (Accept(ref i, TokenType.Comma))
-					{
-						Expect(i, TokenType.Identifier);
-						vars.Add(tok[i].Value);
-						i++;
-					}
-
-					Expect(ref i, TokenType.In);
-
-					parts.Add(new ListCompIterator(vars.ToArray(), ParseExpression(ref i)));
-				}
-				else // where
-				{
-					i++;
-					parts.Add(new ListCompCondition(ParseExpression(ref i)));
-				}
-			}
-
-			if (Accept(i, TokenType.Comma))
-				ParseError(i, "Trailing commas are not allowed in list comprehensions.");
-			Expect(i, TokenType.SquareClose);
-
-			return new ListComprehension(items.ToArray(), parts.ToArray())
 				.At(start, tok[i++].EndIndex, document);
 		}
 

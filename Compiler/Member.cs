@@ -1721,11 +1721,6 @@ namespace Osprey.Members
 		/// <summary>The variable is a parameter.</summary>
 		Parameter,
 		/// <summary>The variable is an iteration variable; that is, it is declared in a for-in loop.</summary>
-		/// <remarks>
-		/// This value is also used for variables declared in the for-in of a list comprehension.
-		/// Variables with this kind MAY be referenced before their <see cref="ParseNode.StartIndex"/>,
-		/// or after their <see cref="ParseNode.EndIndex"/>, but not inbetween (where the list expression goes).
-		/// </remarks>
 		IterationVariable,
 		/// <summary>The variable is a catch variable, into which an error is caught.</summary>
 		CatchVariable,
