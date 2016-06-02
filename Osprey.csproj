@@ -68,11 +68,17 @@
     <Compile Include="DocGenerator.cs" />
     <Compile Include="EmptyArrays.cs" />
     <Compile Include="JsonGen.cs" />
+    <Compile Include="ModuleFile\IFixedSizeObject.cs" />
+    <Compile Include="ModuleFile\StructArray.cs" />
     <Compile Include="Module\MemberTable.cs" />
+    <Compile Include="ModuleFile\MetadataToken.cs" />
     <Compile Include="Module\Module.Saver.cs" />
     <Compile Include="Module\ModuleReader.cs" />
     <Compile Include="Module\Module.Loader.cs" />
     <Compile Include="Module\ModuleWriter.cs" />
+    <Compile Include="ModuleFile\RawEnums.cs" />
+    <Compile Include="ModuleFile\RawStructs.cs" />
+    <Compile Include="ModuleFile\Rva.cs" />
     <Compile Include="Parser\AccessLevel.cs" />
     <Compile Include="Compiler\Compiler.cs" />
     <Compile Include="Compiler\Compiler.Emitter.cs" />
