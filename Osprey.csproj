@@ -68,8 +68,16 @@
     <Compile Include="DocGenerator.cs" />
     <Compile Include="EmptyArrays.cs" />
     <Compile Include="JsonGen.cs" />
+    <Compile Include="ModuleFile\ConstantPool.cs" />
+    <Compile Include="ModuleFile\DefinitionsSection.cs" />
+    <Compile Include="ModuleFile\FileObjectFactory.cs" />
     <Compile Include="ModuleFile\IFixedSizeObject.cs" />
+    <Compile Include="ModuleFile\MetadataSection.cs" />
+    <Compile Include="ModuleFile\MethodBodySection.cs" />
+    <Compile Include="ModuleFile\StringDataSection.cs" />
     <Compile Include="ModuleFile\StructArray.cs" />
+    <Compile Include="ModuleFile\FileObject.cs" />
+    <Compile Include="ModuleFile\ReferencesSection.cs" />
     <Compile Include="Module\MemberTable.cs" />
     <Compile Include="ModuleFile\MetadataToken.cs" />
     <Compile Include="Module\Module.Saver.cs" />
@@ -139,7 +147,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
   </Target>
