@@ -3,105 +3,39 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Osprey.ModuleFile;
 
 namespace Osprey
 {
-	public class ModuleWriter : BinaryWriter
+	public class ModuleWriter
 	{
-		public ModuleWriter(Stream output)
-			: base(output)
-		{ }
-		public ModuleWriter(Stream output, Encoding encoding)
-			: base(output, encoding)
+		public ModuleWriter(Module module)
+			: this(module, new FileObjectFactory())
 		{ }
 
-		private Stack<long> collections = new Stack<long>();
-
-		public void BeginCollection(int length)
+		public ModuleWriter(Module module, IFileObjectFactory fileObjectFactory)
 		{
-			collections.Push(OutStream.Position); // Save the current position, which will contain the size
-			Seek(4, SeekOrigin.Current); // Skip ahead 4 bytes
-			Write(length); // Write the length
+			this.module = module;
+			this.fileObjectFactory = fileObjectFactory;
 
-			// Let the user write the contents
+			allSections = new FileObjectArray<FileSection>(null, 5)
+			{
+				stringData,
+				metadata,
+				references,
+				definitions,
+				methodBodies,
+			};
 		}
 
-		public void EndCollection()
-		{
-			var sizeOffset = collections.Pop(); // Recover the position of the size
-			var currentOffset = OutStream.Position;
+		private Module module;
+		private IFileObjectFactory fileObjectFactory;
 
-			var size = currentOffset - sizeOffset - 4;
-			OutStream.Seek(sizeOffset, SeekOrigin.Begin); // Go back to where the size needs to be
-			Write(checked((uint)size)); // Write the size, yay!
-			OutStream.Seek(currentOffset, SeekOrigin.Begin); // Continue at the correct offset
-		}
-
-		public void Write(Version value)
-		{
-			if (value == null)
-				throw new ArgumentNullException("value");
-
-			Write(value.Major);
-			Write(value.Minor);
-			Write(value.Build);
-			Write(value.Revision);
-		}
-
-		public override void Write(string value)
-		{
-			if (value == null)
-				throw new ArgumentNullException("value");
-
-			Write(value.Length);
-			for (var i = 0; i < value.Length; i++)
-				Write(unchecked((ushort)value[i]));
-		}
-
-		public void WriteCString(string value)
-		{
-			if (value == null)
-				throw new ArgumentNullException("value");
-
-			Write(value.Length + 1); // Characters + zero terminator
-			for (var i = 0; i < value.Length; i++)
-				Write(checked((sbyte)value[i]));
-			Write((byte)0); // Zero terminator, must be included
-		}
-
-		public void WriteFlags(Module.TypeFlags value)
-		{
-			Write((uint)value);
-		}
-
-		public void WriteFlags(Module.FieldFlags value)
-		{
-			Write((uint)value);
-		}
-
-		public void WriteFlags(Module.MethodFlags value)
-		{
-			Write((uint)value);
-		}
-
-		public void WriteFlags(Module.OverloadFlags value)
-		{
-			Write((uint)value);
-		}
-
-		public void WriteFlags(Module.ParamFlags value)
-		{
-			Write((ushort)value);
-		}
-
-		public void WriteFlags(Module.ConstantFlags value)
-		{
-			Write((uint)value);
-		}
-
-		public void WriteFlags(Module.Operator value)
-		{
-			Write((byte)value);
-		}
+		private StringDataSection stringData = new StringDataSection();
+		private MetadataSection metadata = new MetadataSection();
+		private ReferencesSection references = new ReferencesSection();
+		private DefinitionsSection definitions = new DefinitionsSection();
+		private MethodBodySection methodBodies = new MethodBodySection();
+		private FileObjectArray<FileSection> allSections;
 	}
 }
