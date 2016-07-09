@@ -622,30 +622,9 @@ namespace Osprey
 			compileTimer.Stop();
 
 			// Step 12: Save the output module. Once we've done this, we're all done!
-			// Saving a module requires a lot of seeking back and forth, because certain
-			// structures in the file format need to be prefixed with their size, which
-			// usually cannot be calculated without actually emitting data. Seeking appears
-			// to be relatively slow, so we write to a memory stream first, then write
-			// the resulting buffer to the file in one go.
-			// The vast majority of modules are small, and .NET can deal with large byte
-			// arrays with no difficulty.
-			var emitTimer = new Stopwatch();
-			long bytesWritten;
-			using (var stream = new MemoryStream(65536))
-			{
-				emitTimer.Start();
-
-				outputModule.Save(stream);
-
-				bytesWritten = stream.Position;
-
-				// CopyTo reads from the current position, so reset first!
-				stream.Position = 0;
-				using (var fileStream = File.Open(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
-					stream.CopyTo(fileStream);
-
-				emitTimer.Stop();
-			}
+			var emitTimer = Stopwatch.StartNew();
+			long bytesWritten = outputModule.Save(targetPath);
+			emitTimer.Stop();
 
 			Notice("Compilation finished at " + DateTime.Now);
 			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
@@ -1671,108 +1650,9 @@ namespace Osprey
 			for (var i = 0; i < documents.Count; i++)
 				fileToIndex.Add(documents[i].SourceFile, i);
 
-			using (var outStream = new MemoryStream(65536))
-			using (var writer = new ModuleWriter(outStream, Encoding.Unicode))
-			{
-				writer.Write(DebugSymbolsMagicNumber); // magicNumber
-
-				// Source files!
-				// There must always be at least one source file, hence documents.Count
-				// can never be zero.
-				writer.BeginCollection(documents.Count);
-				foreach (var doc in documents)
-				{
-					writer.Write(doc.SourceFile.FileName); // fileName
-					writer.Write(doc.SourceFile.FileHash); // hash
-				}
-				writer.EndCollection();
-
-				// Debug symbols!
-				WriteDebugSymbols(writer, fileToIndex);
-
-				outStream.Position = 0;
-				using (var outFileStream = File.Create(targetPath))
-					outStream.CopyTo(outFileStream);
-			}
+			throw new NotImplementedException();
 
 			Notice("[debug] Finished writing debug symbols.", CompilerVerbosity.Verbose);
-		}
-
-		private void WriteDebugSymbols(ModuleWriter writer, Dictionary<SourceFile, int> fileToIndex)
-		{
-			// We don't know yet just how many methods there will be with debug symbols.
-			long sizePos = writer.BaseStream.Position;
-			writer.Write(0); // totalOverloadsWithSymbols (placeholder)
-			writer.Write(0); // size (placeholder)
-
-			long lengthPos = writer.BaseStream.Position;
-			writer.Write(0); // length (placeholder)
-
-			Func<Method, bool> hasSymbols = m => m.CompiledMethod != null && m.CompiledMethod.DebugSymbols != null;
-
-			int totalOverloadsWithSymbols = 0;
-			int length = 0;
-			foreach (var kvp in outputModule.Members.GlobalFuncDefs.Concat(outputModule.Members.MethodDefs))
-			{
-				var group = kvp.Value;
-				if (group.Any(hasSymbols))
-				{
-					length++;
-					WriteMethodDebugSymbols(writer, fileToIndex, group, ref totalOverloadsWithSymbols);
-				}
-			}
-
-			long endPos = writer.BaseStream.Position;
-			writer.BaseStream.Seek(sizePos, SeekOrigin.Begin);
-			writer.Write(totalOverloadsWithSymbols); // totalOverloadsWithSymbols
-			writer.Write(checked((int)(endPos - lengthPos))); // size
-			writer.Write(length); // length
-
-			Notice(CompilerVerbosity.Verbose,
-				"[debug] Wrote debug symbols for {0} method group{1}",
-				length, length == 1 ? "" : "s");
-		}
-
-		private void WriteMethodDebugSymbols(ModuleWriter writer,
-			Dictionary<SourceFile, int> fileToIndex, MethodGroup group,
-			ref int totalOverloadsWithSymbols)
-		{
-			Notice(CompilerVerbosity.ExtraVerbose,
-				"[debug] Emitting debug symbols for method '{0}'",
-				group.FullName);
-
-			writer.Write(group.Id); // methodId
-
-			writer.BeginCollection(group.Count);
-			foreach (var method in group)
-			{
-				if (method.CompiledMethod == null || method.CompiledMethod.DebugSymbols == null ||
-					method.CompiledMethod.DebugSymbols.Length == 0)
-				{
-					writer.Write(0); // count
-					continue;
-				}
-
-				totalOverloadsWithSymbols++;
-
-				var debug = method.CompiledMethod.DebugSymbols;
-				writer.Write(debug.Length); // count
-				for (var i = 0; i < debug.Length; i++)
-				{
-					var d = debug[i];
-					writer.Write(d.BytecodeStartOffset); // startOffset
-					writer.Write(d.BytecodeEndOffset);   // endOffset
-					writer.Write(fileToIndex[d.File]); // sourceFile
-
-					int column;
-					var lineNumber = d.GetLineNumber(1, out column);
-					writer.Write(lineNumber);         // lineNumber
-					writer.Write(column);             // column
-					writer.Write(d.SourceStartIndex); // sourceStartIndex
-					writer.Write(d.SourceEndIndex);   // sourceEndIndex
-				}
-			}
-			writer.EndCollection();
 		}
 
 		/// <summary>
