@@ -438,4 +438,25 @@ namespace Osprey.ModuleFile.Raw
 		[FieldOffset(8)]
 		public MetadataToken StringValue;
 	}
+
+	// Debug symbol structs - used for writing only
+
+	[StructLayout(LayoutKind.Sequential)]
+	public struct DebugSymbol : IFixedSizeObject
+	{
+		public uint StartOffset;
+		public uint EndOffset;
+
+		public int SourceFile;
+
+		public SourceLocation StartLocation;
+		public SourceLocation EndLocation;
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	public struct SourceLocation : IFixedSizeObject
+	{
+		public int LineNumber;
+		public int Column;
+	}
 }

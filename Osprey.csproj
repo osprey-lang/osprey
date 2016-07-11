@@ -69,6 +69,7 @@
     <Compile Include="EmptyArrays.cs" />
     <Compile Include="JsonGen.cs" />
     <Compile Include="ModuleFile\ConstantPool.cs" />
+    <Compile Include="ModuleFile\DebugSymbols.cs" />
     <Compile Include="ModuleFile\DefinitionsSection.cs" />
     <Compile Include="ModuleFile\FileObjectFactory.cs" />
     <Compile Include="ModuleFile\IFixedSizeObject.cs" />
