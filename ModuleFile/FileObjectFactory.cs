@@ -38,6 +38,11 @@ namespace Osprey.ModuleFile
 
 	public class FileObjectFactory : IFileObjectFactory
 	{
+		public FileObjectFactory(ModuleWriter writer)
+		{
+			this.writer = writer;
+		}
+
 		private ModuleWriter writer;
 
 		public TypeDef CreateClassDef(Members.Class type)

@@ -10,13 +10,13 @@ namespace Osprey
 	public class ModuleWriter
 	{
 		public ModuleWriter(Module module)
-			: this(module, new FileObjectFactory())
+			: this(module, null)
 		{ }
 
 		public ModuleWriter(Module module, IFileObjectFactory fileObjectFactory)
 		{
 			this.module = module;
-			this.fileObjectFactory = fileObjectFactory;
+			this.fileObjectFactory = fileObjectFactory ?? new FileObjectFactory(this);
 
 			allSections = new FileObjectArray<FileSection>(null, 5)
 			{
