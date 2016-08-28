@@ -240,7 +240,7 @@ namespace Osprey.Members
 			else
 			{
 				Signature = new Signature(0, 0, splat);
-				Parameters = new Parameter[0];
+				Parameters = EmptyArrays.Parameters;
 			}
 		}
 		public Method(ParseNode node, string name, AccessLevel access, Statement body, Signature signature)
