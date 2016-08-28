@@ -96,14 +96,16 @@ namespace Osprey.ModuleFile
 
 	public class MethodDef : FileObject
 	{
-		public MethodDef(Members.MethodGroup method)
+		public MethodDef(Members.MethodGroup method, OverloadDef[] overloads)
 		{
 			if (method.Module.Imported)
 				throw new ArgumentException("The method is imported, not declared.", "method");
 			this.Method = method;
+			this.Overloads = overloads;
 		}
 
 		public readonly Members.MethodGroup Method;
+		public readonly OverloadDef[] Overloads;
 
 		public override uint Size { get { return 20; } }
 
