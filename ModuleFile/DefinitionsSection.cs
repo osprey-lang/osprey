@@ -131,15 +131,12 @@ namespace Osprey.ModuleFile
 
 	public class Parameter : FileObject
 	{
-		public Parameter(Members.Variable variable)
+		public Parameter(Nodes.Parameter parameter)
 		{
-			if (!variable.IsParameter)
-				throw new ArgumentException("The variable is not a parameter.", "variable");
-
-			this.Variable = variable;
+			this.ParameterNode = parameter;
 		}
 
-		public readonly Members.Variable Variable;
+		public readonly Nodes.Parameter ParameterNode;
 
 		public override uint Size { get { return 8; } }
 

@@ -23,7 +23,7 @@ namespace Osprey.ModuleFile
 
 		OverloadDef CreateOverloadDef(Members.Method overload);
 
-		Parameter CreateParameter(Members.Variable variable);
+		Parameter CreateParameter(Nodes.Parameter parameter);
 
 		ModuleRef CreateModuleRef(Module module);
 
