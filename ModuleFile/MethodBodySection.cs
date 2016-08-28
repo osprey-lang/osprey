@@ -327,15 +327,30 @@ namespace Osprey.ModuleFile
 		public MethodBodySection()
 		{
 			methodBodyArray = new FileObjectArray<MethodBody>(this, 50);
-			methodBodySet = new HashSet<MethodBody>();
+			methodBodyDict = new Dictionary<MethodBody, MethodBody>();
 		}
 
 		private readonly FileObjectArray<MethodBody> methodBodyArray;
-		private readonly HashSet<MethodBody> methodBodySet;
+		// HashSet<MethodBody> would not let us obtain the actual value stored in the set, so
+		// we have to use a Dictionary<,> here.
+		private readonly Dictionary<MethodBody, MethodBody> methodBodyDict;
 
 		public override uint Size { get { return methodBodyArray.Size; } }
 
 		public override uint Alignment { get { return methodBodyArray.Alignment; } }
+
+		public MethodBody Add(MethodBody item)
+		{
+			// If there is already an identical method body, reuse it. This will happen with
+			// some kinds of auto-generated methods, such as parameterless constructors that
+			// just call through to Object.'.new'().
+			MethodBody existingItem;
+			if (methodBodyDict.TryGetValue(item, out existingItem))
+				return existingItem;
+
+			methodBodyDict.Add(item, item);
+			return item;
+		}
 
 		public override void LayOutChildren()
 		{

@@ -56,22 +56,30 @@ namespace Osprey
 
 		public PropertyDef CreateProperty(Members.Property property)
 		{
-			return new PropertyDef(property);
+			var result = new PropertyDef(property);
+			definitions.PropertyDefs.Add(result);
+			return result;
 		}
 
 		public OperatorDef CreateOperator(Members.OperatorOverload @operator)
 		{
-			return new OperatorDef(@operator);
+			var result = new OperatorDef(@operator);
+			definitions.OperatorDefs.Add(result);
+			return result;
 		}
 
 		public ClassFieldDef CreateClassFieldDef(Members.Field field)
 		{
-			return new ClassFieldDef(field);
+			var result = new ClassFieldDef(field);
+			definitions.FieldDefs.Add(result);
+			return result;
 		}
 
 		public EnumFieldDef CreateEnumFieldDef(Members.EnumField field)
 		{
-			return new EnumFieldDef(field);
+			var result = new EnumFieldDef(field);
+			definitions.FieldDefs.Add(result);
+			return result;
 		}
 
 		public MethodDef CreateMethodDef(Members.MethodGroup method)
@@ -79,14 +87,18 @@ namespace Osprey
 			var overloads = method
 				.Select(CreateOverloadDef)
 				.ToArray();
-			throw new NotImplementedException();
+			var result = new MethodDef(method, overloads);
+			this.definitions.MethodDefs.Add(result);
+			return result;
 		}
 
 		public OverloadDef CreateOverloadDef(Members.Method overload)
 		{
 			var parameters = overload.Parameters.Select(CreateParameter);
 			var body = CreateMethodBody(overload);
-			return new OverloadDef(overload, body);
+			var result = new OverloadDef(overload, body);
+			definitions.OverloadDefs.Add(result);
+			return result;
 		}
 
 		private MethodBody CreateMethodBody(Members.Method overload)
@@ -94,12 +106,14 @@ namespace Osprey
 			var compiledMethod = overload.CompiledMethod;
 
 			var externBody = overload.Body as Members.ExternBlockSpace;
+			MethodBody result;
 			if (externBody != null)
-				return CreateNativeMethodBody(compiledMethod.LocalCount, externBody.EntryPoint);
+				result = CreateNativeMethodBody(compiledMethod.LocalCount, externBody.EntryPoint);
 			else if (CanUseShortHeader(overload))
-				return CreateShortMethodBody(overload);
+				result = CreateShortMethodBody(overload);
 			else
-				return CreateLongMethodBody(overload);
+				result = CreateLongMethodBody(overload);
+			return methodBodies.Add(result);
 		}
 
 		private NativeMethodBody CreateNativeMethodBody(int localCount, string entryPoint)
@@ -128,32 +142,44 @@ namespace Osprey
 
 		public Parameter CreateParameter(Nodes.Parameter parameter)
 		{
-			return new Parameter(parameter);
+			var result = new Parameter(parameter);
+			definitions.Parameters.Add(result);
+			return result;
 		}
 
 		public ModuleRef CreateModuleRef(Module module)
 		{
-			return new ModuleRef(module);
+			var result = new ModuleRef(module);
+			references.ModuleRefs.Add(result);
+			return result;
 		}
 
 		public TypeRef CreateTypeRef(Members.Type type)
 		{
-			return new TypeRef(type);
+			var result = new TypeRef(type);
+			references.TypeRefs.Add(result);
+			return result;
 		}
 
 		public FieldRef CreateFieldRef(Members.Field field)
 		{
-			return new FieldRef(field);
+			var result = new FieldRef(field);
+			references.FieldRefs.Add(result);
+			return result;
 		}
 
 		public MethodRef CreateMethodRef(Members.MethodGroup method)
 		{
-			return new MethodRef(method);
+			var result = new MethodRef(method);
+			references.MethodRefs.Add(result);
+			return result;
 		}
 
 		public FunctionRef CreateFunctionRef(Members.MethodGroup function)
 		{
-			return new FunctionRef(function);
+			var result = new FunctionRef(function);
+			references.FunctionRefs.Add(result);
+			return result;
 		}
 	}
 }
