@@ -17,6 +17,8 @@ namespace Osprey.ModuleFile
 
 		ClassFieldDef CreateClassFieldDef(Members.Field field);
 
+		ClassConstantDef CreateClassConstantDef(Members.ClassConstant constant);
+
 		EnumFieldDef CreateEnumFieldDef(Members.EnumField field);
 
 		MethodDef CreateMethodDef(Members.MethodGroup method);

@@ -84,6 +84,18 @@ namespace Osprey.ModuleFile
 		public readonly Members.Field Field;
 	}
 
+	public class ClassConstantDef : FieldDef
+	{
+		public ClassConstantDef(Members.ClassConstant constant, ConstantValueObject value)
+		{
+			this.Constant = constant;
+			this.Value = value;
+		}
+
+		public readonly Members.ClassConstant Constant;
+		public readonly ConstantValueObject Value;
+	}
+
 	public class EnumFieldDef : FieldDef
 	{
 		public EnumFieldDef(Members.EnumField field)
