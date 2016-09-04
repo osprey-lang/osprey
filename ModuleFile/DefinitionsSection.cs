@@ -169,6 +169,22 @@ namespace Osprey.ModuleFile
 		public override uint Alignment { get { return 8; } }
 	}
 
+	public class ConstantDef : FileObject
+	{
+		public ConstantDef(Members.GlobalConstant constant, ConstantValueObject value)
+		{
+			this.Constant = constant;
+			this.Value = value;
+		}
+
+		public readonly Members.GlobalConstant Constant;
+		public readonly ConstantValueObject Value;
+
+		public override uint Size { get { return 16; } }
+
+		public override uint Alignment { get { return 8; } }
+	}
+
 	public class DefinitionsSection : FileSection
 	{
 		public DefinitionsSection()
@@ -179,6 +195,7 @@ namespace Osprey.ModuleFile
 			FieldDefs = new FileObjectArray<FieldDef>(this, 40);
 			MethodDefs = new FileObjectArray<MethodDef>(this, 80);
 			FunctionDefs = new FileObjectArray<MethodDef>(this, 10);
+			ConstantDefs = new FileObjectArray<ConstantDef>(this, 5);
 			OverloadDefs = new FileObjectArray<OverloadDef>(this, 100);
 			Parameters = new FileObjectArray<Parameter>(this, 100);
 
@@ -190,6 +207,7 @@ namespace Osprey.ModuleFile
 				FieldDefs,
 				MethodDefs,
 				FunctionDefs,
+				ConstantDefs,
 				OverloadDefs,
 				Parameters,
 			};
@@ -201,6 +219,7 @@ namespace Osprey.ModuleFile
 		public readonly FileObjectArray<FieldDef> FieldDefs;
 		public readonly FileObjectArray<MethodDef> MethodDefs;
 		public readonly FileObjectArray<MethodDef> FunctionDefs;
+		public readonly FileObjectArray<ConstantDef> ConstantDefs;
 		public readonly FileObjectArray<OverloadDef> OverloadDefs;
 		public readonly FileObjectArray<Parameter> Parameters;
 

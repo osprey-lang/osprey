@@ -27,6 +27,8 @@ namespace Osprey.ModuleFile
 
 		Parameter CreateParameter(Nodes.Parameter parameter);
 
+		ConstantDef CreateConstantDef(Members.GlobalConstant constant);
+
 		ModuleRef CreateModuleRef(Module module);
 
 		TypeRef CreateTypeRef(Members.Type type);
