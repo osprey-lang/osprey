@@ -23,6 +23,8 @@ namespace Osprey.ModuleFile
 			this.Operators = operators;
 		}
 
+		public uint Token { get { return Type.Id; } }
+
 		public readonly Members.Type Type;
 		public readonly ByteString Initer;
 		public readonly FieldDef[] Fields;
@@ -72,6 +74,8 @@ namespace Osprey.ModuleFile
 		public override uint Size { get { return 20; } }
 
 		public override uint Alignment { get { return 4; } }
+
+		public abstract uint Token { get; }
 	}
 
 	public class ClassFieldDef : FieldDef
@@ -80,6 +84,8 @@ namespace Osprey.ModuleFile
 		{
 			this.Field = field;
 		}
+
+		public override uint Token { get { return Field.Id; } }
 
 		public readonly Members.Field Field;
 	}
@@ -92,6 +98,8 @@ namespace Osprey.ModuleFile
 			this.Value = value;
 		}
 
+		public override uint Token { get { return Constant.Id; } }
+
 		public readonly Members.ClassConstant Constant;
 		public readonly ConstantValueObject Value;
 	}
@@ -102,6 +110,8 @@ namespace Osprey.ModuleFile
 		{
 			this.Field = field;
 		}
+
+		public override uint Token { get { return Field.Id; } }
 
 		public readonly Members.EnumField Field;
 	}
@@ -115,6 +125,8 @@ namespace Osprey.ModuleFile
 			this.Method = method;
 			this.Overloads = overloads;
 		}
+
+		public uint Token { get { return Method.Id; } }
 
 		public readonly Members.MethodGroup Method;
 		public readonly OverloadDef[] Overloads;
