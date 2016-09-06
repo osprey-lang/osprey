@@ -17,11 +17,6 @@ namespace Osprey.ModuleFile.Raw
 
 		public bool IsNull { get { return Address == 0; } }
 
-		public T Read(/* TODO */)
-		{
-			throw new NotImplementedException();
-		}
-
 		public static readonly Rva<T> Null = new Rva<T>();
 	}
 
@@ -36,11 +31,6 @@ namespace Osprey.ModuleFile.Raw
 		public uint Address;
 
 		public bool IsNull { get { return Address == 0; } }
-
-		public StructArray<T> Read(/* TODO */)
-		{
-			throw new NotImplementedException();
-		}
 
 		public static readonly RvaToArray<T> Null = new RvaToArray<T>();
 	}
