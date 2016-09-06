@@ -13,12 +13,13 @@ namespace Osprey
 		{
 			this.module = module;
 
-			allSections = new FileObjectArray<FileSection>(null, 5)
+			allSections = new FileObjectArray<FileSection>(null, 6)
 			{
 				stringData,
 				metadata,
 				references,
 				definitions,
+				constants,
 				methodBodies,
 			};
 		}
@@ -29,6 +30,7 @@ namespace Osprey
 		private MetadataSection metadata = new MetadataSection();
 		private ReferencesSection references = new ReferencesSection();
 		private DefinitionsSection definitions = new DefinitionsSection();
+		private ConstantPool constants = new ConstantPool();
 		private MethodBodySection methodBodies = new MethodBodySection();
 		private FileObjectArray<FileSection> allSections;
 
@@ -46,12 +48,69 @@ namespace Osprey
 
 		public TypeDef CreateClassDef(Members.Class type)
 		{
-			throw new NotImplementedException();
+			var fields = new TempList<FieldDef>(type.members.Count / 2);
+			var methods = new TempList<MethodDef>(type.members.Count / 2);
+			var properties = new TempList<PropertyDef>(type.members.Count / 2);
+
+			foreach (var member in type.members.Values)
+			{
+				switch (member.Kind)
+				{
+					case Members.MemberKind.Constructor:
+					case Members.MemberKind.Iterator:
+						// The implementing method will be visited eventually
+						continue;
+					case Members.MemberKind.Field:
+						fields.Add(CreateClassFieldDef((Members.Field)member));
+						break;
+					case Members.MemberKind.Constant:
+						fields.Add(CreateClassConstantDef((Members.ClassConstant)member));
+						break;
+					case Members.MemberKind.MethodGroup:
+						methods.Add(CreateMethodDef((Members.MethodGroup)member));
+						break;
+					case Members.MemberKind.Property:
+					case Members.MemberKind.IndexerMember:
+						properties.Add(CreateProperty((Members.Property)member));
+						break;
+					default:
+						throw new CompileTimeException(member.Node, "Unsupported member in class");
+				}
+			}
+
+			var initer = type.Initializer != null
+				? stringData.GetByteString(type.Initializer)
+				: null;
+			var operators = type.operators.Select(CreateOperator);
+
+			// Fields and methods must be sorted by token value
+			var fieldsArray = fields.ToArray();
+			Array.Sort(fieldsArray, (a, b) => a.Token.CompareTo(b.Token));
+			var methodsArray = methods.ToArray();
+			Array.Sort(methodsArray, (a, b) => a.Token.CompareTo(b.Token));
+
+			var result = new TypeDef(
+				type,
+				initer,
+				fieldsArray,
+				methodsArray,
+				properties.ToArray(),
+				operators.ToArray()
+			);
+			definitions.TypeDefs.Add(result);
+			return result;
 		}
 
 		public TypeDef CreateEnumDef(Members.Enum type)
 		{
-			throw new NotImplementedException();
+			// fields have to be in token value order.
+			var fields = type.members.Values
+				.OrderBy(m => m.Id)
+				.Select(CreateEnumFieldDef)
+				.ToArray();
+			var result = new TypeDef(type, null, fields, null, null, null);
+			definitions.TypeDefs.Add(result);
+			return result;
 		}
 
 		public PropertyDef CreateProperty(Members.Property property)
@@ -73,6 +132,12 @@ namespace Osprey
 			var result = new ClassFieldDef(field);
 			definitions.FieldDefs.Add(result);
 			return result;
+		}
+
+		public ClassConstantDef CreateClassConstantDef(Members.ClassConstant constant)
+		{
+			var value = constants.Add(constant.Value);
+			return new ClassConstantDef(constant, value);
 		}
 
 		public EnumFieldDef CreateEnumFieldDef(Members.EnumField field)
@@ -145,6 +210,12 @@ namespace Osprey
 			var result = new Parameter(parameter);
 			definitions.Parameters.Add(result);
 			return result;
+		}
+
+		public ConstantDef CreateConstantDef(Members.GlobalConstant constant)
+		{
+			var value = constants.Add(constant.Value);
+			return new ConstantDef(constant, value);
 		}
 
 		public ModuleRef CreateModuleRef(Module module)
