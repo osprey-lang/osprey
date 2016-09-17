@@ -65,77 +65,11 @@ namespace Osprey.ModuleFile.Raw
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
-	public struct ModuleVersionStruct : IFixedSizeObject, IEquatable<ModuleVersionStruct>, IComparable<ModuleVersionStruct>
+	public struct ModuleVersionStruct : IFixedSizeObject
 	{
 		public uint Major;
 		public uint Minor;
 		public uint Patch;
-
-		public override bool Equals(object obj)
-		{
-			if (obj is ModuleVersionStruct)
-				return Equals((ModuleVersionStruct)obj);
-			return false;
-		}
-
-		public bool Equals(ModuleVersionStruct other)
-		{
-			return this.Major == other.Major &&
-				this.Minor == other.Minor &&
-				this.Patch == other.Patch;
-		}
-
-		public override int GetHashCode()
-		{
-			return unchecked(
-				(int)(
-					(Major << 20) ^
-					(Minor << 10) ^
-					Patch
-				)
-			);
-		}
-
-		public int CompareTo(ModuleVersionStruct other)
-		{
-			if (this.Major != other.Major)
-				return this.Major < other.Major ? -1 : 1;
-			if (this.Minor != other.Minor)
-				return this.Minor < other.Minor ? -1 : 1;
-			if (this.Patch != other.Patch)
-				return this.Patch < other.Patch ? -1 : 1;
-			return 0;
-		}
-
-		public static bool operator ==(ModuleVersionStruct a, ModuleVersionStruct b)
-		{
-			return a.Equals(b);
-		}
-
-		public static bool operator !=(ModuleVersionStruct a, ModuleVersionStruct b)
-		{
-			return !a.Equals(b);
-		}
-
-		public static bool operator <(ModuleVersionStruct a, ModuleVersionStruct b)
-		{
-			return a.CompareTo(b) < 0;
-		}
-
-		public static bool operator <=(ModuleVersionStruct a, ModuleVersionStruct b)
-		{
-			return a.CompareTo(b) <= 0;
-		}
-
-		public static bool operator >(ModuleVersionStruct a, ModuleVersionStruct b)
-		{
-			return a.CompareTo(b) > 0;
-		}
-
-		public static bool operator >=(ModuleVersionStruct a, ModuleVersionStruct b)
-		{
-			return a.CompareTo(b) >= 0;
-		}
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
