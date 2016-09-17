@@ -93,14 +93,18 @@ namespace Osprey.ModuleFile
 			return stringMapping[value];
 		}
 
-		public void AddStrings(IEnumerable<string> strings)
+		public WideString AddString(string value)
 		{
-			foreach (var value in strings)
+			WideString ws;
+
+			if (!stringMapping.TryGetValue(value, out ws))
 			{
-				var ws = new WideString(value);
-				this.strings.Add(ws);
-				this.stringMapping.Add(value, ws);
+				ws = new WideString(value);
+				strings.Add(ws);
+				stringMapping.Add(value, ws);
 			}
+
+			return ws;
 		}
 
 		public ByteString GetByteString(string value)

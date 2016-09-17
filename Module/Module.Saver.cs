@@ -16,7 +16,9 @@ namespace Osprey
 			if (imported)
 				throw new InvalidOperationException("Cannot save imported module.");
 
-			// TODO
+			var writer = new ModuleWriter();
+			writer.AddBasicModuleData(this);
+
 			throw new NotImplementedException();
 		}
 	}

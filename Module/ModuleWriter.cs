@@ -9,10 +9,8 @@ namespace Osprey
 {
 	public class ModuleWriter : IFileObjectFactory
 	{
-		public ModuleWriter(Module module)
+		public ModuleWriter()
 		{
-			this.module = module;
-
 			allSections = new FileObjectArray<FileSection>(null, 6)
 			{
 				stringData,
@@ -24,7 +22,9 @@ namespace Osprey
 			};
 		}
 
-		private Module module;
+		private ModuleVersion moduleVersion;
+		private WideString moduleName;
+		private WideString nativeLibraryName;
 
 		private StringDataSection stringData = new StringDataSection();
 		private MetadataSection metadata = new MetadataSection();
@@ -44,6 +44,37 @@ namespace Osprey
 		{
 			// Byte strings are added on demand
 			return stringData.AddByteString(value);
+		}
+
+		public void AddBasicModuleData(Module module)
+		{
+			// Module strings must be added first, because there are compiled methods that
+			// rely on specific string tokens.
+			foreach (var kvp in module.Members.Strings)
+				stringData.AddString(kvp.Value);
+
+			// In the old module format, some strings did not have string tokens associated
+			// with them; the String struct was inlined. Since the new format is basically
+			// bolted onto an old compiler that was definitely not made for it, those strings
+			// are not in the usual string table, so we must add them separately.
+			//
+			// Note that these strings are not referred to by token, only by RVA.
+
+			moduleName = stringData.AddString(module.Name);
+			if (module.NativeLib != null)
+				nativeLibraryName = stringData.AddString(module.NativeLib);
+
+			foreach (var kvp in module.Metadata)
+				metadata.AddEntry(
+					stringData.AddString(kvp.Key),
+					stringData.AddString(kvp.Value)
+				);
+
+			moduleVersion = new ModuleVersion(
+				module.Version.Major,
+				module.Version.Minor,
+				module.Version.Revision
+			);
 		}
 
 		public TypeDef CreateClassDef(Members.Class type)
@@ -85,9 +116,9 @@ namespace Osprey
 
 			// Fields and methods must be sorted by token value
 			var fieldsArray = fields.ToArray();
-			Array.Sort(fieldsArray, (a, b) => a.Token.CompareTo(b.Token));
+			Array.Sort(fieldsArray, FieldComparer);
 			var methodsArray = methods.ToArray();
-			Array.Sort(methodsArray, (a, b) => a.Token.CompareTo(b.Token));
+			Array.Sort(methodsArray, MethodComparer);
 
 			var result = new TypeDef(
 				type,
@@ -252,5 +283,8 @@ namespace Osprey
 			references.FunctionRefs.Add(result);
 			return result;
 		}
+
+		private static Comparison<FieldDef> FieldComparer = (a, b) => a.Token.CompareTo(b.Token);
+		private static Comparison<MethodDef> MethodComparer = (a, b) => a.Token.CompareTo(b.Token);
 	}
 }
