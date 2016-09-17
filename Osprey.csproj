@@ -84,6 +84,7 @@
     <Compile Include="Module\Module.Saver.cs" />
     <Compile Include="Module\ModuleReader.cs" />
     <Compile Include="Module\Module.Loader.cs" />
+    <Compile Include="Module\ModuleVersion.cs" />
     <Compile Include="Module\ModuleWriter.cs" />
     <Compile Include="ModuleFile\RawEnums.cs" />
     <Compile Include="ModuleFile\RawStructs.cs" />
