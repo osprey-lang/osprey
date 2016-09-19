@@ -77,6 +77,12 @@ namespace Osprey.ModuleFile
 			}
 			return startOffset;
 		}
+
+		public Raw.Rva<T> ToRva<T>()
+			where T : struct
+		{
+			return new Raw.Rva<T>(Address);
+		}
 	}
 
 	public abstract class FileSection : FileObject
@@ -144,6 +150,22 @@ namespace Osprey.ModuleFile
 		public override void LayOutChildren()
 		{
 			LayOutItems(0, items);
+		}
+
+		public new Raw.RvaToArray<T> ToRva<T>()
+			where T : struct
+		{
+			if (Count == 0)
+				return Raw.RvaToArray<T>.Null;
+			else
+				return new Raw.RvaToArray<T>(Address);
+		}
+
+		public Raw.RvaToArray<T> ToRva<T>(out int countField)
+			where T : struct
+		{
+			countField = this.Count;
+			return ToRva<T>();
 		}
 
 		public IEnumerator<T> GetEnumerator()
@@ -223,6 +245,22 @@ namespace Osprey.ModuleFile
 				item.LayOutChildren();
 				startOffset += item.AlignedSize;
 			}
+		}
+
+		public new Raw.RvaToArray<T> ToRva<T>()
+			where T : struct
+		{
+			if (Count == 0)
+				return Raw.RvaToArray<T>.Null;
+			else
+				return new Raw.RvaToArray<T>(Address);
+		}
+
+		public Raw.RvaToArray<T> ToRva<T>(out int countField)
+			where T : struct
+		{
+			countField = this.Count;
+			return ToRva<T>();
 		}
 
 		public IEnumerator<T> GetEnumerator()
