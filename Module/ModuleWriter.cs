@@ -77,6 +77,15 @@ namespace Osprey
 			);
 		}
 
+		public TypeDef CreateTypeDef(Members.Type type)
+		{
+			var @class = type as Members.Class;
+			if (@class != null)
+				return CreateClassDef(@class);
+			else
+				return CreateEnumDef((Members.Enum)type);
+		}
+
 		public TypeDef CreateClassDef(Members.Class type)
 		{
 			var fields = new TempList<FieldDef>(type.members.Count / 2);
@@ -101,8 +110,10 @@ namespace Osprey
 						methods.Add(CreateMethodDef((Members.MethodGroup)member));
 						break;
 					case Members.MemberKind.Property:
-					case Members.MemberKind.IndexerMember:
 						properties.Add(CreateProperty((Members.Property)member));
+						break;
+					case Members.MemberKind.IndexerMember:
+						properties.Add(CreateProperty((Members.IndexerMember)member));
 						break;
 					default:
 						throw new CompileTimeException(member.Node, "Unsupported member in class");
@@ -110,9 +121,11 @@ namespace Osprey
 			}
 
 			var initer = type.Initializer != null
-				? stringData.GetByteString(type.Initializer)
+				? stringData.AddByteString(type.Initializer)
 				: null;
-			var operators = type.operators.Select(CreateOperator);
+			var operators =
+				type.operators.Where(op => op != null)
+					.Select(CreateOperator);
 
 			// Fields and methods must be sorted by token value
 			var fieldsArray = fields.ToArray();
@@ -146,7 +159,14 @@ namespace Osprey
 
 		public PropertyDef CreateProperty(Members.Property property)
 		{
-			var result = new PropertyDef(property);
+			var result = new SimplePropertyDef(property);
+			definitions.PropertyDefs.Add(result);
+			return result;
+		}
+
+		public PropertyDef CreateProperty(Members.IndexerMember indexer)
+		{
+			var result = new IndexerPropertyDef(indexer);
 			definitions.PropertyDefs.Add(result);
 			return result;
 		}
@@ -155,8 +175,8 @@ namespace Osprey
 		{
 			var result = new OperatorDef(@operator);
 			definitions.OperatorDefs.Add(result);
-			return result;
-		}
+			return result;		}
+
 
 		public ClassFieldDef CreateClassFieldDef(Members.Field field)
 		{
@@ -184,15 +204,20 @@ namespace Osprey
 				.Select(CreateOverloadDef)
 				.ToArray();
 			var result = new MethodDef(method, overloads);
-			this.definitions.MethodDefs.Add(result);
+			if (method.ParentAsClass == null)
+				this.definitions.FunctionDefs.Add(result);
+			else
+				this.definitions.MethodDefs.Add(result);
 			return result;
 		}
 
 		public OverloadDef CreateOverloadDef(Members.Method overload)
 		{
-			var parameters = overload.Parameters.Select(CreateParameter);
-			var body = CreateMethodBody(overload);
-			var result = new OverloadDef(overload, body);
+			var parameters = overload.Parameters != null
+				? overload.Parameters.Select(CreateParameter).ToArray()
+				: null;
+			var body = overload.IsAbstract ? null : CreateMethodBody(overload);
+			var result = new OverloadDef(overload, parameters, body);
 			definitions.OverloadDefs.Add(result);
 			return result;
 		}
@@ -223,7 +248,7 @@ namespace Osprey
 			var compiledMethod = overload.CompiledMethod;
 			return compiledMethod.LocalCount == 0 &&
 				compiledMethod.MaxStack <= 8 &&
-				compiledMethod.TryBlocks.Length == 0;
+				(compiledMethod.TryBlocks == null || compiledMethod.TryBlocks.Length == 0);
 		}
 
 		private ShortMethodBody CreateShortMethodBody(Members.Method overload)

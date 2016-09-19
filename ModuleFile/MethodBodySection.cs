@@ -163,11 +163,19 @@ namespace Osprey.ModuleFile
 			var compiledMethod = method.CompiledMethod;
 			this.localCount = compiledMethod.LocalCount;
 			this.maxStack = compiledMethod.MaxStack;
-			this.tryBlocks = new FileObjectArray<TryBlockObject>(this, compiledMethod.TryBlocks.Length);
-			this.catchBlocks = new FileObjectArray<CatchClauseObject>(this, compiledMethod.TryBlocks.Length > 0 ? 2 : 0);
 			this.body = compiledMethod.BodyBytes;
 
-			AddTryBlocks(compiledMethod.TryBlocks);
+			if (compiledMethod.TryBlocks == null || compiledMethod.TryBlocks.Length == 0)
+			{
+				this.tryBlocks = new FileObjectArray<TryBlockObject>(this);
+				this.catchBlocks = new FileObjectArray<CatchClauseObject>(this);
+			}
+			else
+			{
+				this.tryBlocks = new FileObjectArray<TryBlockObject>(this, compiledMethod.TryBlocks.Length);
+				this.catchBlocks = new FileObjectArray<CatchClauseObject>(this, compiledMethod.TryBlocks.Length);
+				AddTryBlocks(compiledMethod.TryBlocks);
+			}
 		}
 
 		private int localCount;

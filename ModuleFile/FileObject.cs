@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
@@ -86,6 +87,7 @@ namespace Osprey.ModuleFile
 	// This class can safely be used with variable-size file objects, as long as they have
 	// the same alignment. The alignment will be reported as the alignment of the first item,
 	// or 1 if the array is empty.
+	[DebuggerDisplay("Count = {Count}")]
 	public class FileObjectArray<T> : FileObject, IEnumerable<T>
 		where T : FileObject
 	{

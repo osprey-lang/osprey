@@ -7,9 +7,7 @@ namespace Osprey.ModuleFile
 {
 	public interface IFileObjectFactory
 	{
-		TypeDef CreateClassDef(Members.Class type);
-
-		TypeDef CreateEnumDef(Members.Enum type);
+		TypeDef CreateTypeDef(Members.Type type);
 
 		PropertyDef CreateProperty(Members.Property property);
 

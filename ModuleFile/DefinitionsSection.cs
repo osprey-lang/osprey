@@ -37,9 +37,16 @@ namespace Osprey.ModuleFile
 		public override uint Alignment { get { return 8; } }
 	}
 
-	public class PropertyDef : FileObject
+	public abstract class PropertyDef : FileObject
 	{
-		public PropertyDef(Members.Property property)
+		public override uint Size { get { return 12; } }
+
+		public override uint Alignment { get { return 4; } }
+	}
+
+	public class SimplePropertyDef : PropertyDef
+	{
+		public SimplePropertyDef(Members.Property property)
 		{
 			if (property.Parent.Module.Imported)
 				throw new ArgumentException("The property belongs to an imported, not declared, type.", "property");
@@ -47,10 +54,18 @@ namespace Osprey.ModuleFile
 		}
 
 		public readonly Members.Property Property;
+	}
 
-		public override uint Size { get { return 12; } }
+	public class IndexerPropertyDef : PropertyDef
+	{
+		public IndexerPropertyDef(Members.IndexerMember indexer)
+		{
+			if (indexer.Parent.Module.Imported)
+				throw new ArgumentException("The indexer belongs to an imported, not declared, type.", "indexer");
+			this.Indexer = indexer;
+		}
 
-		public override uint Alignment { get { return 4; } }
+		public readonly Members.IndexerMember Indexer;
 	}
 
 	public class OperatorDef : FileObject
@@ -138,16 +153,18 @@ namespace Osprey.ModuleFile
 
 	public class OverloadDef : FileObject
 	{
-		public OverloadDef(Members.Method overload, MethodBody body)
+		public OverloadDef(Members.Method overload, Parameter[] parameters, MethodBody body)
 		{
 			if (overload.Group.Module.Imported)
 				throw new ArgumentException("The containing method is imported, not declared.", "overload");
 
 			this.Overload = overload;
+			this.Parameters = parameters;
 			this.Body = body;
 		}
 
 		public readonly Members.Method Overload;
+		public readonly Parameter[] Parameters;
 		public readonly MethodBody Body;
 
 		public override uint Size { get { return 20; } }
