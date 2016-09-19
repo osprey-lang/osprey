@@ -357,6 +357,7 @@ namespace Osprey.ModuleFile
 				return existingItem;
 
 			methodBodyDict.Add(item, item);
+			methodBodyArray.Add(item);
 			return item;
 		}
 
