@@ -29,7 +29,7 @@ namespace Osprey.ModuleFile
 			get { return relativeAddress; }
 			set
 			{
-				if (relativeAddress % Alignment != 0)
+				if (value % Alignment != 0)
 					throw new ArgumentException("Incorrectly aligned address.", "value");
 				relativeAddress = value;
 			}
@@ -144,6 +144,85 @@ namespace Osprey.ModuleFile
 		public override void LayOutChildren()
 		{
 			LayOutItems(0, items);
+		}
+
+		public IEnumerator<T> GetEnumerator()
+		{
+			return items.GetEnumerator();
+		}
+
+		System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+		{
+			return GetEnumerator();
+		}
+	}
+
+	// This class resembles FileObjectArray<T>, except that it can safely be used with
+	// objects of /different/ alignment. Everything within the array will be aligned
+	// according to its own alignment. As the name implies, this class is only really
+	// used for file sections, but note that this includes sections within sections,
+	// such as the ClassDefs, MethodDefs, FieldDefs, etc. inside the DefinitionsSection.
+	public class FileSectionArray<T> : FileObject, IEnumerable<T>
+		where T : FileObject
+	{
+		public FileSectionArray(int capacity)
+		{
+			this.items = new TempList<T>(capacity);
+		}
+
+		public T this[int index] { get { return items[index]; } }
+
+		public int Count { get { return items.Count; } }
+
+		public override uint Size
+		{
+			get
+			{
+				if (items.Count == 0)
+					return 0;
+				var lastItem = items[items.Count - 1];
+				// Don't add AlignedSize here - the next item may not be aligned the same way,
+				// so it makes no difference anyway. Plus, we /don't/ want the final size of
+				// the module to be dependent on the last section's alignment.
+				return lastItem.RelativeAddress + lastItem.Size;
+			}
+		}
+
+		public override uint Alignment
+		{
+			get
+			{
+				// We can safely return 1 here, because every section will be aligned according
+				// to its own alignment. Hence it doesn't matter where we put this array; it'll
+				// shift to fit its contents.
+				return 1;
+			}
+		}
+
+		private TempList<T> items;
+
+		public void Add(T item)
+		{
+			if (item == null)
+				throw new ArgumentNullException("item");
+
+			item.LayoutParent = this;
+			// Possibly temporary address; LayOutChildren may change it.
+			item.RelativeAddress = AlignTo(this.Size, item.Alignment);
+
+			items.Add(item);
+		}
+
+		public override void LayOutChildren()
+		{
+			// Can't call LayOutItems here - it assumes every item has the same alignment.
+			uint startOffset = 0u;
+			foreach (var item in items)
+			{
+				item.RelativeAddress = AlignTo(startOffset, item.Alignment);
+				item.LayOutChildren();
+				startOffset += item.AlignedSize;
+			}
 		}
 
 		public IEnumerator<T> GetEnumerator()

@@ -95,7 +95,7 @@ namespace Osprey.ModuleFile
 			MethodRefs = new FileObjectArray<MethodRef>(this, 20);
 			FunctionRefs = new FileObjectArray<FunctionRef>(this, 5);
 
-			allChildren = new FileObject[]
+			allChildren = new FileSectionArray<FileObject>(5)
 			{
 				ModuleRefs,
 				TypeRefs,
@@ -111,31 +111,15 @@ namespace Osprey.ModuleFile
 		public readonly FileObjectArray<MethodRef> MethodRefs;
 		public readonly FileObjectArray<FunctionRef> FunctionRefs;
 
-		private readonly FileObject[] allChildren;
+		private readonly FileSectionArray<FileObject> allChildren;
 
-		public override uint Size
-		{
-			get
-			{
-				return ModuleRefs.AlignedSize +
-					TypeRefs.AlignedSize +
-					FieldRefs.AlignedSize +
-					MethodRefs.AlignedSize +
-					FunctionRefs.AlignedSize;
-			}
-		}
+		public override uint Size { get { return allChildren.Size; } }
 
 		public override uint Alignment { get { return 4; } }
 
 		public override void LayOutChildren()
 		{
-			LayOutItems(0, new FileObject[] {
-				ModuleRefs,
-				TypeRefs,
-				FieldRefs,
-				MethodRefs,
-				FunctionRefs,
-			});
+			allChildren.LayOutChildren();
 		}
 	}
 }

@@ -216,7 +216,7 @@ namespace Osprey.ModuleFile
 			OverloadDefs = new FileObjectArray<OverloadDef>(this, 100);
 			Parameters = new FileObjectArray<Parameter>(this, 100);
 
-			allChildren = new FileObject[]
+			allChildren = new FileSectionArray<FileObject>(9)
 			{
 				TypeDefs,
 				PropertyDefs,
@@ -240,14 +240,13 @@ namespace Osprey.ModuleFile
 		public readonly FileObjectArray<OverloadDef> OverloadDefs;
 		public readonly FileObjectArray<Parameter> Parameters;
 
-		private readonly FileObject[] allChildren;
+		private readonly FileSectionArray<FileObject> allChildren;
 
 		public override uint Size
 		{
 			get
 			{
-				var lastChild = allChildren[allChildren.Length - 1];
-				return lastChild.RelativeAddress + lastChild.AlignedSize;
+				return allChildren.AlignedSize;
 			}
 		}
 
@@ -255,7 +254,8 @@ namespace Osprey.ModuleFile
 
 		public override void LayOutChildren()
 		{
-			LayOutItems(0, allChildren);
+			allChildren.RelativeAddress = 0;
+			allChildren.LayOutChildren();
 		}
 	}
 }

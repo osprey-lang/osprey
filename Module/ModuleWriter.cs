@@ -11,7 +11,7 @@ namespace Osprey
 	{
 		public ModuleWriter()
 		{
-			allSections = new FileObjectArray<FileSection>(null, 6)
+			allSections = new FileSectionArray<FileSection>(6)
 			{
 				stringData,
 				metadata,
@@ -32,7 +32,7 @@ namespace Osprey
 		private DefinitionsSection definitions = new DefinitionsSection();
 		private ConstantPool constants = new ConstantPool();
 		private MethodBodySection methodBodies = new MethodBodySection();
-		private FileObjectArray<FileSection> allSections;
+		private FileSectionArray<FileSection> allSections;
 
 		public WideString GetWideString(string value)
 		{
@@ -177,7 +177,6 @@ namespace Osprey
 			definitions.OperatorDefs.Add(result);
 			return result;		}
 
-
 		public ClassFieldDef CreateClassFieldDef(Members.Field field)
 		{
 			var result = new ClassFieldDef(field);
@@ -308,6 +307,17 @@ namespace Osprey
 			references.FunctionRefs.Add(result);
 			return result;
 		}
+
+		public void LayOutSections()
+		{
+			// The RefTableHeader begins right after the ModuleHeader,
+			// after which comes all that juicy data.
+			allSections.RelativeAddress = ModuleHeaderSize + RefTableHeaderSize;
+			allSections.LayOutChildren();
+		}
+
+		private const uint ModuleHeaderSize = 96u;
+		private const uint RefTableHeaderSize = 40u;
 
 		private static Comparison<FieldDef> FieldComparer = (a, b) => a.Token.CompareTo(b.Token);
 		private static Comparison<MethodDef> MethodComparer = (a, b) => a.Token.CompareTo(b.Token);

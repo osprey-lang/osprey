@@ -33,7 +33,13 @@ namespace Osprey.ModuleFile
 
 		private FileObjectArray<MetadataEntry> entries;
 
-		public override uint Size { get { return entries.Size; } }
+		public override uint Size
+		{
+			get
+			{
+				return MetadataHeaderSize + entries.Size;
+			}
+		}
 
 		public override uint Alignment { get { return 4; } }
 
@@ -50,5 +56,7 @@ namespace Osprey.ModuleFile
 		{
 			entries.LayOutChildren();
 		}
+
+		private const uint MetadataHeaderSize = 4u;
 	}
 }

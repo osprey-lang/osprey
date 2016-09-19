@@ -21,6 +21,7 @@ namespace Osprey
 
 			WriteReferences(writer);
 			WriteDefinitions(writer);
+			writer.LayOutSections();
 
 			throw new NotImplementedException();
 		}
