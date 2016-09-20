@@ -60,7 +60,7 @@ namespace Osprey.ModuleFile.Raw
 		Sealed    = 0x00000200,
 		Static    = 0x00000300,
 		Impl      = 0x00001000,
-		Primitive = 0x00002200,
+		Primitive = 0x00002000,
 	}
 
 	public enum Operator : uint

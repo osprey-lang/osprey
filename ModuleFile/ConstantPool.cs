@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 
@@ -7,12 +8,16 @@ namespace Osprey.ModuleFile
 {
 	public class ConstantValueObject : FileObject
 	{
-		public ConstantValueObject(ConstantValue value)
+		public ConstantValueObject(ConstantValue value, uint typeToken, uint stringToken)
 		{
 			this.Value = value;
+			this.TypeToken = typeToken;
+			this.StringToken = stringToken;
 		}
 
 		public readonly ConstantValue Value;
+		public readonly uint TypeToken;
+		public readonly uint StringToken;
 
 		public override uint Size { get { return 16; } }
 
@@ -35,6 +40,40 @@ namespace Osprey.ModuleFile
 		{
 			return this.Value.Equals(other.Value);
 		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var value = new Raw.ConstantValueStruct();
+			switch (Value.Type)
+			{
+				case ConstantValueType.Null:
+					value.Type = MetadataToken.Null;
+					value.Value = 0UL;
+					break;
+				case ConstantValueType.Boolean:
+				case ConstantValueType.Int:
+				case ConstantValueType.UInt:
+				case ConstantValueType.Real:
+				case ConstantValueType.Char:
+					value.Type = new MetadataToken(TypeToken);
+					value.Value = Value.GetRawValue();
+					break;
+				case ConstantValueType.String:
+					value.Type = new MetadataToken(TypeToken);
+					value.StringValue = new MetadataToken(StringToken);
+					break;
+				case ConstantValueType.Enum:
+					{
+						var enumValue = Value.EnumValue;
+						value.Type = new MetadataToken(enumValue.Type.Id);
+						value.Value = unchecked((ulong)enumValue.Value);
+					}
+					break;
+				default:
+					throw new InvalidOperationException("Invalid ConstantValueType");
+			}
+			view.Write(this.Address, ref value);
+		}
 	}
 
 	public class ConstantPool : FileSection
@@ -51,12 +90,12 @@ namespace Osprey.ModuleFile
 
 		public override uint Alignment { get { return values.Alignment; } }
 
-		public ConstantValueObject Add(ConstantValue value)
+		public ConstantValueObject Add(ConstantValue value, uint typeToken, uint stringToken)
 		{
 			ConstantValueObject cvo;
 			if (!valueMapping.TryGetValue(value, out cvo))
 			{
-				cvo = new ConstantValueObject(value);
+				cvo = new ConstantValueObject(value, typeToken, stringToken);
 				values.Add(cvo);
 				valueMapping.Add(value, cvo);
 			}
@@ -67,6 +106,11 @@ namespace Osprey.ModuleFile
 		public override void LayOutChildren()
 		{
 			values.LayOutChildren();
+		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			values.Emit(view);
 		}
 	}
 }

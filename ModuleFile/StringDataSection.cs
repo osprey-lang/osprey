@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 
@@ -25,6 +26,23 @@ namespace Osprey.ModuleFile
 		}
 
 		public override uint Alignment { get { return 4; } }
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var address = this.Address;
+
+			var str = Value;
+			view.Write(address, str.Length);
+			address += sizeof(uint);
+
+			// Avoiding foreach for teeny tiny miniscule supposed performance benefit.
+			// There are usually quite a lot of strings in a module.
+			for (var i = 0; i < str.Length; i++)
+			{
+				view.Write(address, str[i]);
+				address += sizeof(char);
+			}
+		}
 	}
 
 	public class ByteString : FileObject
@@ -50,6 +68,16 @@ namespace Osprey.ModuleFile
 		}
 
 		public override uint Alignment { get { return 4; } }
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			view.Write(this.Address, utf8Length);
+
+			var address = this.Address + sizeof(uint);
+			var utf8Bytes = Encoding.UTF8.GetBytes(Value);
+			view.WriteArray(address, utf8Bytes, 0, utf8Bytes.Length);
+			view.Write(address + utf8Length, (byte)0);
+		}
 	}
 
 	public class StringDataSection : FileSection
@@ -133,6 +161,32 @@ namespace Osprey.ModuleFile
 
 			byteStrings.RelativeAddress = strings.RelativeAddress + strings.AlignedSize;
 			byteStrings.LayOutChildren();
+		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			uint address = this.Address;
+
+			// uint length
+			view.Write(address, (uint)strings.Count);
+			address += sizeof(uint);
+
+			// Rva<String>[length] strings -- array of pointers to each string
+			// Here we can be a bit clever and write the string /and/ its address
+			// simultaneously.
+			foreach (var str in strings)
+			{
+				view.Write(address, str.Address);
+				address += sizeof(uint);
+
+				str.Emit(view);
+			}
+
+			// Byte strings don't get an indirection table.
+			foreach (var str in byteStrings)
+			{
+				str.Emit(view);
+			}
 		}
 	}
 }

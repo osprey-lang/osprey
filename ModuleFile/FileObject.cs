@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 
@@ -83,6 +84,8 @@ namespace Osprey.ModuleFile
 		{
 			return new Raw.Rva<T>(Address);
 		}
+
+		public abstract void Emit(MemoryMappedViewAccessor view);
 	}
 
 	public abstract class FileSection : FileObject
@@ -152,20 +155,29 @@ namespace Osprey.ModuleFile
 			LayOutItems(0, items);
 		}
 
-		public new Raw.RvaToArray<T> ToRva<T>()
-			where T : struct
+		public new Raw.RvaToArray<TRva> ToRva<TRva>()
+			where TRva : struct
 		{
 			if (Count == 0)
-				return Raw.RvaToArray<T>.Null;
+				return Raw.RvaToArray<TRva>.Null;
 			else
-				return new Raw.RvaToArray<T>(Address);
+				return new Raw.RvaToArray<TRva>(Address);
 		}
 
-		public Raw.RvaToArray<T> ToRva<T>(out int countField)
-			where T : struct
+		public Raw.RvaToArray<TRva> ToRva<TRva>(out int countField)
+			where TRva : struct
 		{
 			countField = this.Count;
-			return ToRva<T>();
+			return ToRva<TRva>();
+		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			if (items.Count == 0)
+				return;
+
+			foreach (var item in items)
+				item.Emit(view);
 		}
 
 		public IEnumerator<T> GetEnumerator()
@@ -187,8 +199,9 @@ namespace Osprey.ModuleFile
 	public class FileSectionArray<T> : FileObject, IEnumerable<T>
 		where T : FileObject
 	{
-		public FileSectionArray(int capacity)
+		public FileSectionArray(FileObject layoutParent, int capacity)
 		{
+			this.LayoutParent = layoutParent;
 			this.items = new TempList<T>(capacity);
 		}
 
@@ -247,20 +260,29 @@ namespace Osprey.ModuleFile
 			}
 		}
 
-		public new Raw.RvaToArray<T> ToRva<T>()
-			where T : struct
+		public new Raw.RvaToArray<TRva> ToRva<TRva>()
+			where TRva : struct
 		{
 			if (Count == 0)
-				return Raw.RvaToArray<T>.Null;
+				return Raw.RvaToArray<TRva>.Null;
 			else
-				return new Raw.RvaToArray<T>(Address);
+				return new Raw.RvaToArray<TRva>(Address);
 		}
 
-		public Raw.RvaToArray<T> ToRva<T>(out int countField)
-			where T : struct
+		public Raw.RvaToArray<TRva> ToRva<TRva>(out int countField)
+			where TRva : struct
 		{
 			countField = this.Count;
-			return ToRva<T>();
+			return ToRva<TRva>();
+		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			if (items.Count == 0)
+				return;
+
+			foreach (var item in items)
+				item.Emit(view);
 		}
 
 		public IEnumerator<T> GetEnumerator()

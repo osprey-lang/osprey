@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 
@@ -57,6 +58,11 @@ namespace Osprey.ModuleFile
 			overloads.LayOutChildren();
 		}
 
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			throw new NotImplementedException();
+		}
+
 		// memberToken + metadata + overloadCount
 		private const uint BaseSize = 12;
 	}
@@ -85,6 +91,11 @@ namespace Osprey.ModuleFile
 		}
 
 		public override uint Alignment { get { return 4; } }
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			throw new NotImplementedException();
+		}
 
 		// metadata + symbolCount
 		private const uint BaseSize = 8;

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 
@@ -22,6 +23,14 @@ namespace Osprey.ModuleFile
 		public override uint Size { get { return 8; } }
 
 		public override uint Alignment { get { return 4; } }
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var entry = new Raw.StringMapEntryStruct();
+			entry.Key = key.ToRva<Raw.StringStruct>();
+			entry.Value = key.ToRva<Raw.StringStruct>();
+			view.Write(this.Address, ref entry);
+		}
 	}
 
 	public class MetadataSection : FileSection
@@ -54,7 +63,17 @@ namespace Osprey.ModuleFile
 
 		public override void LayOutChildren()
 		{
+			entries.RelativeAddress = MetadataHeaderSize;
 			entries.LayOutChildren();
+		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var header = new Raw.StringMapHeaderStruct();
+			header.Length = entries.Count;
+			view.Write(this.Address, ref header);
+
+			entries.Emit(view);
 		}
 
 		private const uint MetadataHeaderSize = 4u;

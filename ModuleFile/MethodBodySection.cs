@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 
@@ -7,7 +8,7 @@ namespace Osprey.ModuleFile
 {
 	public abstract class MethodBody : FileObject
 	{
-		public override uint Alignment { get { return 8; } }
+		public override uint Alignment { get { return 4; } }
 
 		public abstract override int GetHashCode();
 
@@ -74,7 +75,7 @@ namespace Osprey.ModuleFile
 
 		private int? hashCode;
 
-		public override uint Size { get { return unchecked(4 + (uint)body.Length); } }
+		public override uint Size { get { return unchecked(MethodBodySize + (uint)body.Length); } }
 
 		public override int GetHashCode()
 		{
@@ -100,6 +101,18 @@ namespace Osprey.ModuleFile
 		{
 			// Nothing to be done here
 		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var body = new Raw.MethodBodyStruct();
+			body.Size = (uint)this.body.Length;
+			view.Write(this.Address, ref body);
+
+			// The body bytes follow the MethodBody
+			view.WriteArray(this.Address + sizeof(uint), this.body, 0, this.body.Length);
+		}
+
+		private const uint MethodBodySize = 4u;
 	}
 
 	public abstract class TryBlockObject : FileObject
@@ -127,6 +140,20 @@ namespace Osprey.ModuleFile
 		}
 
 		public readonly FinallyBlock FinallyBlock;
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var tryBlock = new Raw.TryBlockStruct();
+			tryBlock.Kind = Raw.TryKind.Finally;
+			tryBlock.TryStart = (uint)TryBlock.StartOffset;
+			tryBlock.TryEnd = (uint)TryBlock.EndOffset;
+			tryBlock.FinallyClause = new Raw.FinallyClauseStruct
+			{
+				FinallyStart = (uint)FinallyBlock.StartOffset,
+				FinallyEnd = (uint)FinallyBlock.EndOffset,
+			};
+			view.Write(this.Address, ref tryBlock);
+		}
 	}
 
 	public class TryCatchBlock : TryBlockObject
@@ -138,6 +165,20 @@ namespace Osprey.ModuleFile
 		}
 
 		public readonly CatchClauseObject[] CatchClauses;
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var tryBlock = new Raw.TryBlockStruct();
+			tryBlock.Kind = Raw.TryKind.Catch;
+			tryBlock.TryStart = (uint)TryBlock.StartOffset;
+			tryBlock.TryEnd = (uint)TryBlock.EndOffset;
+			tryBlock.CatchClauses = new Raw.CatchClausesStruct
+			{
+				Count = CatchClauses.Length,
+				Clauses = new Raw.RvaToArray<Raw.CatchClauseStruct>(CatchClauses[0].Address),
+			};
+			view.Write(this.Address, ref tryBlock);
+		}
 	}
 
 	public class CatchClauseObject : FileObject
@@ -152,6 +193,15 @@ namespace Osprey.ModuleFile
 		public override uint Size { get { return 12; } }
 
 		public override uint Alignment { get { return 4; } }
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var catchClause = new Raw.CatchClauseStruct();
+			catchClause.CaughtType = new MetadataToken(CatchBlock.TypeId);
+			catchClause.CatchStart = (uint)CatchBlock.StartOffset;
+			catchClause.CatchEnd = (uint)CatchBlock.EndOffset;
+			view.Write(this.Address, ref catchClause);
+		}
 
 		internal const uint _Alignment = 4;
 	}
@@ -284,6 +334,20 @@ namespace Osprey.ModuleFile
 			}
 		}
 
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			var header = new Raw.MethodHeaderStruct();
+			header.LocalCount = (uint)localCount;
+			header.MaxStack = (uint)maxStack;
+			header.TryBlocks = tryBlocks.ToRva<Raw.TryBlockStruct>(out header.TryBlockCount);
+			header.Body.Size = (uint)body.Length;
+
+			view.Write(this.Address, ref header);
+			view.WriteArray(this.Address + BaseSize, body, 0, body.Length);
+			tryBlocks.Emit(view);
+			catchBlocks.Emit(view);
+		}
+
 		// Base struct including TryBlocks RVA and length of method body
 		private const uint BaseSize = 20;
 	}
@@ -328,6 +392,12 @@ namespace Osprey.ModuleFile
 		{
 			entryPointName.RelativeAddress = 4;
 		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			view.Write(this.Address, localCount);
+			entryPointName.Emit(view);
+		}
 	}
 
 	public class MethodBodySection : FileSection
@@ -364,6 +434,11 @@ namespace Osprey.ModuleFile
 		public override void LayOutChildren()
 		{
 			methodBodyArray.LayOutChildren();
+		}
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			methodBodyArray.Emit(view);
 		}
 	}
 }

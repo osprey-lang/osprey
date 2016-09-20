@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 using Osprey.Members;
@@ -21,9 +22,14 @@ namespace Osprey
 
 			WriteReferences(writer);
 			WriteDefinitions(writer);
-			writer.LayOutSections();
+			var fileSize = writer.LayOutSections();
 
-			throw new NotImplementedException();
+			using (var file = MemoryMappedFile.CreateFromFile(targetPath, FileMode.Create, null, fileSize, MemoryMappedFileAccess.ReadWrite))
+			{
+				writer.Emit(file);
+			}
+
+			return fileSize;
 		}
 
 		private void WriteReferences(ModuleWriter writer)

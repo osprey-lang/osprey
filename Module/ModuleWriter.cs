@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 using Osprey.ModuleFile;
+using Raw = Osprey.ModuleFile.Raw;
 
 namespace Osprey
 {
@@ -11,7 +13,7 @@ namespace Osprey
 	{
 		public ModuleWriter()
 		{
-			allSections = new FileSectionArray<FileSection>(6)
+			allSections = new FileSectionArray<FileSection>(null, 6)
 			{
 				stringData,
 				metadata,
@@ -22,6 +24,7 @@ namespace Osprey
 			};
 		}
 
+		private Module module;
 		private ModuleVersion moduleVersion;
 		private WideString moduleName;
 		private WideString nativeLibraryName;
@@ -48,6 +51,8 @@ namespace Osprey
 
 		public void AddBasicModuleData(Module module)
 		{
+			this.module = module;
+
 			// Module strings must be added first, because there are compiled methods that
 			// rely on specific string tokens.
 			foreach (var kvp in module.Members.Strings)
@@ -186,13 +191,14 @@ namespace Osprey
 
 		public ClassConstantDef CreateClassConstantDef(Members.ClassConstant constant)
 		{
-			var value = constants.Add(constant.Value);
+			var value = CreateConstantValue(constant.Value);
 			return new ClassConstantDef(constant, value);
 		}
 
 		public EnumFieldDef CreateEnumFieldDef(Members.EnumField field)
 		{
-			var result = new EnumFieldDef(field);
+			var value = CreateConstantValue(field.Value);
+			var result = new EnumFieldDef(field, value);
 			definitions.FieldDefs.Add(result);
 			return result;
 		}
@@ -238,7 +244,7 @@ namespace Osprey
 
 		private NativeMethodBody CreateNativeMethodBody(int localCount, string entryPoint)
 		{
-			var entryPointString = GetByteString(entryPoint);
+			var entryPointString = new ByteString(entryPoint);
 			return new NativeMethodBody(localCount, entryPointString);
 		}
 
@@ -262,59 +268,173 @@ namespace Osprey
 
 		public Parameter CreateParameter(Nodes.Parameter parameter)
 		{
-			var result = new Parameter(parameter);
+			var nameToken = module.GetStringId(parameter.Name);
+			var result = new Parameter(parameter, nameToken);
 			definitions.Parameters.Add(result);
 			return result;
 		}
 
 		public ConstantDef CreateConstantDef(Members.GlobalConstant constant)
 		{
-			var value = constants.Add(constant.Value);
+			var value = CreateConstantValue(constant.Value);
 			return new ConstantDef(constant, value);
 		}
 
 		public ModuleRef CreateModuleRef(Module module)
 		{
-			var result = new ModuleRef(module);
+			var nameToken = this.module.GetStringId(module.Name);
+			var result = new ModuleRef(module, nameToken);
 			references.ModuleRefs.Add(result);
 			return result;
 		}
 
 		public TypeRef CreateTypeRef(Members.Type type)
 		{
-			var result = new TypeRef(type);
+			var nameToken = this.module.GetStringId(type.FullName);
+			var declModuleToken = this.module.Members.ModuleRefs.GetId(type.Module);
+			var result = new TypeRef(nameToken, declModuleToken);
 			references.TypeRefs.Add(result);
 			return result;
 		}
 
 		public FieldRef CreateFieldRef(Members.Field field)
 		{
-			var result = new FieldRef(field);
+			var nameToken = this.module.GetStringId(field.Name);
+			var result = new FieldRef(field.Parent.Id, nameToken);
 			references.FieldRefs.Add(result);
 			return result;
 		}
 
 		public MethodRef CreateMethodRef(Members.MethodGroup method)
 		{
-			var result = new MethodRef(method);
+			var nameToken = this.module.GetStringId(method.Name);
+			var result = new MethodRef(method.ParentAsClass.Id, nameToken);
 			references.MethodRefs.Add(result);
 			return result;
 		}
 
 		public FunctionRef CreateFunctionRef(Members.MethodGroup function)
 		{
-			var result = new FunctionRef(function);
+			var declModuleToken = this.module.Members.ModuleRefs.GetId(function.Module);
+			var nameToken = this.module.GetStringId(function.FullName);
+			var result = new FunctionRef(declModuleToken, nameToken);
 			references.FunctionRefs.Add(result);
 			return result;
 		}
 
-		public void LayOutSections()
+		private ConstantValueObject CreateConstantValue(ConstantValue value)
+		{
+			uint typeToken = 0u;
+			uint stringToken = 0u;
+			switch (value.Type)
+			{
+				case ConstantValueType.Null:
+					// everything is zero!
+					break;
+				case ConstantValueType.Boolean:
+				case ConstantValueType.Int:
+				case ConstantValueType.UInt:
+				case ConstantValueType.Real:
+				case ConstantValueType.Char:
+					typeToken = value.GetTypeObject(module.Pool.Compiler).Id;
+					break;
+				case ConstantValueType.String:
+					typeToken = value.GetTypeObject(module.Pool.Compiler).Id;
+					stringToken = module.GetStringId(value.StringValue);
+					break;
+				case ConstantValueType.Enum:
+					typeToken = value.EnumValue.Type.Id;
+					break;
+				default:
+					throw new InvalidOperationException("Invalid ConstantValueType");
+			}
+
+			return constants.Add(value, typeToken, stringToken);
+		}
+
+		public uint LayOutSections()
 		{
 			// The RefTableHeader begins right after the ModuleHeader,
 			// after which comes all that juicy data.
 			allSections.RelativeAddress = ModuleHeaderSize + RefTableHeaderSize;
 			allSections.LayOutChildren();
+
+			return allSections.Address + allSections.Size;
 		}
+
+		public void Emit(MemoryMappedFile file)
+		{
+			using (var view = file.CreateViewAccessor())
+			{
+				EmitHeader(view);
+
+				allSections.Emit(view);
+			}
+		}
+
+		private void EmitHeader(MemoryMappedViewAccessor view)
+		{
+			// RefTableHeader is placed right after the ModuleHeader
+			var refTableAddress = ModuleHeaderSize;
+			EmitModuleHeader(view, refTableAddress);
+			EmitRefTableHeader(view, refTableAddress);
+		}
+
+		private void EmitModuleHeader(MemoryMappedViewAccessor view, uint refTableAddress)
+		{
+			var header = new Raw.ModuleHeaderStruct();
+			header.Magic = MagicNumber;
+			header.FormatVersion = FileFormatVersion;
+
+			header.Version = new Raw.ModuleVersionStruct
+			{
+				Major = unchecked((uint)moduleVersion.Major),
+				Minor = unchecked((uint)moduleVersion.Minor),
+				Patch = unchecked((uint)moduleVersion.Patch),
+			};
+			header.Name = moduleName.ToRva<Raw.StringStruct>();
+
+			header.Strings = stringData.ToRva<Raw.StringTableHeaderStruct>();
+
+			header.NativeLib = nativeLibraryName != null
+				? nativeLibraryName.ToRva<Raw.StringStruct>()
+				: Raw.Rva<Raw.StringStruct>.Null;
+
+			header.References = new Raw.Rva<Raw.RefTableHeaderStruct>(refTableAddress);
+
+			header.Metadata = metadata.ToRva<Raw.StringMapHeaderStruct>();
+
+			header.MainMethod = module.MainMethod != null ? module.MainMethod.Id : 0u;
+
+			header.Types = definitions.TypeDefs.ToRva<Raw.TypeDefStruct>(out header.TypeCount);
+			header.Fields = definitions.FieldDefs.ToRva<Raw.FieldDefStruct>(out header.FieldCount);
+			header.Methods = definitions.MethodDefs.ToRva<Raw.MethodDefStruct>(out header.MethodCount);
+			header.Functions = definitions.FunctionDefs.ToRva<Raw.MethodDefStruct>(out header.FunctionCount);
+			header.Constants = definitions.ConstantDefs.ToRva<Raw.ConstantDefStruct>(out header.ConstantCount);
+
+			header.Annotations = 0; // not supported
+
+			view.Write(0, ref header);
+		}
+
+		private void EmitRefTableHeader(MemoryMappedViewAccessor view, uint offset)
+		{
+			var header = new Raw.RefTableHeaderStruct();
+			header.ModuleRefs = references.ModuleRefs.ToRva<Raw.ModuleRefStruct>(out header.ModuleRefCount);
+			header.TypeRefs = references.TypeRefs.ToRva<Raw.TypeRefStruct>(out header.TypeRefCount);
+			header.FieldRefs = references.FieldRefs.ToRva<Raw.FieldRefStruct>(out header.FieldRefCount);
+			header.MethodRefs = references.MethodRefs.ToRva<Raw.MethodRefStruct>(out header.MethodRefCount);
+			header.FunctionRefs = references.FunctionRefs.ToRva<Raw.FunctionRefStruct>(out header.FunctionRefCount);
+
+			view.Write(offset, ref header);
+		}
+
+		private const uint MagicNumber =
+			(79u)       | // O
+			(86u <<  8) | // V
+			(77u << 16) | // M
+			(77u << 24);  // M
+		private const uint FileFormatVersion = 0x100;
 
 		private const uint ModuleHeaderSize = 96u;
 		private const uint RefTableHeaderSize = 40u;
