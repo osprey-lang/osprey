@@ -376,19 +376,35 @@ namespace Osprey.ModuleFile.Raw
 	// Debug symbol structs - used for writing only
 
 	[StructLayout(LayoutKind.Sequential)]
-	public struct DebugSymbol : IFixedSizeObject
+	public struct MethodSymbolsStruct
+	{
+		public MetadataToken MemberToken;
+		public uint Metadata;
+		public int OverloadCount;
+		// overloads follow the count
+	}
+
+	public struct OverloadSymbolsStruct
+	{
+		public uint Metadata;
+		public int SymbolCount;
+		// debug symbols follow the count
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	public struct DebugSymbolStruct : IFixedSizeObject
 	{
 		public uint StartOffset;
 		public uint EndOffset;
 
 		public int SourceFile;
 
-		public SourceLocation StartLocation;
-		public SourceLocation EndLocation;
+		public SourceLocationStruct StartLocation;
+		public SourceLocationStruct EndLocation;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
-	public struct SourceLocation : IFixedSizeObject
+	public struct SourceLocationStruct : IFixedSizeObject
 	{
 		public int LineNumber;
 		public int Column;
