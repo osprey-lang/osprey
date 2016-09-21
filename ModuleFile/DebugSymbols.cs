@@ -15,12 +15,40 @@ namespace Osprey.ModuleFile
 	// for layout purposes, as these objects are variable-size and are referred to
 	// with RVAs.
 
+	public class SourceFileObject : FileObject
+	{
+		public SourceFileObject(SourceFile file)
+		{
+			this.Hash = file.FileHash;
+			this.FileName = new WideString(file.FileName);
+		}
+
+		public readonly byte[] Hash;
+		public readonly WideString FileName;
+
+		public override uint Size
+		{
+			get
+			{
+				return unchecked((uint)Hash.Length + FileName.Size);
+			}
+		}
+
+		public override uint Alignment { get { return 4; } }
+
+		public override void Emit(MemoryMappedViewAccessor view)
+		{
+			throw new NotImplementedException();
+		}
+	}
+
 	public class MethodSymbolsObject : FileObject
 	{
 		public MethodSymbolsObject(Members.MethodGroup method)
 		{
 			this.Method = method;
 			overloads = new FileObjectArray<OverloadSymbolsObject>(this, method.Count);
+			AddOverloads(method);
 		}
 
 		public readonly Members.MethodGroup Method;
@@ -72,11 +100,11 @@ namespace Osprey.ModuleFile
 		public OverloadSymbolsObject(Members.Method overload)
 		{
 			this.Overload = overload;
-			this.debugSymbols = overload.CompiledMethod.DebugSymbols;
+			this.DebugSymbols = overload.CompiledMethod.DebugSymbols;
 		}
 
 		public readonly Members.Method Overload;
-		private readonly SourceLocation[] debugSymbols;
+		public readonly SourceLocation[] DebugSymbols;
 
 		public override uint Size
 		{
@@ -85,7 +113,7 @@ namespace Osprey.ModuleFile
 				// BaseSize + size of debug symbols array
 				return unchecked(
 					BaseSize +
-					(uint)(DebugSymbolSize * Overload.CompiledMethod.DebugSymbols.Length)
+					(uint)(DebugSymbolSize * DebugSymbols.Length)
 				);
 			}
 		}
