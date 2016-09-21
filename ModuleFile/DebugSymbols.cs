@@ -21,6 +21,7 @@ namespace Osprey.ModuleFile
 		{
 			this.Hash = file.FileHash;
 			this.FileName = new WideString(file.FileName);
+			this.FileName.LayoutParent = this;
 		}
 
 		public readonly byte[] Hash;
@@ -36,19 +37,25 @@ namespace Osprey.ModuleFile
 
 		public override uint Alignment { get { return 4; } }
 
+		public override void LayOutChildren()
+		{
+			FileName.RelativeAddress = unchecked((uint)Hash.Length);
+		}
+
 		public override void Emit(MemoryMappedViewAccessor view)
 		{
-			throw new NotImplementedException();
+			view.WriteArray(this.Address, Hash, 0, Hash.Length);
+			FileName.Emit(view);
 		}
 	}
 
 	public class MethodSymbolsObject : FileObject
 	{
-		public MethodSymbolsObject(Members.MethodGroup method)
+		public MethodSymbolsObject(Members.MethodGroup method, DebugSymbolsWriter writer)
 		{
 			this.Method = method;
 			overloads = new FileObjectArray<OverloadSymbolsObject>(this, method.Count);
-			AddOverloads(method);
+			AddOverloads(method, writer);
 		}
 
 		public readonly Members.MethodGroup Method;
@@ -69,11 +76,16 @@ namespace Osprey.ModuleFile
 
 		public override uint Alignment { get { return 4; } }
 
-		private void AddOverloads(IEnumerable<Members.Method> overloads)
+		private void AddOverloads(IEnumerable<Members.Method> overloads, DebugSymbolsWriter writer)
 		{
 			foreach (var overload in overloads)
 			{
-				this.overloads.Add(new OverloadSymbolsObject(overload));
+				if (overload.CompiledMethod != null &&
+					overload.CompiledMethod.DebugSymbols != null &&
+					overload.CompiledMethod.DebugSymbols.Length > 0)
+					this.overloads.Add(new OverloadSymbolsObject(overload, writer));
+				else
+					this.overloads.Add(OverloadSymbolsObject.Empty);
 			}
 		}
 
@@ -88,7 +100,24 @@ namespace Osprey.ModuleFile
 
 		public override void Emit(MemoryMappedViewAccessor view)
 		{
-			throw new NotImplementedException();
+			var address = this.Address;
+
+			var data = new Raw.MethodSymbolsStruct();
+			data.MemberToken = new MetadataToken(Method.Id);
+			data.Metadata = 0u; // not used
+			data.OverloadCount = overloads.Count;
+			view.Write(address, ref data);
+
+			address += BaseSize;
+			// Array of RVAs to each overload's symbols follows
+			foreach (var overload in overloads)
+			{
+				view.Write(address, overload.Address);
+				address += sizeof(uint);
+
+				if (!overload.IsEmpty)
+					overload.Emit(view);
+			}
 		}
 
 		// memberToken + metadata + overloadCount
@@ -97,24 +126,42 @@ namespace Osprey.ModuleFile
 
 	public class OverloadSymbolsObject : FileObject
 	{
-		public OverloadSymbolsObject(Members.Method overload)
+		// Special constructor used only for a "null" OverloadsSymbolObject.
+		private OverloadSymbolsObject()
 		{
-			this.Overload = overload;
+			this.debugWriter = null;
+			this.DebugSymbols = null;
+		}
+		public OverloadSymbolsObject(Members.Method overload, DebugSymbolsWriter writer)
+		{
+			this.debugWriter = writer;
 			this.DebugSymbols = overload.CompiledMethod.DebugSymbols;
+
+			// It is currently not possible for an overload to have
+			// debug symbols from more than one source file. So we
+			// just have to make sure that one source file is in the
+			// writer, for when it's time to emit symbols. This is
+			// terribly ugly, yes.
+			writer.GetSourceFileIndex(this.DebugSymbols[0].File);
 		}
 
-		public readonly Members.Method Overload;
+		private readonly DebugSymbolsWriter debugWriter;
 		public readonly SourceLocation[] DebugSymbols;
+
+		public bool IsEmpty { get { return DebugSymbols == null; } }
 
 		public override uint Size
 		{
 			get
 			{
-				// BaseSize + size of debug symbols array
-				return unchecked(
-					BaseSize +
-					(uint)(DebugSymbolSize * DebugSymbols.Length)
-				);
+				if (IsEmpty)
+					return 0u;
+				else
+					// BaseSize + size of debug symbols array
+					return unchecked(
+						BaseSize +
+						(uint)(DebugSymbolSize * DebugSymbols.Length)
+					);
 			}
 		}
 
@@ -122,11 +169,50 @@ namespace Osprey.ModuleFile
 
 		public override void Emit(MemoryMappedViewAccessor view)
 		{
-			throw new NotImplementedException();
+			var address = this.Address;
+
+			var data = new Raw.OverloadSymbolsStruct();
+			data.Metadata = 0u; // not used
+			data.SymbolCount = DebugSymbols.Length;
+			view.Write(address, ref data);
+			address += BaseSize;
+
+			foreach (var symbol in DebugSymbols)
+			{
+				var symbolData = new Raw.DebugSymbolStruct();
+				symbolData.StartOffset = unchecked((uint)symbol.BytecodeStartOffset);
+				symbolData.EndOffset = unchecked((uint)symbol.BytecodeEndOffset);
+				symbolData.SourceFile = debugWriter.GetSourceFileIndex(symbol.File);
+				symbolData.StartLocation = GetSourceLocation(symbol.File, symbol.SourceStartIndex);
+				view.Write(address, ref symbolData);
+				address += DebugSymbolSize;
+			}
+		}
+
+		public new Raw.Rva<T> ToRva<T>()
+			where T : struct
+		{
+			if (IsEmpty)
+				return Raw.Rva<T>.Null;
+			else
+				return new Raw.Rva<T>(this.Address);
 		}
 
 		// metadata + symbolCount
 		private const uint BaseSize = 8;
 		private const uint DebugSymbolSize = 28;
+
+		public static readonly OverloadSymbolsObject Empty = new OverloadSymbolsObject();
+
+		private static Raw.SourceLocationStruct GetSourceLocation(SourceFile file, int sourceIndex)
+		{
+			int column;
+			int line = file.GetLineNumber(sourceIndex, 1, out column);
+			return new Raw.SourceLocationStruct
+			{
+				LineNumber = line,
+				Column = column,
+			};
+		}
 	}
 }

@@ -376,6 +376,23 @@ namespace Osprey.ModuleFile.Raw
 	// Debug symbol structs - used for writing only
 
 	[StructLayout(LayoutKind.Sequential)]
+	public struct DebugSymbolsHeaderStruct
+	{
+		public uint MagicNumber;
+		public uint Metadata;
+		public Rva<SourceFileListStruct> SourceFiles;
+		public int MethodSymbolCount;
+		// method symbols follow the count
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	public struct SourceFileListStruct
+	{
+		public int FileCount;
+		// source files follow the count
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
 	public struct MethodSymbolsStruct
 	{
 		public MetadataToken MemberToken;

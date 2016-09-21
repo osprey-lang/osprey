@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -1646,11 +1647,30 @@ namespace Osprey
 		{
 			Notice("[debug] Writing debug symbols...", CompilerVerbosity.Verbose);
 
-			var fileToIndex = new Dictionary<SourceFile, int>(documents.Count);
-			for (var i = 0; i < documents.Count; i++)
-				fileToIndex.Add(documents[i].SourceFile, i);
+			var writer = new DebugSymbolsWriter();
 
-			throw new NotImplementedException();
+			Func<Method, bool> hasSymbols =
+				m => m.CompiledMethod != null &&
+					m.CompiledMethod.DebugSymbols != null &&
+					m.CompiledMethod.DebugSymbols.Length > 0;
+
+			var allMethods =
+				outputModule.Members.GlobalFuncDefs.Values
+					.Concat(outputModule.Members.MethodDefs.Values)
+					.Where(m => m.Any(hasSymbols))
+					.OrderBy(m => m.Id);
+
+			foreach (var method in allMethods)
+			{
+				writer.AddMethodSymbols(method);
+			}
+
+			var fileSize = writer.LayOutMembers();
+
+			using (var file = MemoryMappedFile.CreateFromFile(targetPath, FileMode.Create, null, fileSize, MemoryMappedFileAccess.ReadWrite))
+			{
+				writer.Emit(file);
+			}
 
 			Notice("[debug] Finished writing debug symbols.", CompilerVerbosity.Verbose);
 		}
@@ -1838,8 +1858,6 @@ namespace Osprey
 			{LambdaOperator.Xor, "λ<boolXor>"},
 			{LambdaOperator.And, "λ<boolAnd>"}
 		};
-
-		private static readonly byte[] DebugSymbolsMagicNumber = { (byte)'O', (byte)'V', (byte)'D', (byte)'S' };
 
 		internal static readonly char[] Dot = { '.' };
 

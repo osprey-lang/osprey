@@ -79,6 +79,7 @@
     <Compile Include="ModuleFile\StructArray.cs" />
     <Compile Include="ModuleFile\FileObject.cs" />
     <Compile Include="ModuleFile\ReferencesSection.cs" />
+    <Compile Include="Module\DebugSymbolsWriter.cs" />
     <Compile Include="Module\MemberTable.cs" />
     <Compile Include="ModuleFile\MetadataToken.cs" />
     <Compile Include="Module\Module.Saver.cs" />
