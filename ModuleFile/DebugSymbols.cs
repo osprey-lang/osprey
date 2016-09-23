@@ -184,6 +184,7 @@ namespace Osprey.ModuleFile
 				symbolData.EndOffset = unchecked((uint)symbol.BytecodeEndOffset);
 				symbolData.SourceFile = debugWriter.GetSourceFileIndex(symbol.File);
 				symbolData.StartLocation = GetSourceLocation(symbol.File, symbol.SourceStartIndex);
+				symbolData.EndLocation = GetSourceLocation(symbol.File, symbol.SourceEndIndex);
 				view.Write(address, ref symbolData);
 				address += DebugSymbolSize;
 			}
