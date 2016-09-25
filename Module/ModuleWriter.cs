@@ -97,7 +97,7 @@ namespace Osprey
 			var methods = new TempList<MethodDef>(type.members.Count / 2);
 			var properties = new TempList<PropertyDef>(type.members.Count / 2);
 
-			foreach (var member in type.members.Values)
+			foreach (var member in type.GetMembersSorted())
 			{
 				switch (member.Kind)
 				{
@@ -132,17 +132,11 @@ namespace Osprey
 				type.operators.Where(op => op != null)
 					.Select(CreateOperator);
 
-			// Fields and methods must be sorted by token value
-			var fieldsArray = fields.ToArray();
-			Array.Sort(fieldsArray, FieldComparer);
-			var methodsArray = methods.ToArray();
-			Array.Sort(methodsArray, MethodComparer);
-
 			var result = new TypeDef(
 				type,
 				initer,
-				fieldsArray,
-				methodsArray,
+				fields.ToArray(),
+				methods.ToArray(),
 				properties.ToArray(),
 				operators.ToArray()
 			);
@@ -180,7 +174,8 @@ namespace Osprey
 		{
 			var result = new OperatorDef(@operator);
 			definitions.OperatorDefs.Add(result);
-			return result;		}
+			return result;
+		}
 
 		public ClassFieldDef CreateClassFieldDef(Members.Field field)
 		{
@@ -192,7 +187,9 @@ namespace Osprey
 		public ClassConstantDef CreateClassConstantDef(Members.ClassConstant constant)
 		{
 			var value = CreateConstantValue(constant.Value);
-			return new ClassConstantDef(constant, value);
+			var result = new ClassConstantDef(constant, value);
+			definitions.FieldDefs.Add(result);
+			return result;
 		}
 
 		public EnumFieldDef CreateEnumFieldDef(Members.EnumField field)
