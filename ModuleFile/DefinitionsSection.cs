@@ -178,6 +178,7 @@ namespace Osprey.ModuleFile
 			data.Name = new MetadataToken(Indexer.Parent.Module.GetStringId(Indexer.Name));
 			data.Getter = new MetadataToken(Indexer.GetterGroupId);
 			data.Setter = new MetadataToken(Indexer.SetterGroupId);
+			view.Write(this.Address, ref data);
 		}
 	}
 
