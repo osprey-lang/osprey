@@ -10,15 +10,12 @@ namespace Osprey.ModuleFile
 	{
 		public MetadataEntry(WideString key, WideString value)
 		{
-			this.key = key;
-			this.value = value;
+			this.Key = key;
+			this.Value = value;
 		}
 
-		private WideString key;
-		public WideString Key { get { return key; } }
-
-		private WideString value;
-		public WideString Value { get { return value; } }
+		private readonly WideString Key;
+		private readonly WideString Value;
 
 		public override uint Size { get { return 8; } }
 
@@ -27,8 +24,8 @@ namespace Osprey.ModuleFile
 		public override void Emit(MemoryMappedViewAccessor view)
 		{
 			var entry = new Raw.StringMapEntryStruct();
-			entry.Key = key.ToRva<Raw.StringStruct>();
-			entry.Value = key.ToRva<Raw.StringStruct>();
+			entry.Key = Key.ToRva<Raw.StringStruct>();
+			entry.Value = Value.ToRva<Raw.StringStruct>();
 			view.Write(this.Address, ref entry);
 		}
 	}
