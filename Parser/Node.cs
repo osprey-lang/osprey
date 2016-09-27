@@ -442,6 +442,7 @@ namespace Osprey.Nodes
 			switch (this.Access)
 			{
 				case AccessLevel.Public: return "public ";
+				case AccessLevel.Internal: return "internal ";
 				case AccessLevel.Protected: return "protected ";
 				case AccessLevel.Private: return "private ";
 				default: return "";
@@ -472,7 +473,7 @@ namespace Osprey.Nodes
 	public sealed class EnumDeclaration : TypeDeclaration
 	{
 		public EnumDeclaration(string name, bool isSet, AccessLevel access)
-			: base(name, access)
+			: base(name, access == AccessLevel.Private ? AccessLevel.Internal : access)
 		{
 			IsSet = isSet;
 		}
@@ -564,7 +565,7 @@ namespace Osprey.Nodes
 	public sealed class ClassDeclaration : TypeDeclaration
 	{
 		public ClassDeclaration(string name, AccessLevel access)
-			: base(name, access)
+			: base(name, access == AccessLevel.Private ? AccessLevel.Internal : access)
 		{ }
 
 		public TypeName BaseClass = null;

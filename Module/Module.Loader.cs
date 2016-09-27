@@ -7,6 +7,7 @@ using Osprey.Members;
 using Osprey.Nodes;
 using Enum = Osprey.Members.Enum;
 using Type = Osprey.Members.Type;
+using Raw = Osprey.ModuleFile.Raw;
 
 namespace Osprey
 {
@@ -142,48 +143,84 @@ namespace Osprey
 			return constValue;
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, TypeFlags flags)
+		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.TypeFlags flags)
 		{
-			if ((flags & TypeFlags.Public) == TypeFlags.Public)
-				return AccessLevel.Public;
-			if ((flags & TypeFlags.Private) == TypeFlags.Private)
-				return AccessLevel.Private;
+			const Raw.TypeFlags accessibility =
+				Raw.TypeFlags.Public |
+				Raw.TypeFlags.Internal;
 
-			throw new ModuleLoadException(reader.FileName, "TypeDef has no declared accessibility.");
+			switch (flags & accessibility)
+			{
+				case Osprey.ModuleFile.Raw.TypeFlags.Public:
+					return AccessLevel.Public;
+				case Osprey.ModuleFile.Raw.TypeFlags.Internal:
+					return AccessLevel.Internal;
+				default:
+					throw new ModuleLoadException(reader.FileName, "TypeDef has no declared accessibility.");
+			}
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, FieldFlags flags)
+		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.FieldFlags flags)
 		{
-			if ((flags & FieldFlags.Public) == FieldFlags.Public)
-				return AccessLevel.Public;
-			if ((flags & FieldFlags.Private) == FieldFlags.Private)
-				return AccessLevel.Private;
-			if ((flags & FieldFlags.Protected) == FieldFlags.Protected)
-				return AccessLevel.Protected;
+			const Raw.FieldFlags accessibility =
+				Raw.FieldFlags.Public |
+				Raw.FieldFlags.Internal |
+				Raw.FieldFlags.Protected |
+				Raw.FieldFlags.Private;
 
-			throw new ModuleLoadException(reader.FileName, "FieldDef has no declared accessibility.");
+			switch (flags & accessibility)
+			{
+				case Osprey.ModuleFile.Raw.FieldFlags.Public:
+					return AccessLevel.Public;
+				case Osprey.ModuleFile.Raw.FieldFlags.Internal:
+					return AccessLevel.Internal;
+				case Osprey.ModuleFile.Raw.FieldFlags.Protected:
+					return AccessLevel.Protected;
+				case Osprey.ModuleFile.Raw.FieldFlags.Private:
+					return AccessLevel.Private;
+				default:
+					throw new ModuleLoadException(reader.FileName, "FieldDef has no declared accessibility.");
+			}
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, MethodFlags flags)
+		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.MethodFlags flags, bool isGlobal)
 		{
-			if ((flags & MethodFlags.Public) == MethodFlags.Public)
-				return AccessLevel.Public;
-			if ((flags & MethodFlags.Private) == MethodFlags.Private)
-				return AccessLevel.Private;
-			if ((flags & MethodFlags.Protected) == MethodFlags.Protected)
-				return AccessLevel.Protected;
+			const Raw.MethodFlags accessibility =
+				Raw.MethodFlags.Public |
+				Raw.MethodFlags.Internal |
+				Raw.MethodFlags.Protected |
+				Raw.MethodFlags.Private;
 
-			throw new ModuleLoadException(reader.FileName, "MethodDef or FunctionDef has no declared accessibility.");
+			switch (flags & accessibility)
+			{
+				case Osprey.ModuleFile.Raw.MethodFlags.Public:
+					return AccessLevel.Public;
+				case Osprey.ModuleFile.Raw.MethodFlags.Internal:
+					return AccessLevel.Internal;
+				case Osprey.ModuleFile.Raw.MethodFlags.Protected:
+					return AccessLevel.Protected;
+				case Osprey.ModuleFile.Raw.MethodFlags.Private:
+					return AccessLevel.Private;
+				default:
+					throw new ModuleLoadException(reader.FileName, "MethodDef or FunctionDef has no declared accessibility.");
+			}
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, ConstantFlags flags)
+		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.ConstantFlags flags)
 		{
-			if ((flags & ConstantFlags.Public) == ConstantFlags.Public)
-				return AccessLevel.Public;
-			if ((flags & ConstantFlags.Private) == ConstantFlags.Private)
-				return AccessLevel.Private;
+			const Raw.ConstantFlags accessibility =
+				Raw.ConstantFlags.Public |
+				Raw.ConstantFlags.Internal;
 
-			throw new ModuleLoadException(reader.FileName, "ConstantDef has no declared accessibility.");
+			switch (flags & accessibility)
+			{
+				case Osprey.ModuleFile.Raw.ConstantFlags.Public:
+					return AccessLevel.Public;
+				case Osprey.ModuleFile.Raw.ConstantFlags.Internal:
+					return AccessLevel.Internal;
+				default:
+					throw new ModuleLoadException(reader.FileName, "ConstantDef has no declared accessibility.");
+			}
 		}
 
 		private static string[] GetPathFromName(string fullName, out string name)

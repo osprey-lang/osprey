@@ -200,7 +200,7 @@ namespace Osprey.Members
 			node.DeclSpace = this;
 		}
 		public Method(GlobalFunctionDeclaration node)
-			: base(node.Function.Name, MemberKind.Method, node, node.IsPublic ? AccessLevel.Public : AccessLevel.Private)
+			: base(node.Function.Name, MemberKind.Method, node, node.IsPublic ? AccessLevel.Public : AccessLevel.Internal)
 		{
 			var func = node.Function;
 			this.body = BlockSpace.FromStatement(func.Body, this);

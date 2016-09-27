@@ -176,8 +176,7 @@ namespace Osprey.Members
 			// of type sharing).
 			if (access == AccessLevel.Private)
 				return fromType != null && (declType == fromType || declType == fromType.SharedType);
-
-			if (access == AccessLevel.Protected)
+			else if (access == AccessLevel.Protected)
 			{
 				if (fromType == null)
 					return false;
@@ -190,6 +189,10 @@ namespace Osprey.Members
 
 				while (fromType != null && fromType != declType)
 					fromType = fromType.BaseType;
+			}
+			else if (access == AccessLevel.Internal)
+			{
+				return declType.Module == null || !declType.Module.Imported;
 			}
 
 			return true; // AccessLevel.Public or accessible
@@ -2075,7 +2078,7 @@ namespace Osprey.Members
 		{
 			if (variable.CaptureField == null)
 			{
-				variable.CaptureField = new Field(GetFieldName(variable), AccessLevel.Public, this)
+				variable.CaptureField = new Field(GetFieldName(variable), AccessLevel.Internal, this)
 				{
 					IsStatic = false,
 				};
@@ -2103,7 +2106,7 @@ namespace Osprey.Members
 			else if (blockToField.ContainsKey(block))
 				return blockToField[block];
 
-			var field = new Field(GetFieldName(block), AccessLevel.Public, this);
+			var field = new Field(GetFieldName(block), AccessLevel.Internal, this);
 			field.IsStatic = false;
 
 			DeclareField(field);
@@ -2116,7 +2119,7 @@ namespace Osprey.Members
 		{
 			if (thisField == null)
 			{
-				thisField = new Field(ThisFieldName, AccessLevel.Public, this)
+				thisField = new Field(ThisFieldName, AccessLevel.Internal, this)
 				{
 					IsStatic = false,
 				};
@@ -2241,7 +2244,7 @@ namespace Osprey.Members
 					) { IgnoreValue = true }
 				),
 			};
-			var ctor = new Constructor(new Block(ctorBody), AccessLevel.Public, this, Signature.Empty);
+			var ctor = new Constructor(new Block(ctorBody), AccessLevel.Internal, this, Signature.Empty);
 			DeclareConstructor(ctor);
 		}
 
@@ -2258,7 +2261,7 @@ namespace Osprey.Members
 				var name = ClosureClass.GetFieldName(variable);
 				if (!members.ContainsKey(name))
 				{
-					var field = new Field(name, AccessLevel.Public, this)
+					var field = new Field(name, AccessLevel.Internal, this)
 					{
 						IsStatic = false,
 					};
@@ -2285,7 +2288,7 @@ namespace Osprey.Members
 				}
 
 			{
-				var field = new Field(GetAnonFieldName(anonFields.Count), AccessLevel.Public, this);
+				var field = new Field(GetAnonFieldName(anonFields.Count), AccessLevel.Internal, this);
 				field.IsStatic = false;
 				field.IsImplDetail = true;
 				DeclareField(field);
@@ -2298,7 +2301,7 @@ namespace Osprey.Members
 		{
 			if (thisField == null)
 			{
-				thisField = new Field(ClosureClass.ThisFieldName, AccessLevel.Public, this)
+				thisField = new Field(ClosureClass.ThisFieldName, AccessLevel.Internal, this)
 				{
 					IsStatic = false,
 				};

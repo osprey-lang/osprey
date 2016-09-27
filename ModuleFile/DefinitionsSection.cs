@@ -246,6 +246,9 @@ namespace Osprey.ModuleFile
 				case AccessLevel.Public:
 					flags |= Raw.FieldFlags.Public;
 					break;
+				case AccessLevel.Internal:
+					flags |= Raw.FieldFlags.Internal;
+					break;
 				case AccessLevel.Protected:
 					flags |= Raw.FieldFlags.Protected;
 					break;
@@ -295,6 +298,9 @@ namespace Osprey.ModuleFile
 			{
 				case AccessLevel.Public:
 					flags |= Raw.FieldFlags.Public;
+					break;
+				case AccessLevel.Internal:
+					flags |= Raw.FieldFlags.Internal;
 					break;
 				case AccessLevel.Protected:
 					flags |= Raw.FieldFlags.Protected;
@@ -392,6 +398,9 @@ namespace Osprey.ModuleFile
 			{
 				case AccessLevel.Public:
 					flags |= Raw.MethodFlags.Public;
+					break;
+				case AccessLevel.Internal:
+					flags |= Raw.MethodFlags.Internal;
 					break;
 				case AccessLevel.Protected:
 					flags |= Raw.MethodFlags.Protected;

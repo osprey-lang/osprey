@@ -20,6 +20,10 @@ namespace Osprey
 		/// </summary>
 		Public,
 		/// <summary>
+		/// The member is declared internal.
+		/// </summary>
+		Internal,
+		/// <summary>
 		/// The member is declared protected.
 		/// </summary>
 		Protected,
