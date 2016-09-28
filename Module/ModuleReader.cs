@@ -36,6 +36,12 @@ namespace Osprey
 		/// </summary>
 		public string FileName { get { return fileName; } }
 
+		private List<UnresolvedConstant> unresolvedConstants = null;
+		/// <summary>
+		/// Gets a list of constants whose types have not been resolved yet.
+		/// </summary>
+		public IEnumerable<UnresolvedConstant> UnresolvedConstants { get { return unresolvedConstants; } }
+
 		public void Dispose()
 		{
 			Dispose(true);
@@ -121,6 +127,26 @@ namespace Osprey
 					fileName,
 					string.Format("Wrong number of array items read ({0}, expected {1})", count, itemsRead)
 				);
+		}
+
+		public void AddUnresolvedConstant(Members.ImportedClassConstant member, uint typeId, long value)
+		{
+			if (unresolvedConstants == null)
+				unresolvedConstants = new List<UnresolvedConstant>();
+
+			unresolvedConstants.Add(new UnresolvedConstant
+			{
+				Member = member,
+				TypeId = typeId,
+				Value = value
+			});
+		}
+
+		public struct UnresolvedConstant
+		{
+			public Members.ImportedClassConstant Member;
+			public uint TypeId;
+			public long Value;
 		}
 	}
 }
