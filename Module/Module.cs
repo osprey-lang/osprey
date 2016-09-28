@@ -417,8 +417,11 @@ namespace Osprey
 		internal const uint FieldRefMask      = 0x52000000u;
 		internal const uint MethodRefMask     = 0x54000000u;
 
-		internal static readonly byte[] MagicNumber = { (byte)'O', (byte)'V', (byte)'M', (byte)'M' };
-		internal const int DataStart = 16; // the beginning of the "real" data in the module
+		internal const uint MagicNumber =
+			(79u)       | // O
+			(86u << 8)  | // V
+			(77u << 16) | // M
+			(77u << 24);  // M
 
 		internal const string FileExtension = ".ovm";
 

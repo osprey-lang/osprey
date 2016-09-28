@@ -380,8 +380,8 @@ namespace Osprey
 		private void EmitModuleHeader(MemoryMappedViewAccessor view, uint refTableAddress)
 		{
 			var header = new Raw.ModuleHeaderStruct();
-			header.Magic = MagicNumber;
-			header.FormatVersion = FileFormatVersion;
+			header.Magic = Module.MagicNumber;
+			header.FormatVersion = Module.MaxFileFormatVersion;
 
 			header.Version = new Raw.ModuleVersionStruct
 			{
@@ -425,13 +425,6 @@ namespace Osprey
 
 			view.Write(offset, ref header);
 		}
-
-		private const uint MagicNumber =
-			(79u)       | // O
-			(86u <<  8) | // V
-			(77u << 16) | // M
-			(77u << 24);  // M
-		private const uint FileFormatVersion = 0x100;
 
 		private const uint ModuleHeaderSize = 96u;
 		private const uint RefTableHeaderSize = 40u;
