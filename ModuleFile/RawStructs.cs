@@ -77,11 +77,6 @@ namespace Osprey.ModuleFile.Raw
 	{
 		public int Length;
 		public const uint CharactersOffset = 4;
-
-		public StructArray<char> ReadCharacters(/* TODO */)
-		{
-			throw new NotImplementedException();
-		}
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -89,11 +84,6 @@ namespace Osprey.ModuleFile.Raw
 	{
 		public int Length;
 		public const uint CharactersOffset = 4;
-
-		public StructArray<byte> ReadCharacters(/* TODO */)
-		{
-			throw new NotImplementedException();
-		}
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -101,11 +91,6 @@ namespace Osprey.ModuleFile.Raw
 	{
 		public int Length;
 		public const uint StringsOffset = 4;
-
-		public StructArray<Rva<StringStruct>> ReadStrings(/* TODO */)
-		{
-			throw new NotImplementedException();
-		}
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -113,11 +98,6 @@ namespace Osprey.ModuleFile.Raw
 	{
 		public int Length;
 		public const uint EntriesOffset = 4;
-
-		public StructArray<StringMapEntryStruct> ReadEntries(/* TODO */)
-		{
-			throw new NotImplementedException();
-		}
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
