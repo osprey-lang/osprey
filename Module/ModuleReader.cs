@@ -1,27 +1,34 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
+using Raw = Osprey.ModuleFile.Raw;
 
 namespace Osprey
 {
 	/// <summary>
 	/// Reads module data from a <see cref="FileStream"/>.
 	/// </summary>
-	internal class ModuleReader : BinaryReader
+	internal class ModuleReader : IDisposable
 	{
-		public ModuleReader(FileStream input)
-			: base(input)
+		public ModuleReader(string fileName)
 		{
-			fileName = input.Name;
+			if (fileName == null)
+				throw new ArgumentNullException("fileName");
+
+			this.file = MemoryMappedFile.CreateFromFile(fileName, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
+			this.fileName = fileName;
+			this.View = file.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
 		}
 
-		public ModuleReader(FileStream input, Encoding encoding)
-			: base(input, encoding)
-		{
-			fileName = input.Name;
-		}
+		private MemoryMappedFile file;
+
+		/// <summary>
+		/// A view into the memory-mapped file, over the entire file.
+		/// </summary>
+		public readonly MemoryMappedViewAccessor View;
 
 		private string fileName;
 		/// <summary>
@@ -29,84 +36,91 @@ namespace Osprey
 		/// </summary>
 		public string FileName { get { return fileName; } }
 
-		public string ReadOvumString()
+		public void Dispose()
 		{
-			var length = ReadInt32();
-			var data = ReadChars(length);
-
-			return new string(data);
+			Dispose(true);
 		}
 
-		public Version ReadVersion()
+		private void Dispose(bool disposing)
 		{
-			var major = ReadInt32();
-			var minor = ReadInt32();
-			var build = ReadInt32();
-			var revision = ReadInt32();
-
-			return new Version(major, minor, build, revision);
+			if (disposing)
+			{
+				View.Dispose();
+				file.Dispose();
+			}
 		}
 
-		public Module.TypeFlags ReadTypeFlags()
+		public int ReadInt32(uint address)
 		{
-			return (Module.TypeFlags)ReadUInt32();
+			return View.ReadInt32(address);
 		}
 
-		public Module.FieldFlags ReadFieldFlags()
+		public uint ReadUInt32(uint address)
 		{
-			return (Module.FieldFlags)ReadUInt32();
+			return View.ReadUInt32(address);
 		}
 
-		public Module.MethodFlags ReadMethodFlags()
+		public string ReadString(uint address)
 		{
-			return (Module.MethodFlags)ReadUInt32();
+			// Ovum modules and .NET are both UTF-16
+			var length = View.ReadInt32(address);
+			if (length == 0)
+				return "";
+
+			var chars = ReadArray<char>(address + Raw.StringStruct.CharactersOffset, length);
+			return new string(chars);
 		}
 
-		public Module.OverloadFlags ReadOverloadFlags()
+		public string ReadString(Raw.Rva<Raw.StringStruct> rva)
 		{
-			return (Module.OverloadFlags)ReadUInt32();
+			return ReadString(rva.Address);
 		}
 
-		public Module.ParamFlags ReadParamFlags()
+		public T Read<T>(uint address)
+			where T : struct
 		{
-			return (Module.ParamFlags)ReadUInt16();
+			T result;
+			View.Read(address, out result);
+			return result;
 		}
 
-		public Module.ConstantFlags ReadConstantFlags()
+		public void Read<T>(uint address, out T result)
+			where T : struct
 		{
-			return (Module.ConstantFlags)ReadUInt32();
+			View.Read(address, out result);
 		}
 
-		public Module.Operator ReadOperator()
+		public T Deref<T>(Raw.Rva<T> rva)
+			where T : struct
 		{
-			return (Module.Operator)ReadByte();
+			T result;
+			View.Read(rva.Address, out result);
+			return result;
 		}
 
-		public uint SkipHeader()
+		public void Deref<T>(Raw.Rva<T> rva, out T result)
+			where T : struct
 		{
-			var magicNumber = ReadBytes(4);
-			for (var i = 0; i < 4; i++)
-				if (magicNumber[i] != Module.MagicNumber[i])
-					throw new ModuleLoadException(fileName, "Invalid magic number in file.");
-
-			// Module file format version
-			uint version = ReadUInt32();
-			Seek(Module.DataStart, SeekOrigin.Begin);
-			return version;
+			View.Read(rva.Address, out result);
 		}
 
-		/// <summary>
-		/// Skips past a size-prefixed collection.
-		/// </summary>
-		public void SkipCollection()
+		public T[] ReadArray<T>(uint address, int count)
+			where T : struct
 		{
-			var size = ReadUInt32();
-			Seek(size, SeekOrigin.Current);
+			var result = new T[count];
+			ReadArray(address, count, result);
+			return result;
 		}
 
-		public long Seek(long offset, SeekOrigin origin)
+		public void ReadArray<T>(uint address, int count, T[] result)
+			where T : struct
 		{
-			return BaseStream.Seek(offset, origin);
+			var itemsRead = View.ReadArray(address, result, 0, count);
+			if (itemsRead != count)
+				throw new ModuleLoadException(
+					fileName,
+					string.Format("Wrong number of array items read ({0}, expected {1})", count, itemsRead)
+				);
 		}
 	}
 }
