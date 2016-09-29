@@ -509,6 +509,9 @@ namespace Osprey.Members
 
 		private Namespace GetNamespace(string[] path, int offset, bool imported)
 		{
+			if (offset == path.Length)
+				return this;
+
 			var name = path[offset];
 			Namespace ns;
 			if (members.ContainsKey(name))
@@ -533,11 +536,7 @@ namespace Osprey.Members
 				members[name] = ns = new Namespace(name);
 
 			ns.parent = this;
-
-			if (offset == path.Length - 1)
-				return ns;
-			else
-				return ns.GetNamespace(path, offset + 1, imported);
+			return ns.GetNamespace(path, offset + 1, imported);
 		}
 
 		internal Namespace FindNamespace(QualifiedName name)

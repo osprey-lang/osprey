@@ -42,6 +42,9 @@ namespace Osprey
 		/// </summary>
 		public IEnumerable<UnresolvedConstant> UnresolvedConstants { get { return unresolvedConstants; } }
 
+		public uint FieldsBase;
+		public uint MethodsBase;
+
 		public void Dispose()
 		{
 			Dispose(true);
@@ -94,6 +97,12 @@ namespace Osprey
 			where T : struct
 		{
 			View.Read(address, out result);
+		}
+
+		public Raw.Rva<T> ReadRva<T>(uint address)
+			where T : struct
+		{
+			return new Raw.Rva<T>(ReadUInt32(address));
 		}
 
 		public T Deref<T>(Raw.Rva<T> rva)

@@ -19,6 +19,9 @@ namespace Osprey.ModuleFile
 
 		public uint Value;
 
+		/// <summary>
+		/// Gets the index value of the token, as a zero-based array index.
+		/// </summary>
 		public uint Index
 		{
 			get
@@ -34,8 +37,6 @@ namespace Osprey.ModuleFile
 				return unchecked((Raw.MemberKind)(Value & MemberKindMask));
 			}
 		}
-
-		public uint Size { get { return sizeof(uint); } }
 
 		public override bool Equals(object obj)
 		{

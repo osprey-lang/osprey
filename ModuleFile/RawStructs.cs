@@ -132,6 +132,8 @@ namespace Osprey.ModuleFile.Raw
 		public MetadataToken Name;
 		public VersionConstraint VersionConstraint;
 		public ModuleVersionStruct Version;
+
+		public const uint Size = 12u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -140,6 +142,8 @@ namespace Osprey.ModuleFile.Raw
 		public MetadataToken DeclModule;
 		public TypeRefFlags Flags;
 		public MetadataToken Name;
+
+		public const uint Size = 12u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -190,6 +194,8 @@ namespace Osprey.ModuleFile.Raw
 
 		public int OperatorCount;
 		public RvaToArray<OperatorDefStruct> Operators;
+
+		public const uint Size = 56u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -203,6 +209,8 @@ namespace Osprey.ModuleFile.Raw
 		public uint Annotations;
 
 		public Rva<ConstantValueStruct> Value;
+
+		public const uint Size = 20u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -211,6 +219,8 @@ namespace Osprey.ModuleFile.Raw
 		public MetadataToken Name;
 		public MetadataToken Getter;
 		public MetadataToken Setter;
+
+		public const uint Size = 12u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -218,6 +228,8 @@ namespace Osprey.ModuleFile.Raw
 	{
 		public Operator Operator;
 		public MetadataToken Method;
+
+		public const uint Size = 8u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -229,6 +241,8 @@ namespace Osprey.ModuleFile.Raw
 
 		public int OverloadCount;
 		public RvaToArray<OverloadDefStruct> Overloads;
+
+		public const uint Size = 20u;
 	}
 
 	[StructLayout(LayoutKind.Explicit)]
@@ -252,6 +266,8 @@ namespace Osprey.ModuleFile.Raw
 		public Rva<MethodHeaderStruct> LongHeader;
 		[FieldOffset(16)]
 		public Rva<NativeMethodHeaderStruct> NativeHeader;
+
+		public const uint Size = 20u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -259,6 +275,8 @@ namespace Osprey.ModuleFile.Raw
 	{
 		public ParamFlags Flags;
 		public MetadataToken Name;
+
+		public const uint Size = 8u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
@@ -339,6 +357,8 @@ namespace Osprey.ModuleFile.Raw
 		public uint Annotations;
 
 		public Rva<ConstantValueStruct> Value;
+
+		public const uint Size = 16u;
 	}
 
 	[StructLayout(LayoutKind.Explicit)]
