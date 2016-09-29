@@ -124,8 +124,6 @@ namespace Osprey.ModuleFile
 		public readonly uint DeclModuleToken;
 		public readonly uint NameToken;
 
-		public readonly Members.MethodGroup Function;
-
 		public override uint Size { get { return 12; } }
 
 		public override uint Alignment { get { return 4; } }
@@ -136,6 +134,7 @@ namespace Osprey.ModuleFile
 			data.DeclModule = new MetadataToken(DeclModuleToken);
 			data.Flags = Raw.FunctionRefFlags.None;
 			data.Name = new MetadataToken(NameToken);
+			view.Write(this.Address, ref data);
 		}
 	}
 
