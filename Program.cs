@@ -67,7 +67,7 @@ namespace Osprey
 
 			var exitCode = 0;
 #if DEBUG
-			Compiler.Compile(ref compilerOptions, programOptions.OutFile, constants, sourceFiles.ToArray());
+			Compiler.Compile(ref compilerOptions, programOptions.OutFile, constants, imports, sourceFiles.ToArray());
 			Console.ReadKey(intercept: true);
 #else
 			var err = compilerOptions.ErrorToStdout ? Console.Out : Console.Error;
