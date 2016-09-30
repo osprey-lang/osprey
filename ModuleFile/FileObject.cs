@@ -254,7 +254,8 @@ namespace Osprey.ModuleFile
 			uint startOffset = 0u;
 			foreach (var item in items)
 			{
-				item.RelativeAddress = AlignTo(startOffset, item.Alignment);
+				startOffset = AlignTo(startOffset, item.Alignment);
+				item.RelativeAddress = startOffset;
 				item.LayOutChildren();
 				startOffset += item.AlignedSize;
 			}
