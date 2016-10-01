@@ -586,7 +586,7 @@ namespace Osprey
 			{
 				var operatorDef = reader.Read<Raw.OperatorDefStruct>(address);
 
-				var @operator = GetOperator(reader, operatorDef.Operator);
+				var @operator = operatorDef.Operator;
 				var method = module.members.MethodDefs[operatorDef.Method.Value];
 
 				if (type.operators[(int)@operator] != null)
@@ -1074,54 +1074,13 @@ namespace Osprey
 			}
 		}
 
-		private static Operator GetOperator(ModuleReader reader, Raw.Operator op)
+		private static int GetArity(Raw.Operator op)
 		{
 			switch (op)
 			{
-				case Raw.Operator.Add:
-					return Operator.Add;
-				case Raw.Operator.Subtract:
-					return Operator.Subtract;
-				case Raw.Operator.Or:
-					return Operator.Or;
-				case Raw.Operator.Xor:
-					return Operator.Xor;
-				case Raw.Operator.Multiply:
-					return Operator.Multiply;
-				case Raw.Operator.Divide:
-					return Operator.Divide;
-				case Raw.Operator.Modulo:
-					return Operator.Modulo;
-				case Raw.Operator.And:
-					return Operator.And;
-				case Raw.Operator.Power:
-					return Operator.Power;
-				case Raw.Operator.ShiftLeft:
-					return Operator.ShiftLeft;
-				case Raw.Operator.ShiftRight:
-					return Operator.ShiftRight;
 				case Raw.Operator.Plus:
-					return Operator.Plus;
 				case Raw.Operator.Negate:
-					return Operator.Negate;
 				case Raw.Operator.Not:
-					return Operator.Not;
-				case Raw.Operator.Equals:
-					return Operator.Equals;
-				case Raw.Operator.Compare:
-					return Operator.Compare;
-				default:
-					throw new ModuleLoadException(reader.FileName, "Invalid operator.");
-			}
-		}
-
-		private static int GetArity(Operator op)
-		{
-			switch (op)
-			{
-				case Operator.Plus:
-				case Operator.Negate:
-				case Operator.Not:
 					return 1;
 				default:
 					return 2;

@@ -373,7 +373,7 @@ namespace Osprey.Members
 		/// The total number of overloadable operators. If the number changes and this member
 		/// is not updated, you have no one to blame but yourself!
 		/// </summary>
-		internal const int OperatorCount = 18;
+		internal const int OperatorCount = 16;
 		internal OperatorOverload[] operators = new OperatorOverload[OperatorCount];
 
 		private int overloadedOperatorCount = 0;
