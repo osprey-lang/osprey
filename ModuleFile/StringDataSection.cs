@@ -62,8 +62,8 @@ namespace Osprey.ModuleFile
 			get
 			{
 				// 4 bytes for the string length, plus 1 byte per character,
-				// encoded as UTF-8
-				return 4u + utf8Length;
+				// encoded as UTF-8, plus the zero terminator.
+				return 4u + utf8Length + 1;
 			}
 		}
 
@@ -76,6 +76,7 @@ namespace Osprey.ModuleFile
 			var address = this.Address + sizeof(uint);
 			var utf8Bytes = Encoding.UTF8.GetBytes(Value);
 			view.WriteArray(address, utf8Bytes, 0, utf8Bytes.Length);
+			// zero terminator
 			view.Write(address + utf8Length, (byte)0);
 		}
 	}
