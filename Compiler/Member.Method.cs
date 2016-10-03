@@ -200,7 +200,7 @@ namespace Osprey.Members
 			node.DeclSpace = this;
 		}
 		public Method(GlobalFunctionDeclaration node)
-			: base(node.Function.Name, MemberKind.Method, node, node.IsPublic ? AccessLevel.Public : AccessLevel.Private)
+			: base(node.Function.Name, MemberKind.Method, node, node.IsPublic ? AccessLevel.Public : AccessLevel.Internal)
 		{
 			var func = node.Function;
 			this.body = BlockSpace.FromStatement(func.Body, this);
@@ -240,7 +240,7 @@ namespace Osprey.Members
 			else
 			{
 				Signature = new Signature(0, 0, splat);
-				Parameters = new Parameter[0];
+				Parameters = EmptyArrays.Parameters;
 			}
 		}
 		public Method(ParseNode node, string name, AccessLevel access, Statement body, Signature signature)
@@ -474,7 +474,7 @@ namespace Osprey.Members
 			var body = mb.GetBodyBytes();
 			CompiledMethod = new CompiledMethodData(
 				bodyOffset: compiler.OutputModule.AppendMethodBody(body),
-				bodyLength: body.Length,
+				bodyBytes: body,
 				localCount: mb.LocalCount,
 				maxStack: mb.GetMaxStack(),
 				tryBlocks: mb.GetTryBlocks(),
@@ -752,12 +752,13 @@ namespace Osprey.Members
 		internal class CompiledMethodData
 		{
 			internal CompiledMethodData() { }
-			internal CompiledMethodData(uint bodyOffset, int bodyLength,
+			internal CompiledMethodData(uint bodyOffset, byte[] bodyBytes,
 				int localCount, int maxStack, TryBlock[] tryBlocks,
 				SourceLocation[] debugSymbols)
 			{
 				BodyOffset = bodyOffset;
-				BodyLength = bodyLength;
+				BodyBytes = bodyBytes;
+				BodyLength = bodyBytes.Length;
 				LocalCount = localCount;
 				MaxStack = maxStack;
 				TryBlocks = tryBlocks;
@@ -769,6 +770,10 @@ namespace Osprey.Members
 			/// within the module's method block.
 			/// </summary>
 			internal uint BodyOffset;
+			/// <summary>
+			/// The bytes that make up the compiled method body.
+			/// </summary>
+			internal byte[] BodyBytes;
 			/// <summary>
 			/// The total number of bytes taken up by the compiled body.
 			/// </summary>
@@ -834,7 +839,7 @@ namespace Osprey.Members
 			var body = mb.GetBodyBytes();
 			CompiledMethod = new CompiledMethodData(
 				bodyOffset: compiler.OutputModule.AppendMethodBody(body),
-				bodyLength: body.Length,
+				bodyBytes: body,
 				localCount: mb.LocalCount,
 				maxStack: mb.GetMaxStack(),
 				tryBlocks: mb.GetTryBlocks(),

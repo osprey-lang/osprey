@@ -290,36 +290,75 @@ namespace Osprey
 
 		public override int GetHashCode()
 		{
+			int valueHashCode;
 			switch (type)
 			{
 				case ConstantValueType.Boolean:
-					return num.BooleanValue.GetHashCode();
+					valueHashCode = num.BooleanValue.GetHashCode();
+					break;
 				case ConstantValueType.Int:
-					return num.IntValue.GetHashCode();
+					valueHashCode = num.IntValue.GetHashCode();
+					break;
 				case ConstantValueType.UInt:
-					return num.UIntValue.GetHashCode();
+					valueHashCode = num.UIntValue.GetHashCode();
+					break;
 				case ConstantValueType.Real:
-					return num.RealValue.GetHashCode();
+					valueHashCode = num.RealValue.GetHashCode();
+					break;
 				case ConstantValueType.String:
-					return stringValue.GetHashCode();
+					valueHashCode = stringValue.GetHashCode();
+					break;
+				case ConstantValueType.Char:
+					valueHashCode = unchecked((char)num.IntValue).GetHashCode();
+					break;
 				case ConstantValueType.Enum:
-					return enumType.GetHashCode() ^
+					valueHashCode = enumType.GetHashCode() ^
 						num.IntValue.GetHashCode();
+					break;
 				default: // Null or unknown/invalid
-					return 0;
+					valueHashCode = 0;
+					break;
 			}
+
+			return valueHashCode ^ ((int)type << 24);
 		}
 
 		public override bool Equals(object obj)
 		{
 			if (obj is ConstantValue)
-				return this == (ConstantValue)obj;
+				return this.Equals((ConstantValue)obj);
 			return base.Equals(obj);
 		}
 
 		public bool Equals(ConstantValue other)
 		{
-			return this == other;
+			if (this.type != other.type)
+				return false;
+
+			switch (this.type)
+			{
+				case ConstantValueType.Null:
+					// Nulls are equal
+					return true;
+				case ConstantValueType.Boolean:
+					return this.num.BooleanValue == other.num.BooleanValue;
+				case ConstantValueType.Int:
+					return this.num.IntValue == other.num.IntValue;
+				case ConstantValueType.UInt:
+					return this.num.UIntValue == other.num.UIntValue;
+				case ConstantValueType.Real:
+					// Note: can't use == here, because NaN sucks.
+					return this.num.RealValue.Equals(other.num.RealValue);
+				case ConstantValueType.String:
+					return this.stringValue.Equals(other.stringValue, StringComparison.Ordinal);
+				case ConstantValueType.Char:
+					return unchecked((char)this.num.IntValue == (char)other.num.IntValue);
+				case ConstantValueType.Enum:
+					return this.enumType == other.enumType &&
+						this.num.IntValue == other.num.IntValue;
+				default:
+					throw new InvalidOperationException("Invalid ConstantValue type.");
+			}
 		}
 
 		public bool SupportsOperator(BinaryOperator op, ConstantValue right)
@@ -745,8 +784,7 @@ namespace Osprey
 				{
 					var leftReal = left.ToReal();
 					var rightReal = right.ToReal();
-					return double.IsNaN(leftReal) && double.IsNaN(rightReal) ||
-						leftReal == rightReal;
+					return leftReal.Equals(rightReal);
 				}
 
 				if (left.Type == ConstantValueType.Int)
@@ -764,6 +802,7 @@ namespace Osprey
 						left.num.UIntValue == unchecked((ulong)right.num.IntValue);
 				}
 			}
+
 			if (left.IsStringLike && right.IsStringLike)
 			{
 				var leftStr = left.IsString ? left.stringValue : char.ConvertFromUtf32(unchecked((int)left.num.IntValue));

@@ -417,8 +417,11 @@ namespace Osprey
 		internal const uint FieldRefMask      = 0x52000000u;
 		internal const uint MethodRefMask     = 0x54000000u;
 
-		internal static readonly byte[] MagicNumber = { (byte)'O', (byte)'V', (byte)'M', (byte)'M' };
-		internal const int DataStart = 16; // the beginning of the "real" data in the module
+		internal const uint MagicNumber =
+			(79u)       | // O
+			(86u << 8)  | // V
+			(77u << 16) | // M
+			(77u << 24);  // M
 
 		internal const string FileExtension = ".ovm";
 
@@ -515,83 +518,6 @@ namespace Osprey
 					return instance ?? (instance = new MethodBlockComparer());
 				}
 			}
-		}
-
-		[Flags]
-		public enum TypeFlags : uint
-		{
-			Public = 0x01,
-			Private = 0x02,
-			Abstract = 0x04,
-			Sealed = 0x08,
-			Static = Abstract | Sealed,
-			Primitive = 0x10 | Sealed,
-		}
-
-		[Flags]
-		public enum FieldFlags : uint
-		{
-			Public = 0x01,
-			Private = 0x02,
-			Protected = 0x04,
-			Instance = 0x08,
-			HasValue = 0x10, // For constant values
-		}
-
-		[Flags]
-		public enum MethodFlags : uint
-		{
-			Public = 0x01,
-			Private = 0x02,
-			Protected = 0x04,
-			Instance = 0x08,
-			Ctor = 0x10,
-			Impl = 0x20,
-		}
-
-		[Flags]
-		public enum OverloadFlags : uint
-		{
-			VarEnd = 0x01,
-			Native = 0x04,
-			ShortHeader = 0x08,
-			Virtual = 0x10,
-			Abstract = 0x20,
-		}
-
-		[Flags]
-		public enum ParamFlags : ushort
-		{
-			ByRef = 0x01,
-		}
-
-		[Flags]
-		public enum ConstantFlags : uint
-		{
-			Public = 0x01,
-			Private = 0x02,
-		}
-
-		public enum Operator : byte
-		{
-			Add = 0x00,
-			Subtract = 0x01,
-			Or = 0x02,
-			Xor = 0x03,
-			Multiply = 0x04,
-			Divide = 0x05,
-			Modulo = 0x06,
-			And = 0x07,
-			Power = 0x08,
-			ShiftLeft = 0x09,
-			ShiftRight = 0x0A,
-			// Reserved: 0x0B
-			// Reserved: 0x0C
-			Plus = 0x0D,
-			Negate = 0x0E,
-			Not = 0x0F,
-			Equals = 0x10,
-			Compare = 0x11,
 		}
 	}
 

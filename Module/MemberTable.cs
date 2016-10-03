@@ -71,6 +71,12 @@ namespace Osprey
 		/// </summary>
 		public bool ReadOnly { get { return readOnly; } }
 
+		/// <summary>
+		/// Gets a collection of all the values in this table. The returned collection can
+		/// be used to iterate over the table's entries in order without including their IDs.
+		/// </summary>
+		public ValueCollection Values { get { return new ValueCollection(this); } }
+
 		private void Initialize(int capacity)
 		{
 			capacity = GetPrime(capacity);
@@ -209,7 +215,7 @@ namespace Osprey
 			readOnly = true;
 		}
 
-		private IEnumerable<KeyValuePair<uint, T>> EnumerateEntries()
+		private IEnumerator<KeyValuePair<uint, T>> EnumerateEntries()
 		{
 			var startVersion = version;
 			var count = length;
@@ -222,14 +228,27 @@ namespace Osprey
 			}
 		}
 
+		private IEnumerator<T> EnumerateValues()
+		{
+			var startVersion = version;
+			var count = length;
+			for (var i = 0; i < count; i++)
+			{
+				if (version != startVersion)
+					throw new InvalidOperationException("The table has been modified since the enumeration began.");
+
+				yield return entries[i].Value;
+			}
+		}
+
 		public IEnumerator<KeyValuePair<uint, T>> GetEnumerator()
 		{
-			return EnumerateEntries().GetEnumerator();
+			return EnumerateEntries();
 		}
 
 		System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
 		{
-			return EnumerateEntries().GetEnumerator();
+			return EnumerateEntries();
 		}
 
 		// Primes and helper methods taken from Ovum
@@ -272,6 +291,28 @@ namespace Osprey
 					return false;
 
 			return true;
+		}
+
+		public struct ValueCollection : IEnumerable<T>
+		{
+			internal ValueCollection(MemberTable<T> table)
+			{
+				this.table = table;
+			}
+
+			private MemberTable<T> table;
+
+			public int Count { get { return table.Count; } }
+
+			public IEnumerator<T> GetEnumerator()
+			{
+				return table.EnumerateValues();
+			}
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+			{
+				return table.EnumerateValues();
+			}
 		}
 	}
 }

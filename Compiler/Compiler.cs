@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -229,14 +230,14 @@ namespace Osprey
 
 			if (globalsClass == null)
 			{
-				globalsClass = new Class("<global>", AccessLevel.Private, projectNamespace);
+				globalsClass = new Class("<global>", AccessLevel.Internal, projectNamespace);
 				globalsClass.BaseType = ObjectType;
 				globalsClass.IsStatic = true;
 				AddType(globalsClass);
 			}
 
 			var name = string.Format("{0}@{1}", variable.Name, documents.IndexOf(parentDocument));
-			variable.CaptureField = new Field(name, AccessLevel.Public, globalsClass);
+			variable.CaptureField = new Field(name, AccessLevel.Internal, globalsClass);
 			globalsClass.DeclareField(variable.CaptureField);
 		}
 
@@ -252,7 +253,7 @@ namespace Osprey
 		{
 			if (lambdaOpClass == null)
 			{
-				lambdaOpClass = new Class("<lambda>", AccessLevel.Private, projectNamespace);
+				lambdaOpClass = new Class("<lambda>", AccessLevel.Internal, projectNamespace);
 				lambdaOpClass.BaseType = ObjectType;
 				lambdaOpClass.IsStatic = true;
 				AddType(lambdaOpClass);
@@ -270,7 +271,7 @@ namespace Osprey
 					case LambdaOperator.Minus:
 					case LambdaOperator.BitwiseNot:
 						{
-							var unaryMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None, new Parameter("a", null));
+							var unaryMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None, new Parameter("a", null));
 							unaryMethod.IsStatic = true;
 							unaryMethod.IsImplDetail = true;
 							unaryMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
@@ -284,7 +285,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Or:
 						{
-							var orMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+							var orMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							orMethod.IsStatic = true;
 							orMethod.IsImplDetail = true;
@@ -308,7 +309,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Xor:
 						{
-							var xorMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+							var xorMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							xorMethod.IsStatic = true;
 							xorMethod.IsImplDetail = true;
@@ -355,7 +356,7 @@ namespace Osprey
 						}
 					case LambdaOperator.And:
 						{
-							var andMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+							var andMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							andMethod.IsStatic = true;
 							andMethod.IsImplDetail = true;
@@ -379,7 +380,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Inequality:
 						{
-							var neqMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+							var neqMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							neqMethod.IsStatic = true;
 							neqMethod.IsImplDetail = true;
@@ -402,7 +403,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Not:
 						{
-							var notMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None, new Parameter("a", null));
+							var notMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None, new Parameter("a", null));
 							notMethod.IsStatic = true;
 							notMethod.IsImplDetail = true;
 
@@ -423,7 +424,7 @@ namespace Osprey
 					default:
 						{
 							// Regular binary operator
-							var binaryMethod = new BytecodeMethod(name, AccessLevel.Public, Splat.None,
+							var binaryMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							binaryMethod.IsStatic = true;
 							binaryMethod.IsImplDetail = true;
@@ -622,30 +623,9 @@ namespace Osprey
 			compileTimer.Stop();
 
 			// Step 12: Save the output module. Once we've done this, we're all done!
-			// Saving a module requires a lot of seeking back and forth, because certain
-			// structures in the file format need to be prefixed with their size, which
-			// usually cannot be calculated without actually emitting data. Seeking appears
-			// to be relatively slow, so we write to a memory stream first, then write
-			// the resulting buffer to the file in one go.
-			// The vast majority of modules are small, and .NET can deal with large byte
-			// arrays with no difficulty.
-			var emitTimer = new Stopwatch();
-			long bytesWritten;
-			using (var stream = new MemoryStream(65536))
-			{
-				emitTimer.Start();
-
-				outputModule.Save(stream);
-
-				bytesWritten = stream.Position;
-
-				// CopyTo reads from the current position, so reset first!
-				stream.Position = 0;
-				using (var fileStream = File.Open(targetPath, FileMode.Create, FileAccess.Write, FileShare.None))
-					stream.CopyTo(fileStream);
-
-				emitTimer.Stop();
-			}
+			var emitTimer = Stopwatch.StartNew();
+			long bytesWritten = outputModule.Save(targetPath);
+			emitTimer.Stop();
 
 			Notice("Compilation finished at " + DateTime.Now);
 			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
@@ -817,9 +797,9 @@ namespace Osprey
 
 				Notice("Initializing main method...", CompilerVerbosity.Verbose);
 				mainMethodBody = new Block(mainMethodContents.ToArray());
-				mainMethod = new Method(null, DefaultMainMethodName, AccessLevel.Private, mainMethodBody, Splat.None, null);
+				mainMethod = new Method(null, DefaultMainMethodName, AccessLevel.Internal, mainMethodBody, Splat.None, null);
 
-				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, AccessLevel.Private);
+				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, AccessLevel.Internal);
 				mainMethodGroup.AddOverload(mainMethod);
 				AddGlobalFunction(mainMethodGroup); // Always first!
 			}
@@ -992,7 +972,7 @@ namespace Osprey
 							if (!ns.ContainsMember(lastPart))
 							{
 								ns.DeclareConstant(new GlobalConstant(lastPart,
-									ConstantValue.CreateBoolean(kvp.Value), AccessLevel.Private));
+									ConstantValue.CreateBoolean(kvp.Value), AccessLevel.Internal));
 								Notice(CompilerVerbosity.Verbose, "Declared constant: {0} = {1}", kvp.Key, kvp.Value);
 							}
 							else
@@ -1157,7 +1137,7 @@ namespace Osprey
 
 			var classDecl = (ClassDeclaration)typeDecl;
 			if (classDecl.IsStatic || classDecl.IsAbstract || classDecl.IsPrimitive ||
-				!classDecl.IsInheritable || classDecl.Access == AccessLevel.Private)
+				!classDecl.IsInheritable || classDecl.Access == AccessLevel.Internal)
 				throw new CompileTimeException(classDecl, "Invalid aves.Object declaration: cannot be marked static, abstract, __primitive or private, and must be marked inheritable. Otherwise you'll break the type hierarchy!");
 			if (classDecl.BaseClass != null)
 				throw new CompileTimeException(classDecl,
@@ -1177,7 +1157,7 @@ namespace Osprey
 
 			var classDecl = (ClassDeclaration)typeDecl;
 			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable ||
-				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Private)
+				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Internal)
 				throw new CompileTimeException(classDecl, "Invalid aves.Enum declaration: cannot be marked static, __primitive, inheritable or private, and must be marked abstract.");
 			if (type.BaseType != ObjectType)
 				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.Enum declaration: must inherit from aves.Object.");
@@ -1192,7 +1172,7 @@ namespace Osprey
 
 			var classDecl = (ClassDeclaration)typeDecl;
 			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable ||
-				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Private)
+				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Internal)
 				throw new CompileTimeException(classDecl, "Invalid aves.EnumSet declaration: cannot be marked static, __primitive, inheritable or private, and must be marked abstract.");
 			if (type.BaseType != EnumType)
 				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.EnumSet declaration: must inherit from aves.Enum.");
@@ -1450,7 +1430,7 @@ namespace Osprey
 			}
 			else
 			{
-				localMethod.Access = AccessLevel.Public; // not hidd'n, technically speakin'
+				localMethod.Access = AccessLevel.Internal; // not hidd'n, technically speakin'
 				localMethod.IsStatic = false;
 
 				// If the function captures variables, then we need to create a closure class for
@@ -1667,112 +1647,32 @@ namespace Osprey
 		{
 			Notice("[debug] Writing debug symbols...", CompilerVerbosity.Verbose);
 
-			var fileToIndex = new Dictionary<SourceFile, int>(documents.Count);
-			for (var i = 0; i < documents.Count; i++)
-				fileToIndex.Add(documents[i].SourceFile, i);
+			var writer = new DebugSymbolsWriter();
 
-			using (var outStream = new MemoryStream(65536))
-			using (var writer = new ModuleWriter(outStream, Encoding.Unicode))
+			Func<Method, bool> hasSymbols =
+				m => m.CompiledMethod != null &&
+					m.CompiledMethod.DebugSymbols != null &&
+					m.CompiledMethod.DebugSymbols.Length > 0;
+
+			var allMethods =
+				outputModule.Members.GlobalFuncDefs.Values
+					.Concat(outputModule.Members.MethodDefs.Values)
+					.Where(m => m.Any(hasSymbols))
+					.OrderBy(m => m.Id);
+
+			foreach (var method in allMethods)
 			{
-				writer.Write(DebugSymbolsMagicNumber); // magicNumber
+				writer.AddMethodSymbols(method);
+			}
 
-				// Source files!
-				// There must always be at least one source file, hence documents.Count
-				// can never be zero.
-				writer.BeginCollection(documents.Count);
-				foreach (var doc in documents)
-				{
-					writer.Write(doc.SourceFile.FileName); // fileName
-					writer.Write(doc.SourceFile.FileHash); // hash
-				}
-				writer.EndCollection();
+			var fileSize = writer.LayOutMembers();
 
-				// Debug symbols!
-				WriteDebugSymbols(writer, fileToIndex);
-
-				outStream.Position = 0;
-				using (var outFileStream = File.Create(targetPath))
-					outStream.CopyTo(outFileStream);
+			using (var file = MemoryMappedFile.CreateFromFile(targetPath, FileMode.Create, null, fileSize, MemoryMappedFileAccess.ReadWrite))
+			{
+				writer.Emit(file);
 			}
 
 			Notice("[debug] Finished writing debug symbols.", CompilerVerbosity.Verbose);
-		}
-
-		private void WriteDebugSymbols(ModuleWriter writer, Dictionary<SourceFile, int> fileToIndex)
-		{
-			// We don't know yet just how many methods there will be with debug symbols.
-			long sizePos = writer.BaseStream.Position;
-			writer.Write(0); // totalOverloadsWithSymbols (placeholder)
-			writer.Write(0); // size (placeholder)
-
-			long lengthPos = writer.BaseStream.Position;
-			writer.Write(0); // length (placeholder)
-
-			Func<Method, bool> hasSymbols = m => m.CompiledMethod != null && m.CompiledMethod.DebugSymbols != null;
-
-			int totalOverloadsWithSymbols = 0;
-			int length = 0;
-			foreach (var kvp in outputModule.Members.GlobalFuncDefs.Concat(outputModule.Members.MethodDefs))
-			{
-				var group = kvp.Value;
-				if (group.Any(hasSymbols))
-				{
-					length++;
-					WriteMethodDebugSymbols(writer, fileToIndex, group, ref totalOverloadsWithSymbols);
-				}
-			}
-
-			long endPos = writer.BaseStream.Position;
-			writer.BaseStream.Seek(sizePos, SeekOrigin.Begin);
-			writer.Write(totalOverloadsWithSymbols); // totalOverloadsWithSymbols
-			writer.Write(checked((int)(endPos - lengthPos))); // size
-			writer.Write(length); // length
-
-			Notice(CompilerVerbosity.Verbose,
-				"[debug] Wrote debug symbols for {0} method group{1}",
-				length, length == 1 ? "" : "s");
-		}
-
-		private void WriteMethodDebugSymbols(ModuleWriter writer,
-			Dictionary<SourceFile, int> fileToIndex, MethodGroup group,
-			ref int totalOverloadsWithSymbols)
-		{
-			Notice(CompilerVerbosity.ExtraVerbose,
-				"[debug] Emitting debug symbols for method '{0}'",
-				group.FullName);
-
-			writer.Write(group.Id); // methodId
-
-			writer.BeginCollection(group.Count);
-			foreach (var method in group)
-			{
-				if (method.CompiledMethod == null || method.CompiledMethod.DebugSymbols == null ||
-					method.CompiledMethod.DebugSymbols.Length == 0)
-				{
-					writer.Write(0); // count
-					continue;
-				}
-
-				totalOverloadsWithSymbols++;
-
-				var debug = method.CompiledMethod.DebugSymbols;
-				writer.Write(debug.Length); // count
-				for (var i = 0; i < debug.Length; i++)
-				{
-					var d = debug[i];
-					writer.Write(d.BytecodeStartOffset); // startOffset
-					writer.Write(d.BytecodeEndOffset);   // endOffset
-					writer.Write(fileToIndex[d.File]); // sourceFile
-
-					int column;
-					var lineNumber = d.GetLineNumber(1, out column);
-					writer.Write(lineNumber);         // lineNumber
-					writer.Write(column);             // column
-					writer.Write(d.SourceStartIndex); // sourceStartIndex
-					writer.Write(d.SourceEndIndex);   // sourceEndIndex
-				}
-			}
-			writer.EndCollection();
 		}
 
 		/// <summary>
@@ -1958,8 +1858,6 @@ namespace Osprey
 			{LambdaOperator.Xor, "λ<boolXor>"},
 			{LambdaOperator.And, "λ<boolAnd>"}
 		};
-
-		private static readonly byte[] DebugSymbolsMagicNumber = { (byte)'O', (byte)'V', (byte)'D', (byte)'S' };
 
 		internal static readonly char[] Dot = { '.' };
 

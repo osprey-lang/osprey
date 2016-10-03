@@ -442,6 +442,7 @@ namespace Osprey.Nodes
 			switch (this.Access)
 			{
 				case AccessLevel.Public: return "public ";
+				case AccessLevel.Internal: return "internal ";
 				case AccessLevel.Protected: return "protected ";
 				case AccessLevel.Private: return "private ";
 				default: return "";
@@ -472,7 +473,7 @@ namespace Osprey.Nodes
 	public sealed class EnumDeclaration : TypeDeclaration
 	{
 		public EnumDeclaration(string name, bool isSet, AccessLevel access)
-			: base(name, access)
+			: base(name, access == AccessLevel.Private ? AccessLevel.Internal : access)
 		{
 			IsSet = isSet;
 		}
@@ -564,7 +565,7 @@ namespace Osprey.Nodes
 	public sealed class ClassDeclaration : TypeDeclaration
 	{
 		public ClassDeclaration(string name, AccessLevel access)
-			: base(name, access)
+			: base(name, access == AccessLevel.Private ? AccessLevel.Internal : access)
 		{ }
 
 		public TypeName BaseClass = null;
@@ -1289,26 +1290,24 @@ namespace Osprey.Nodes
 
 	/* Ovum's source has the following to say about operator indices:
 	 * 
-	 * enum class Operator : uint8_t
+	 * enum Operator : uint32_t
 	 * {
-	 *     ADD =   0,    // The binary + operator.
-	 *     SUB =   1,    // The binary - operator.
-	 *     OR  =   2,    // The | operator.
-	 *     XOR =   3,    // The ^ operator.
-	 *     MUL =   4,    // The * operator.
-	 *     DIV =   5,    // The / operator.
-	 *     MOD =   6,    // The % operator.
-	 *     AND =   7,    // The & operator.
-	 *     POW =   8,    // The ** operator.
-	 *     SHL =   9,    // The << operator.
-	 *     SHR =  10,    // The >> operator.
-	 *     // RESERVED (11)
-	 *     // RESERVED (12)
-	 *     PLUS = 13,    // The unary + operator.
-	 *     NEG  = 14,    // The unary - operator.
-	 *     NOT  = 15,    // The ~ operator.
-	 *     EQ   = 16,    // The == operator.
-	 *     CMP  = 17,    // The <=> operator.
+	 *   OP_ADD         =  0, // +
+	 *   OP_SUBTRACT    =  1, // -
+	 *   OP_OR          =  2, // |
+	 *   OP_XOR         =  3, // ^
+	 *   OP_MULTIPLY    =  4, // *
+	 *   OP_DIVIDE      =  5, // /
+	 *   OP_MODULO      =  6, // %
+	 *   OP_AND         =  7, // &
+	 *   OP_POWER       =  8, // **
+	 *   OP_SHIFT_LEFT  =  9, // <<
+	 *   OP_SHIFT_RIGHT = 10, // >>
+	 *   OP_PLUS        = 11, // +x
+	 *   OP_NEGATE      = 12, // -x
+	 *   OP_NOT         = 13, // ~
+	 *   OP_EQUALS      = 14, // ==
+	 *   OP_COMPARE     = 15, // <=>
 	 * };
 	 * 
 	 * These are the indices that OperatorOverloadDeclaration.GetIndex()
@@ -1391,9 +1390,9 @@ namespace Osprey.Nodes
 		{
 			switch (Operator)
 			{
-				case UnaryOperator.Plus: return 13;
-				case UnaryOperator.Minus: return 14;
-				case UnaryOperator.BitwiseNot: return 15;
+				case UnaryOperator.Plus:       return 11;
+				case UnaryOperator.Minus:      return 12;
+				case UnaryOperator.BitwiseNot: return 13;
 				// Note: 'not' is not overridable.
 				default:
 					throw new InvalidOperationException("UnaryOperatorOverload with invalid operator.");
@@ -1470,8 +1469,8 @@ namespace Osprey.Nodes
 				case BinaryOperator.Exponentiation: return 8;
 				case BinaryOperator.ShiftLeft:      return 9;
 				case BinaryOperator.ShiftRight:     return 10;
-				case BinaryOperator.Equality:       return 16;
-				case BinaryOperator.Comparison:     return 17;
+				case BinaryOperator.Equality:       return 14;
+				case BinaryOperator.Comparison:     return 15;
 				default:
 					throw new InvalidOperationException("BinaryOperatorOverload with invalid operator.");
 			}

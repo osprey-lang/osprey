@@ -509,6 +509,9 @@ namespace Osprey.Members
 
 		private Namespace GetNamespace(string[] path, int offset, bool imported)
 		{
+			if (offset == path.Length)
+				return this;
+
 			var name = path[offset];
 			Namespace ns;
 			if (members.ContainsKey(name))
@@ -533,11 +536,7 @@ namespace Osprey.Members
 				members[name] = ns = new Namespace(name);
 
 			ns.parent = this;
-
-			if (offset == path.Length - 1)
-				return ns;
-			else
-				return ns.GetNamespace(path, offset + 1, imported);
+			return ns.GetNamespace(path, offset + 1, imported);
 		}
 
 		internal Namespace FindNamespace(QualifiedName name)
@@ -850,7 +849,7 @@ namespace Osprey.Members
 	public class GlobalConstant : NamedMember, IConstantMember
 	{
 		public GlobalConstant(string name, VariableDeclarator node, bool isPublic)
-			: base(name, MemberKind.GlobalConstant, node, isPublic ? AccessLevel.Public : AccessLevel.Private)
+			: base(name, MemberKind.GlobalConstant, node, isPublic ? AccessLevel.Public : AccessLevel.Internal)
 		{ }
 
 		internal GlobalConstant(string name, ConstantValue value, AccessLevel access)
@@ -1504,7 +1503,7 @@ namespace Osprey.Members
 					)
 				)
 			};
-			var ctor = new Constructor(new Block(ctorBody), AccessLevel.Public, closure, Signature.Empty);
+			var ctor = new Constructor(new Block(ctorBody), AccessLevel.Internal, closure, Signature.Empty);
 			closure.DeclareConstructor(ctor);
 
 			// And return the method! Simple, innit?
@@ -1948,7 +1947,7 @@ namespace Osprey.Members
 	public class LocalMethod : Method, IDeclarationSpace
 	{
 		public LocalMethod(string name, LocalFunction function, Statement body, Splat splat, params Parameter[] parameters)
-			: base(function.Node, name, AccessLevel.Public, body, new Signature(parameters, splat))
+			: base(function.Node, name, AccessLevel.Internal, body, new Signature(parameters, splat))
 		{
 			this.function = function;
 			IsImplDetail = true;

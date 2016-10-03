@@ -1,27 +1,34 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
+using Raw = Osprey.ModuleFile.Raw;
 
 namespace Osprey
 {
 	/// <summary>
 	/// Reads module data from a <see cref="FileStream"/>.
 	/// </summary>
-	internal class ModuleReader : BinaryReader
+	internal class ModuleReader : IDisposable
 	{
-		public ModuleReader(FileStream input)
-			: base(input)
+		public ModuleReader(string fileName)
 		{
-			fileName = input.Name;
+			if (fileName == null)
+				throw new ArgumentNullException("fileName");
+
+			this.file = MemoryMappedFile.CreateFromFile(fileName, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
+			this.fileName = fileName;
+			this.View = file.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
 		}
 
-		public ModuleReader(FileStream input, Encoding encoding)
-			: base(input, encoding)
-		{
-			fileName = input.Name;
-		}
+		private MemoryMappedFile file;
+
+		/// <summary>
+		/// A view into the memory-mapped file, over the entire file.
+		/// </summary>
+		public readonly MemoryMappedViewAccessor View;
 
 		private string fileName;
 		/// <summary>
@@ -29,84 +36,126 @@ namespace Osprey
 		/// </summary>
 		public string FileName { get { return fileName; } }
 
-		public string ReadOvumString()
-		{
-			var length = ReadInt32();
-			var data = ReadChars(length);
-
-			return new string(data);
-		}
-
-		public Version ReadVersion()
-		{
-			var major = ReadInt32();
-			var minor = ReadInt32();
-			var build = ReadInt32();
-			var revision = ReadInt32();
-
-			return new Version(major, minor, build, revision);
-		}
-
-		public Module.TypeFlags ReadTypeFlags()
-		{
-			return (Module.TypeFlags)ReadUInt32();
-		}
-
-		public Module.FieldFlags ReadFieldFlags()
-		{
-			return (Module.FieldFlags)ReadUInt32();
-		}
-
-		public Module.MethodFlags ReadMethodFlags()
-		{
-			return (Module.MethodFlags)ReadUInt32();
-		}
-
-		public Module.OverloadFlags ReadOverloadFlags()
-		{
-			return (Module.OverloadFlags)ReadUInt32();
-		}
-
-		public Module.ParamFlags ReadParamFlags()
-		{
-			return (Module.ParamFlags)ReadUInt16();
-		}
-
-		public Module.ConstantFlags ReadConstantFlags()
-		{
-			return (Module.ConstantFlags)ReadUInt32();
-		}
-
-		public Module.Operator ReadOperator()
-		{
-			return (Module.Operator)ReadByte();
-		}
-
-		public uint SkipHeader()
-		{
-			var magicNumber = ReadBytes(4);
-			for (var i = 0; i < 4; i++)
-				if (magicNumber[i] != Module.MagicNumber[i])
-					throw new ModuleLoadException(fileName, "Invalid magic number in file.");
-
-			// Module file format version
-			uint version = ReadUInt32();
-			Seek(Module.DataStart, SeekOrigin.Begin);
-			return version;
-		}
-
+		private List<UnresolvedConstant> unresolvedConstants = null;
 		/// <summary>
-		/// Skips past a size-prefixed collection.
+		/// Gets a list of constants whose types have not been resolved yet.
 		/// </summary>
-		public void SkipCollection()
+		public IEnumerable<UnresolvedConstant> UnresolvedConstants { get { return unresolvedConstants; } }
+
+		public uint FieldsBase;
+		public uint MethodsBase;
+
+		public void Dispose()
 		{
-			var size = ReadUInt32();
-			Seek(size, SeekOrigin.Current);
+			Dispose(true);
 		}
 
-		public long Seek(long offset, SeekOrigin origin)
+		private void Dispose(bool disposing)
 		{
-			return BaseStream.Seek(offset, origin);
+			if (disposing)
+			{
+				View.Dispose();
+				file.Dispose();
+			}
+		}
+
+		public int ReadInt32(uint address)
+		{
+			return View.ReadInt32(address);
+		}
+
+		public uint ReadUInt32(uint address)
+		{
+			return View.ReadUInt32(address);
+		}
+
+		public string ReadString(uint address)
+		{
+			// Ovum modules and .NET are both UTF-16
+			var length = View.ReadInt32(address);
+			if (length == 0)
+				return "";
+
+			var chars = ReadArray<char>(address + Raw.StringStruct.CharactersOffset, length);
+			return new string(chars);
+		}
+
+		public string ReadString(Raw.Rva<Raw.StringStruct> rva)
+		{
+			return ReadString(rva.Address);
+		}
+
+		public T Read<T>(uint address)
+			where T : struct
+		{
+			T result;
+			View.Read(address, out result);
+			return result;
+		}
+
+		public void Read<T>(uint address, out T result)
+			where T : struct
+		{
+			View.Read(address, out result);
+		}
+
+		public Raw.Rva<T> ReadRva<T>(uint address)
+			where T : struct
+		{
+			return new Raw.Rva<T>(ReadUInt32(address));
+		}
+
+		public T Deref<T>(Raw.Rva<T> rva)
+			where T : struct
+		{
+			T result;
+			View.Read(rva.Address, out result);
+			return result;
+		}
+
+		public void Deref<T>(Raw.Rva<T> rva, out T result)
+			where T : struct
+		{
+			View.Read(rva.Address, out result);
+		}
+
+		public T[] ReadArray<T>(uint address, int count)
+			where T : struct
+		{
+			var result = new T[count];
+			ReadArray(address, count, result);
+			return result;
+		}
+
+		public void ReadArray<T>(uint address, int count, T[] result)
+			where T : struct
+		{
+			var itemsRead = View.ReadArray(address, result, 0, count);
+			if (itemsRead != count)
+				throw new ModuleLoadException(
+					fileName,
+					string.Format("Wrong number of array items read ({0}, expected {1})", count, itemsRead)
+				);
+		}
+
+		public void AddUnresolvedConstant(Members.ImportedClassConstant member, uint typeId, long value)
+		{
+			if (unresolvedConstants == null)
+				unresolvedConstants = new List<UnresolvedConstant>();
+
+			unresolvedConstants.Add(new UnresolvedConstant
+			{
+				Member = member,
+				TypeId = typeId,
+				Value = value
+			});
+		}
+
+		public struct UnresolvedConstant
+		{
+			public Members.ImportedClassConstant Member;
+			public uint TypeId;
+			public long Value;
 		}
 	}
 }
