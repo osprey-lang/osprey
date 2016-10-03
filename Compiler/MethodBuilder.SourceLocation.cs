@@ -7,7 +7,7 @@ using Osprey.Nodes;
 
 namespace Osprey
 {
-	public sealed class SourceLocation
+	public sealed class SourceLocation : ICloneable
 	{
 		public SourceLocation(ParseNode node)
 		{
@@ -74,6 +74,16 @@ namespace Osprey
 
 			return string.Format("\"{0}\":{1}:{2}+{3}",
 				file.FileName, lineNumber, column, length);
+		}
+
+		public SourceLocation Clone()
+		{
+			return (SourceLocation)MemberwiseClone();
+		}
+
+		object ICloneable.Clone()
+		{
+			return this.Clone();
 		}
 	}
 }

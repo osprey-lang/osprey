@@ -203,6 +203,16 @@ namespace Osprey
 
 		private void PushSourceLocation(SourceLocation location)
 		{
+			// If the current source location has been attached to an instruction,
+			// we have to clone it before pushing the next location. Otherwise we'll
+			// run into troubles later, if the same location is attached to another
+			// instruction, and we try to update the source location's offsets to two
+			// different values.
+			// Since SourceLocation is a reference type, we'll end up with broken
+			// source locations.
+			if (locationUsed && currentLocation != null)
+				currentLocation = currentLocation.Clone();
+
 			location.Previous = currentLocation;
 			currentLocation = location;
 			locationUsed = false;
