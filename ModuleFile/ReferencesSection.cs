@@ -32,7 +32,7 @@ namespace Osprey.ModuleFile
 			{
 				Major = (uint)Module.Version.Major,
 				Minor = (uint)Module.Version.Minor,
-				Patch = (uint)Module.Version.Revision,
+				Patch = (uint)Module.Version.Patch,
 			};
 			view.Write(this.Address, ref data);
 		}

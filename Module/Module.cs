@@ -15,10 +15,10 @@ namespace Osprey
 	/// </summary>
 	public sealed partial class Module
 	{
-		public Module(ModulePool pool, string name, Version version)
+		public Module(ModulePool pool, string name, ModuleVersion version)
 			: this(pool, name, version, MaxFileFormatVersion, false, false)
 		{ }
-		private Module(ModulePool pool, string name, Version version, uint fileFormatVersion, bool imported, bool fromVersionedFile)
+		private Module(ModulePool pool, string name, ModuleVersion version, uint fileFormatVersion, bool imported, bool fromVersionedFile)
 		{
 			this.pool = pool;
 			this.name = name;
@@ -56,12 +56,12 @@ namespace Osprey
 		/// </summary>
 		public string Name { get { return name; } }
 
-		private Version version;
+		private ModuleVersion version;
 		/// <summary>
 		/// Gets the version of the module.
 		/// </summary>
 		/// <remarks>The module that's being compiled has version 1.0.0.0 unless specified on the command line.</remarks>
-		public Version Version { get { return version; } }
+		public ModuleVersion Version { get { return version; } }
 
 		private uint fileFormatVersion;
 		/// <summary>
@@ -580,7 +580,7 @@ namespace Osprey
 
 		private Dictionary<Key, Module> loadedModules = new Dictionary<Key, Module>();
 
-		public bool HasLoaded(string name, Version version)
+		public bool HasLoaded(string name, ModuleVersion version)
 		{
 			return loadedModules.ContainsKey(new Key(name, version));
 		}
@@ -592,7 +592,7 @@ namespace Osprey
 		/// <param name="name">The name of the module to get.</param>
 		/// <param name="version">The version of the module to load, or null to ignore the version.</param>
 		/// <returns>The module with the specified name.</returns>
-		public Module GetOrLoad(string name, Version version)
+		public Module GetOrLoad(string name, ModuleVersion version)
 		{
 			Module module;
 			if (loadedModules.TryGetValue(new Key(name, version), out module))
@@ -621,7 +621,7 @@ namespace Osprey
 			// The versioned paths are excluded if version is null.
 			string fileName = null;
 
-			var versionStr = version != null ? "-" + version.ToStringInvariant(4) : null;
+			var versionStr = version != null ? "-" + version : null;
 			var dirs = new string[] { Path.Combine(".", "lib"), ".", libraryPath };
 
 			bool isVersionedFile = false;
@@ -688,14 +688,14 @@ namespace Osprey
 
 		private struct Key
 		{
-			public Key(string name, Version version)
+			public Key(string name, ModuleVersion version)
 			{
 				Name = name;
 				Version = version;
 			}
 
 			public string Name;
-			public Version Version;
+			public ModuleVersion Version;
 
 			public override bool Equals(object obj)
 			{

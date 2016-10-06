@@ -78,7 +78,7 @@ namespace Osprey
 			moduleVersion = new ModuleVersion(
 				module.Version.Major,
 				module.Version.Minor,
-				module.Version.Revision
+				module.Version.Patch
 			);
 		}
 

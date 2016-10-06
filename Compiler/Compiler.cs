@@ -33,6 +33,7 @@ namespace Osprey
 			this.metadataFile = options.MetadataFile;
 
 			this.moduleName = options.ModuleName ?? Path.GetFileNameWithoutExtension(sourceFiles[0]);
+			this.version = options.ModuleVersion ?? new ModuleVersion(1, 0, 0);
 			this.mainMethodName = options.MainMethod;
 
 			this.sourceFiles = new Dictionary<string, Document>();
@@ -107,9 +108,9 @@ namespace Osprey
 		private NativeLibrary nativeLibrary;
 		internal NativeLibrary NativeLibrary { get { return nativeLibrary; } }
 
-		private Version version;
+		private ModuleVersion version;
 		/// <summary>Gets the version of the project.</summary>
-		public Version Version { get { return version; } }
+		public ModuleVersion Version { get { return version; } }
 
 		private Dictionary<string, string> metadata;
 		private Dictionary<string, Document> sourceFiles;
@@ -644,9 +645,6 @@ namespace Osprey
 			var importedModules = this.importedModules;
 			var modules = new ModulePool(libraryPath, projectNs, this);
 
-			Version foundVersion = null;
-			string versionFile = null;
-
 			// Always load the standard module first.
 			if (!NoStandardModule)
 			{
@@ -668,16 +666,6 @@ namespace Osprey
 					var sourceFile = SourceFile.Open(fileName, computeHash: UseDebugSymbols);
 
 					doc = Parser.Parse(sourceFile, ParserOptions);
-
-					if (doc.Version != null)
-					{
-						if (foundVersion != null && foundVersion != doc.Version)
-							throw new ParseException(doc,
-								string.Format("Version number mismatch; found version {0} in '{1}'.", foundVersion, versionFile));
-						foundVersion = doc.Version;
-						versionFile = fileName;
-					}
-
 					doc.Compiler = this;
 
 					sourceFiles[fileName] = doc; // Add first, to avoid self-dependency issues
@@ -696,7 +684,6 @@ namespace Osprey
 
 			this.projectNamespace = projectNs;
 			this.modules = modules;
-			this.version = foundVersion ?? new Version(1, 0, 0, 0);
 
 			Notice("Finished parsing source files and reading dependent modules.", CompilerVerbosity.Verbose);
 
@@ -1882,16 +1869,28 @@ namespace Osprey
 			this.nativeLibrary = null;
 			this.metadataFile = null;
 			this.moduleName = null;
+			this.moduleVersion = null;
 			this.mainMethod = null;
 			this.docFile = null;
 		}
-		public CompilerOptions(CompilerFlags flags, CompilerVerbosity verbosity, ProjectType type,
-			string moduleName, string libraryPath, string nativeLibrary, string metadataFile, string mainMethod, string docFile)
+		public CompilerOptions(
+			CompilerFlags flags,
+			CompilerVerbosity verbosity,
+			ProjectType type,
+			string moduleName,
+			ModuleVersion moduleVersion,
+			string libraryPath,
+			string nativeLibrary,
+			string metadataFile,
+			string mainMethod,
+			string docFile
+		)
 		{
 			this.flags = flags;
 			this.verbosity = verbosity;
 			this.type = type;
 			this.moduleName = moduleName;
+			this.moduleVersion = moduleVersion;
 			this.libraryPath = libraryPath;
 			this.nativeLibrary = nativeLibrary;
 			this.metadataFile = metadataFile;
@@ -2005,6 +2004,12 @@ namespace Osprey
 		/// Gets or sets the name of the output module.
 		/// </summary>
 		public string ModuleName { get { return moduleName; } set { moduleName = value; } }
+
+		private ModuleVersion moduleVersion;
+		/// <summary>
+		/// Gets or sets the version of the output module.
+		/// </summary>
+		public ModuleVersion ModuleVersion { get { return moduleVersion; } set { moduleVersion = value; } }
 
 		private string mainMethod;
 		/// <summary>

@@ -365,6 +365,12 @@ namespace Osprey
 							compilerOptions.ModuleName = args[++i];
 							break;
 
+						case "version":
+							if (i == argc - 1)
+								throw new ArgumentException("'/version' must be followed by a module version.");
+							compilerOptions.ModuleVersion = ModuleVersion.Parse(args[++i]);
+							break;
+
 						case "main":
 							if (i == argc - 1)
 								throw new ArgumentException("'/main' must be followed by a fully qualified global function name.");

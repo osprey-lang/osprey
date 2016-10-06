@@ -21,7 +21,7 @@ namespace Osprey
 		/// <param name="pool">The pool that the module is being opened for.</param>
 		/// <param name="fileName">The name of the file to open.</param>
 		/// <returns>The module that was loaded.</returns>
-		internal static Module Open(ModulePool pool, string fileName, Version requiredVersion, bool fromVersionedFile)
+		internal static Module Open(ModulePool pool, string fileName, ModuleVersion requiredVersion, bool fromVersionedFile)
 		{
 			if (fileName == null)
 				throw new ArgumentNullException("fileName");
@@ -44,11 +44,10 @@ namespace Osprey
 				reader.MethodsBase = header.Methods.Address;
 
 				var name = reader.ReadString(header.Name);
-				var version = new Version(
+				var version = new ModuleVersion(
 					unchecked((int)header.Version.Major),
 					unchecked((int)header.Version.Minor),
-					unchecked((int)header.Version.Patch),
-					0
+					unchecked((int)header.Version.Patch)
 				);
 
 				if (requiredVersion != null && version != requiredVersion)
@@ -128,11 +127,10 @@ namespace Osprey
 				// This compiler ignores the VersionConstraint and treats everything
 				// like an exact version.
 				var name = module.members.Strings[moduleRef.Name.Value];
-				var version = new Version(
+				var version = new ModuleVersion(
 					unchecked((int)moduleRef.Version.Major),
 					unchecked((int)moduleRef.Version.Minor),
-					unchecked((int)moduleRef.Version.Patch),
-					0
+					unchecked((int)moduleRef.Version.Patch)
 				);
 
 				var importedModule = module.Pool.GetOrLoad(name, version);

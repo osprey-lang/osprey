@@ -48,9 +48,6 @@ namespace Osprey.Nodes
 		/// <summary>Global statements.</summary>
 		public Statement[] Statements;
 
-		/// <summary>The version of the file, which determines the version of the project.</summary>
-		public Version Version;
-
 		/// <summary>The <see cref="FileNamespace"/> associated with this document.</summary>
 		internal FileNamespace Namespace;
 		

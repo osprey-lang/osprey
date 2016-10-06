@@ -507,10 +507,6 @@ namespace Osprey
 
 			var i = 0;
 
-			if (AcceptContextual(i, ContextualType.Version) &&
-				Accept(i + 1, TokenType.Integer))
-				document.Version = ParseVersion(ref i);
-
 			// parse all use directives first
 			while (Accept(ref i, TokenType.Use))
 				document.Uses.Add(ParseUseDirective(ref i));
@@ -545,42 +541,6 @@ namespace Osprey
 			Expect(i, TokenType.EOF);
 
 			return document;
-		}
-
-		private Version ParseVersion(ref int i)
-		{
-			Expect(ref i, TokenType.Identifier); // "version"
-
-			int major = 0, minor = 0, build = 0, revision = 0;
-
-			// Keep in mind: integer literals cannot be negative!
-
-			Func<Parser, Token, int> tokenToField = (_this, tok) =>
-			{
-				var value = IntegerLiteral.ParseToken(tok);
-				if (value.Type != ConstantValueType.Int)
-					_this.ParseError(tok, "Version number field must be of type Int.");
-				if (value.IntValue > int.MaxValue)
-					_this.ParseError(tok, "Version number field out of range.");
-
-				return unchecked((int)value.IntValue);
-			};
-
-			major = tokenToField(this, Expect(ref i, TokenType.Integer));
-
-			Expect(ref i, TokenType.Colon);
-
-			minor = tokenToField(this, Expect(ref i, TokenType.Integer));
-
-			if (Accept(ref i, TokenType.Colon))
-				build = tokenToField(this, Expect(ref i, TokenType.Integer));
-
-			if (Accept(ref i, TokenType.Colon))
-				revision = tokenToField(this, Expect(ref i, TokenType.Integer));
-
-			Expect(ref i, TokenType.Semicolon);
-
-			return new Version(major, minor, build, revision);
 		}
 
 		private UseDirective ParseUseDirective(ref int i)

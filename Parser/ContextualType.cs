@@ -21,8 +21,6 @@ namespace Osprey
 		Set = 2,
 		/// <summary>to</summary>
 		To = 3,
-		/// <summary>version</summary>
-		Version = 4,
 		/// <summary>__primitive</summary>
 		Primitive = 5,
 		/// <summary>__init_type</summary>
