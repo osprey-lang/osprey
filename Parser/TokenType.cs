@@ -91,6 +91,8 @@ namespace Osprey
 		In = 19 | Keyword,
 		/// <summary>inheritable</summary>
 		Inheritable = 20 | Keyword | MemberModifier,
+		/// <summary>internal</summary>
+		Internal = 51 | Keyword | MemberModifier,
 		/// <summary>is</summary>
 		Is = 21 | Keyword,
 		/// <summary>iter</summary>

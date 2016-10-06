@@ -28,6 +28,7 @@ namespace Osprey
 			{"if", TokenType.If},
 			{"in", TokenType.In},
 			{"inheritable", TokenType.Inheritable},
+			{"internal", TokenType.Internal},
 			{"is", TokenType.Is},
 			{"iter", TokenType.Iter},
 			{"namespace", TokenType.Namespace},

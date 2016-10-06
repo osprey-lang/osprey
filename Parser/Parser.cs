@@ -586,43 +586,48 @@ namespace Osprey
 
 			while (Accept(i, TokenType.MemberModifier))
 			{
-				if (Accept(i, TokenType.Public, TokenType.Protected, TokenType.Private))
+				if (Accept(i, TokenType.Public, TokenType.Protected, TokenType.Private, TokenType.Internal))
 				{
 					if (output.Access != Accessibility.None)
-						ParseError(i, "More than one access level modifier.");
+						ParseError(i, "More than one accessibility modifier.");
 					output.Access = tok[i].Type == TokenType.Public ? Accessibility.Public :
 						tok[i].Type == TokenType.Protected ? Accessibility.Protected :
+						tok[i].Type == TokenType.Internal ? Accessibility.Internal :
 						Accessibility.Private;
 				}
-				if (Accept(i, TokenType.Static))
+				else if (Accept(i, TokenType.Static))
 				{
 					if (output.IsStatic)
 						ParseError(i, "Duplicate static modifier.");
 					output.IsStatic = true;
 				}
-				if (Accept(i, TokenType.Abstract))
+				else if (Accept(i, TokenType.Abstract))
 				{
 					if (output.IsAbstract)
 						ParseError(i, "Duplicate abstract modifier.");
 					output.IsAbstract = true;
 				}
-				if (Accept(i, TokenType.Inheritable))
+				else if (Accept(i, TokenType.Inheritable))
 				{
 					if (output.IsInheritable)
 						ParseError(i, "Duplicate inheritable modifier.");
 					output.IsInheritable = true;
 				}
-				if (Accept(i, TokenType.Overridable))
+				else if (Accept(i, TokenType.Overridable))
 				{
 					if (output.IsOverridable)
 						ParseError(i, "Duplicate overridable modifier.");
 					output.IsOverridable = true;
 				}
-				if (Accept(i, TokenType.Override))
+				else if (Accept(i, TokenType.Override))
 				{
 					if (output.IsOverride)
 						ParseError(i, "Duplicate override modifier.");
 					output.IsOverride = true;
+				}
+				else
+				{
+					ParseError(i, "Invalid member modifier.");
 				}
 				i++;
 			}
@@ -3143,17 +3148,18 @@ namespace Osprey
 					throw new ParseException(errorToken, "A static class cannot be inheritable or abstract.");
 				if (IsAbstract && IsInheritable)
 					throw new ParseException(errorToken, "A class cannot be marked both abstract and inheritable.");
-				if (Access == Accessibility.Protected)
-					throw new ParseException(errorToken, "A class cannot be marked as protected.");
+				if (Access == Accessibility.Protected || Access == Accessibility.Private)
+					throw new ParseException(errorToken, "A class cannot be marked protected or private.");
 
 				if (Access == Accessibility.None)
 					Access = Accessibility.Public;
 			}
 			public void ValidateForEnum(Token errorToken)
 			{
-				if (IsOverride || IsStatic || IsOverridable || IsInheritable || IsAbstract || Access == Accessibility.Protected)
+				if (IsOverride || IsStatic || IsOverridable || IsInheritable || IsAbstract ||
+					Access == Accessibility.Protected || Access == Accessibility.Private)
 					throw new ParseException(errorToken,
-						"An enum cannot be marked as override, static, overridable, inheritable, abstract or protected.");
+						"An enum cannot be marked as override, static, overridable, inheritable, abstract, protected or private.");
 
 				if (Access == Accessibility.None)
 					Access = Accessibility.Public;
@@ -3212,8 +3218,8 @@ namespace Osprey
 				if (IsStatic || IsInheritable || IsOverridable || IsAbstract || IsOverride)
 					throw new ParseException(errorToken,
 						"Global functions and constants cannot be declared static, inheritable, overridable, abstract or override.");
-				if (Access == Accessibility.Protected)
-					throw new ParseException(errorToken, "Global functions and constants cannot be declared protected.");
+				if (Access == Accessibility.Protected || Access == Accessibility.Private)
+					throw new ParseException(errorToken, "Global functions and constants cannot be declared protected or private.");
 			}
 		}
 	}

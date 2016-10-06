@@ -1092,6 +1092,10 @@ namespace Osprey
 					if (type.BaseType == type)
 						throw new CompileTimeException(baseTypeName,
 							"A class cannot inherit from itself.");
+					if (type.BaseType.Access != Accessibility.Public &&
+						type.Access == Accessibility.Public)
+						throw new CompileTimeException(baseTypeName,
+							"A public class cannot inherit from an internal class.");
 
 					if (type.BaseType == EnumType && type != EnumSetType)
 						throw new CompileTimeException(baseTypeName,

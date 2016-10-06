@@ -470,7 +470,7 @@ namespace Osprey.Nodes
 	public sealed class EnumDeclaration : TypeDeclaration
 	{
 		public EnumDeclaration(string name, bool isSet, Accessibility access)
-			: base(name, access == Accessibility.Private ? Accessibility.Internal : access)
+			: base(name, access)
 		{
 			IsSet = isSet;
 		}
@@ -562,7 +562,7 @@ namespace Osprey.Nodes
 	public sealed class ClassDeclaration : TypeDeclaration
 	{
 		public ClassDeclaration(string name, Accessibility access)
-			: base(name, access == Accessibility.Private ? Accessibility.Internal : access)
+			: base(name, access)
 		{ }
 
 		public TypeName BaseClass = null;
