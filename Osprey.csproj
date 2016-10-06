@@ -90,7 +90,7 @@
     <Compile Include="ModuleFile\RawEnums.cs" />
     <Compile Include="ModuleFile\RawStructs.cs" />
     <Compile Include="ModuleFile\Rva.cs" />
-    <Compile Include="Parser\AccessLevel.cs" />
+    <Compile Include="Parser\Accessibility.cs" />
     <Compile Include="Compiler\Compiler.cs" />
     <Compile Include="Compiler\Compiler.Emitter.cs" />
     <Compile Include="Compiler\CompileTimeException.cs" />

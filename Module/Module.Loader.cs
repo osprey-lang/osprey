@@ -210,7 +210,7 @@ namespace Osprey
 				// If the type is public and belongs to an explicitly imported module,
 				// we must make it available to the developer in its parent namespace.
 				// Otherwise it would be impossible to refer to it from code!
-				if (module.explicitlyImported && type.Access == AccessLevel.Public)
+				if (module.explicitlyImported && type.Access == Accessibility.Public)
 				{
 					string _;
 					var namespacePath = GetPathFromName(fullName, out _);
@@ -222,7 +222,7 @@ namespace Osprey
 
 				// Modules that refer to this module also need to be able to reference
 				// the type, by full name.
-				if (type.Access == AccessLevel.Public)
+				if (type.Access == Accessibility.Public)
 					module.membersByFullName[type.FullName] = type;
 
 				// And finally lets give it a TypeDef token.
@@ -712,7 +712,7 @@ namespace Osprey
 			{
 				var constantDef = reader.Read<Raw.ConstantDefStruct>(address);
 				var access = GetAccessibility(reader, constantDef.Flags);
-				if (access != AccessLevel.Public)
+				if (access != Accessibility.Public)
 					continue;
 
 				ReadAnnotations(reader, constantDef.Annotations);
@@ -783,7 +783,7 @@ namespace Osprey
 			// the correct parent namespace here in the case of a global function,
 			// might as well add the method to it...
 			// Note: we don't do this for internal global functions.
-			if (isGlobal && access != AccessLevel.Internal)
+			if (isGlobal && access != Accessibility.Internal)
 				((Namespace)parent).ImportMethodGroup(method);
 
 			method.Module = module;
@@ -795,7 +795,7 @@ namespace Osprey
 			ModuleReader reader,
 			Module module,
 			string name,
-			AccessLevel access,
+			Accessibility access,
 			Raw.MethodFlags methodFlags,
 			bool isGlobal,
 			uint address
@@ -992,7 +992,7 @@ namespace Osprey
 			return constValue;
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.TypeFlags flags)
+		private static Accessibility GetAccessibility(ModuleReader reader, Raw.TypeFlags flags)
 		{
 			const Raw.TypeFlags accessibility =
 				Raw.TypeFlags.Public |
@@ -1001,15 +1001,15 @@ namespace Osprey
 			switch (flags & accessibility)
 			{
 				case Osprey.ModuleFile.Raw.TypeFlags.Public:
-					return AccessLevel.Public;
+					return Accessibility.Public;
 				case Osprey.ModuleFile.Raw.TypeFlags.Internal:
-					return AccessLevel.Internal;
+					return Accessibility.Internal;
 				default:
 					throw new ModuleLoadException(reader.FileName, "TypeDef has no declared accessibility.");
 			}
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.FieldFlags flags)
+		private static Accessibility GetAccessibility(ModuleReader reader, Raw.FieldFlags flags)
 		{
 			const Raw.FieldFlags accessibility =
 				Raw.FieldFlags.Public |
@@ -1020,19 +1020,19 @@ namespace Osprey
 			switch (flags & accessibility)
 			{
 				case Osprey.ModuleFile.Raw.FieldFlags.Public:
-					return AccessLevel.Public;
+					return Accessibility.Public;
 				case Osprey.ModuleFile.Raw.FieldFlags.Internal:
-					return AccessLevel.Internal;
+					return Accessibility.Internal;
 				case Osprey.ModuleFile.Raw.FieldFlags.Protected:
-					return AccessLevel.Protected;
+					return Accessibility.Protected;
 				case Osprey.ModuleFile.Raw.FieldFlags.Private:
-					return AccessLevel.Private;
+					return Accessibility.Private;
 				default:
 					throw new ModuleLoadException(reader.FileName, "FieldDef has no declared accessibility.");
 			}
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.MethodFlags flags, bool isGlobal)
+		private static Accessibility GetAccessibility(ModuleReader reader, Raw.MethodFlags flags, bool isGlobal)
 		{
 			const Raw.MethodFlags accessibility =
 				Raw.MethodFlags.Public |
@@ -1043,19 +1043,19 @@ namespace Osprey
 			switch (flags & accessibility)
 			{
 				case Osprey.ModuleFile.Raw.MethodFlags.Public:
-					return AccessLevel.Public;
+					return Accessibility.Public;
 				case Osprey.ModuleFile.Raw.MethodFlags.Internal:
-					return AccessLevel.Internal;
+					return Accessibility.Internal;
 				case Osprey.ModuleFile.Raw.MethodFlags.Protected:
-					return AccessLevel.Protected;
+					return Accessibility.Protected;
 				case Osprey.ModuleFile.Raw.MethodFlags.Private:
-					return AccessLevel.Private;
+					return Accessibility.Private;
 				default:
 					throw new ModuleLoadException(reader.FileName, "MethodDef or FunctionDef has no declared accessibility.");
 			}
 		}
 
-		private static AccessLevel GetAccessibility(ModuleReader reader, Raw.ConstantFlags flags)
+		private static Accessibility GetAccessibility(ModuleReader reader, Raw.ConstantFlags flags)
 		{
 			const Raw.ConstantFlags accessibility =
 				Raw.ConstantFlags.Public |
@@ -1064,9 +1064,9 @@ namespace Osprey
 			switch (flags & accessibility)
 			{
 				case Osprey.ModuleFile.Raw.ConstantFlags.Public:
-					return AccessLevel.Public;
+					return Accessibility.Public;
 				case Osprey.ModuleFile.Raw.ConstantFlags.Internal:
-					return AccessLevel.Internal;
+					return Accessibility.Internal;
 				default:
 					throw new ModuleLoadException(reader.FileName, "ConstantDef has no declared accessibility.");
 			}

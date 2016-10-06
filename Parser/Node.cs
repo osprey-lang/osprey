@@ -407,7 +407,7 @@ namespace Osprey.Nodes
 				var constValue = ((ConstantExpression)decl.Initializer).Value;
 
 				if (IsPublic && constValue.Type == ConstantValueType.Enum &&
-					constValue.EnumValue.Type.Access != AccessLevel.Public)
+					constValue.EnumValue.Type.Access != Accessibility.Public)
 					throw new CompileTimeException(decl, "A public constant cannot contain a value of a non-public type.");
 			}
 		}
@@ -417,7 +417,7 @@ namespace Osprey.Nodes
 
 	public abstract class MemberDeclaration : ParseNode
 	{
-		public MemberDeclaration(string name, AccessLevel access)
+		public MemberDeclaration(string name, Accessibility access)
 		{
 			Name = name;
 			Access = access;
@@ -428,9 +428,9 @@ namespace Osprey.Nodes
 
 		/// <summary>
 		/// The access level of the member.
-		/// This field is not relevant for all members, and should then be set to <see cref="AccessLevel.None"/>.
+		/// This field is not relevant for all members, and should then be set to <see cref="Accessibility.None"/>.
 		/// </summary>
-		public AccessLevel Access;
+		public Accessibility Access;
 
 		public Token DocString = null;
 
@@ -438,10 +438,10 @@ namespace Osprey.Nodes
 		{
 			switch (this.Access)
 			{
-				case AccessLevel.Public: return "public ";
-				case AccessLevel.Internal: return "internal ";
-				case AccessLevel.Protected: return "protected ";
-				case AccessLevel.Private: return "private ";
+				case Accessibility.Public: return "public ";
+				case Accessibility.Internal: return "internal ";
+				case Accessibility.Protected: return "protected ";
+				case Accessibility.Private: return "private ";
 				default: return "";
 			}
 		}
@@ -453,7 +453,7 @@ namespace Osprey.Nodes
 
 	public abstract class TypeDeclaration : MemberDeclaration
 	{
-		public TypeDeclaration(string name, AccessLevel access)
+		public TypeDeclaration(string name, Accessibility access)
 			: base(name, access)
 		{ }
 
@@ -469,8 +469,8 @@ namespace Osprey.Nodes
 
 	public sealed class EnumDeclaration : TypeDeclaration
 	{
-		public EnumDeclaration(string name, bool isSet, AccessLevel access)
-			: base(name, access == AccessLevel.Private ? AccessLevel.Internal : access)
+		public EnumDeclaration(string name, bool isSet, Accessibility access)
+			: base(name, access == Accessibility.Private ? Accessibility.Internal : access)
 		{
 			IsSet = isSet;
 		}
@@ -520,7 +520,7 @@ namespace Osprey.Nodes
 	public sealed class EnumMember : MemberDeclaration
 	{
 		public EnumMember(string name, Expression value)
-			: base(name, AccessLevel.None)
+			: base(name, Accessibility.None)
 		{
 			Value = value;
 		}
@@ -561,8 +561,8 @@ namespace Osprey.Nodes
 
 	public sealed class ClassDeclaration : TypeDeclaration
 	{
-		public ClassDeclaration(string name, AccessLevel access)
-			: base(name, access == AccessLevel.Private ? AccessLevel.Internal : access)
+		public ClassDeclaration(string name, Accessibility access)
+			: base(name, access == Accessibility.Private ? Accessibility.Internal : access)
 		{ }
 
 		public TypeName BaseClass = null;
@@ -747,7 +747,7 @@ namespace Osprey.Nodes
 
 	public sealed class FieldDeclaration : MemberDeclaration
 	{
-		public FieldDeclaration(AccessLevel access, bool isConst, VariableDeclarator[] declarators)
+		public FieldDeclaration(Accessibility access, bool isConst, VariableDeclarator[] declarators)
 			: base(null, access)
 		{
 			IsConstant = isConst;
@@ -767,7 +767,7 @@ namespace Osprey.Nodes
 				sb.Append("static ");
 			if (IsConstant)
 				sb.Append("const ");
-			else if (Access == AccessLevel.None)
+			else if (Access == Accessibility.None)
 				sb.Append("var ");
 			sb.Append(Declarators.JoinString(", ", indent + 1));
 			sb.Append(";");
@@ -782,9 +782,9 @@ namespace Osprey.Nodes
 				if (IsConstant)
 				{
 					var constValue = ((ConstantExpression)decl.Initializer).Value;
-					if (Access == AccessLevel.Public &&
+					if (Access == Accessibility.Public &&
 						constValue.Type == ConstantValueType.Enum &&
-						constValue.EnumValue.Type.Access != AccessLevel.Public)
+						constValue.EnumValue.Type.Access != Accessibility.Public)
 						throw new CompileTimeException(decl, "A public constant cannot contain a value of a non-public type.");
 				}
 			}
@@ -812,7 +812,7 @@ namespace Osprey.Nodes
 
 	public sealed class ConstructorDeclaration : MemberDeclaration
 	{
-		public ConstructorDeclaration(AccessLevel access, ConstructorParam[] parameters, Splat splat, Block body)
+		public ConstructorDeclaration(Accessibility access, ConstructorParam[] parameters, Splat splat, Block body)
 			: base("new", access)
 		{
 			Parameters = parameters;
@@ -820,7 +820,7 @@ namespace Osprey.Nodes
 			Body = body;
 		}
 		public ConstructorDeclaration(ConstructorParam[] parameters, Block body)
-			: base("init", AccessLevel.Private)
+			: base("init", Accessibility.Private)
 		{
 			IsStatic = true;
 			Parameters = parameters;
@@ -1053,7 +1053,7 @@ namespace Osprey.Nodes
 
 	public sealed class MethodDeclaration : MemberDeclaration
 	{
-		public MethodDeclaration(string name, AccessLevel access, Parameter[] parameters, Splat splat, Statement body)
+		public MethodDeclaration(string name, Accessibility access, Parameter[] parameters, Splat splat, Statement body)
 			: base(name, access)
 		{
 			Parameters = parameters;
@@ -1085,7 +1085,7 @@ namespace Osprey.Nodes
 			if (IsOverridable) sb.Append("overridable ");
 			if (IsOverride) sb.Append("override ");
 
-			if (Access == AccessLevel.None)
+			if (Access == Accessibility.None)
 				sb.Append("function ");
 
 			sb.Append(Name);
@@ -1182,7 +1182,7 @@ namespace Osprey.Nodes
 
 	public class PropertyAccessorDeclaration : MemberDeclaration
 	{
-		public PropertyAccessorDeclaration(string name, AccessLevel access, bool isSetter, Statement body)
+		public PropertyAccessorDeclaration(string name, Accessibility access, bool isSetter, Statement body)
 			: base(name, access)
 		{
 			IsSetter = isSetter;
@@ -1254,7 +1254,7 @@ namespace Osprey.Nodes
 
 	public sealed class IndexerAccessorDeclaration : PropertyAccessorDeclaration
 	{
-		public IndexerAccessorDeclaration(AccessLevel access, bool isSetter, Parameter[] parameters, Statement body)
+		public IndexerAccessorDeclaration(Accessibility access, bool isSetter, Parameter[] parameters, Statement body)
 			: base(".item", access, isSetter, body)
 		{
 			this.Parameters = parameters;
@@ -1315,7 +1315,7 @@ namespace Osprey.Nodes
 
 	public abstract class OperatorOverloadDeclaration : MemberDeclaration
 	{
-		protected OperatorOverloadDeclaration(Block body) : base("operator", AccessLevel.None)
+		protected OperatorOverloadDeclaration(Block body) : base("operator", Accessibility.None)
 		{
 			Body = body;
 		}
@@ -1476,7 +1476,7 @@ namespace Osprey.Nodes
 
 	public sealed class IteratorDeclaration : MemberDeclaration
 	{
-		public IteratorDeclaration(Block body) : base("iter", AccessLevel.None)
+		public IteratorDeclaration(Block body) : base("iter", Accessibility.None)
 		{
 			Body = body;
 		}

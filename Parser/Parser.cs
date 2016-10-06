@@ -588,11 +588,11 @@ namespace Osprey
 			{
 				if (Accept(i, TokenType.Public, TokenType.Protected, TokenType.Private))
 				{
-					if (output.Access != AccessLevel.None)
+					if (output.Access != Accessibility.None)
 						ParseError(i, "More than one access level modifier.");
-					output.Access = tok[i].Type == TokenType.Public ? AccessLevel.Public :
-						tok[i].Type == TokenType.Protected ? AccessLevel.Protected :
-						AccessLevel.Private;
+					output.Access = tok[i].Type == TokenType.Public ? Accessibility.Public :
+						tok[i].Type == TokenType.Protected ? Accessibility.Protected :
+						Accessibility.Private;
 				}
 				if (Accept(i, TokenType.Static))
 				{
@@ -654,7 +654,7 @@ namespace Osprey
 				{
 					modifiers.ValidateForGlobal(tok[i]);
 					var func = ParseLocalFunctionDeclaration(ref i, isLocal: false);
-					var globalFunc = new GlobalFunctionDeclaration(modifiers.Access == AccessLevel.Public, func);
+					var globalFunc = new GlobalFunctionDeclaration(modifiers.Access == Accessibility.Public, func);
 					globalFunc.DocString = startTok.Documentation;
 					target.Functions.Add(globalFunc);
 				}
@@ -675,7 +675,7 @@ namespace Osprey
 							"Internal error: global constant declaration should be a simple declaration and marked IsConst.");
 #endif
 
-					var constDecl = new GlobalConstantDeclaration(modifiers.Access == AccessLevel.Public, simpleDecl)
+					var constDecl = new GlobalConstantDeclaration(modifiers.Access == Accessibility.Public, simpleDecl)
 					{
 						Document = document
 					};
@@ -901,7 +901,7 @@ namespace Osprey
 			if (SimplifiedTree && !target.IsStatic && target.Constructors.Count == 0)
 			{
 				// Add the default constructor, which is public and parameterless
-				target.Constructors.Add(new ConstructorDeclaration(AccessLevel.Public,
+				target.Constructors.Add(new ConstructorDeclaration(Accessibility.Public,
 					EmptyArrays.CtorParameters, Splat.None, new Block()) { Document = document });
 			}
 		}
@@ -1061,7 +1061,7 @@ namespace Osprey
 			};
 		}
 
-		private FieldDeclaration ParseFieldDeclaration(ref int i, bool isConst, AccessLevel access, bool isStatic)
+		private FieldDeclaration ParseFieldDeclaration(ref int i, bool isConst, Accessibility access, bool isStatic)
 		{
 			if (Accept(i, TokenType.ParenOpen))
 				ParseError(i, "Parallel declaration is not allowed for fields or constants.");
@@ -3125,14 +3125,14 @@ namespace Osprey
 		private struct MemberModifiers
 		{
 			public bool IsStatic, IsOverridable, IsInheritable, IsAbstract, IsOverride;
-			public AccessLevel Access;
+			public Accessibility Access;
 
 			/// <summary>
 			/// Gets a value indicating whether the instance is empty; that is, no modifiers have been declared.
 			/// </summary>
 			public bool IsEmpty
 			{
-				get { return !(IsStatic || IsOverridable || IsInheritable || IsAbstract || IsOverride) && Access == AccessLevel.None; }
+				get { return !(IsStatic || IsOverridable || IsInheritable || IsAbstract || IsOverride) && Access == Accessibility.None; }
 			}
 
 			public void ValidateForClass(Token errorToken)
@@ -3143,20 +3143,20 @@ namespace Osprey
 					throw new ParseException(errorToken, "A static class cannot be inheritable or abstract.");
 				if (IsAbstract && IsInheritable)
 					throw new ParseException(errorToken, "A class cannot be marked both abstract and inheritable.");
-				if (Access == AccessLevel.Protected)
+				if (Access == Accessibility.Protected)
 					throw new ParseException(errorToken, "A class cannot be marked as protected.");
 
-				if (Access == AccessLevel.None)
-					Access = AccessLevel.Public;
+				if (Access == Accessibility.None)
+					Access = Accessibility.Public;
 			}
 			public void ValidateForEnum(Token errorToken)
 			{
-				if (IsOverride || IsStatic || IsOverridable || IsInheritable || IsAbstract || Access == AccessLevel.Protected)
+				if (IsOverride || IsStatic || IsOverridable || IsInheritable || IsAbstract || Access == Accessibility.Protected)
 					throw new ParseException(errorToken,
 						"An enum cannot be marked as override, static, overridable, inheritable, abstract or protected.");
 
-				if (Access == AccessLevel.None)
-					Access = AccessLevel.Public;
+				if (Access == Accessibility.None)
+					Access = Accessibility.Public;
 			}
 			public void ValidateForMethodOrProperty(Token errorToken)
 			{
@@ -3168,13 +3168,13 @@ namespace Osprey
 				if (IsAbstract && IsOverridable)
 					throw new ParseException(errorToken, "A method, property or indexer cannot be marked as both abstract and overridable.");
 
-				if (Access == AccessLevel.Private && (IsAbstract || IsOverridable || IsOverride))
+				if (Access == Accessibility.Private && (IsAbstract || IsOverridable || IsOverride))
 					throw new ParseException(errorToken,
 						"A private method, property or indexer cannot be marked abstract, overridable or override.");
 				// No declared accessibility => default to private, unless override, in which case inherit the accessibility.
 				// We can't check what's being overridden here, but if there is no override specifier, we can still throw.
 				// (Code at a later stage makes sure that there is a member to override, and inherits the accessibility correctly.)
-				if (Access == AccessLevel.None && !IsOverride && (IsAbstract || IsOverridable))
+				if (Access == Accessibility.None && !IsOverride && (IsAbstract || IsOverridable))
 					throw new ParseException(errorToken,
 						"A method, property or indexer marked abstract or overridable cannot be private.");
 			}
@@ -3194,7 +3194,7 @@ namespace Osprey
 				if (IsStatic)
 				{
 					if (IsOverridable || IsInheritable || IsAbstract || IsOverride ||
-						Access != AccessLevel.None)
+						Access != Accessibility.None)
 						throw new ParseException(errorToken,
 							"A static constructor cannot have any modifiers except 'static'.");
 				}
@@ -3203,8 +3203,8 @@ namespace Osprey
 					if (IsAbstract || IsInheritable || IsOverridable || IsOverride)
 						throw new ParseException(errorToken,
 							"An instance constructor cannot be marked as abstract, inheritable, overridable or override.");
-					if (Access == AccessLevel.None)
-						Access = AccessLevel.Private;
+					if (Access == Accessibility.None)
+						Access = Accessibility.Private;
 				}
 			}
 			public void ValidateForGlobal(Token errorToken)
@@ -3212,7 +3212,7 @@ namespace Osprey
 				if (IsStatic || IsInheritable || IsOverridable || IsAbstract || IsOverride)
 					throw new ParseException(errorToken,
 						"Global functions and constants cannot be declared static, inheritable, overridable, abstract or override.");
-				if (Access == AccessLevel.Protected)
+				if (Access == Accessibility.Protected)
 					throw new ParseException(errorToken, "Global functions and constants cannot be declared protected.");
 			}
 		}

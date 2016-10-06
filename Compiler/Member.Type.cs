@@ -18,7 +18,7 @@ namespace Osprey.Members
 				throw new ArgumentNullException("parent");
 			this.parent = parent;
 		}
-		protected Type(string name, MemberKind kind, AccessLevel access, Namespace parent)
+		protected Type(string name, MemberKind kind, Accessibility access, Namespace parent)
 			: base(name, kind, null, access)
 		{
 			this.parent = parent;
@@ -95,7 +95,7 @@ namespace Osprey.Members
 					Type declType;
 					if (mem is ClassMember)
 					{
-						if (mem.Access == AccessLevel.Protected &&
+						if (mem.Access == Accessibility.Protected &&
 							mem.Kind == MemberKind.Property)
 						{
 							var prop = (Property)mem;
@@ -113,7 +113,7 @@ namespace Osprey.Members
 					else if (mem is MethodGroup)
 					{
 						var method = (MethodGroup)mem;
-						if (mem.Access == AccessLevel.Protected)
+						if (mem.Access == Accessibility.Protected)
 						{
 							while (method.BaseGroup != null)
 								method = method.BaseGroup;
@@ -167,16 +167,16 @@ namespace Osprey.Members
 		/// <param name="declType">The type that declares the member.</param>
 		/// <param name="fromType">The type that contains the expression that looks up the member, or null if it is not contained within a type.</param>
 		/// <returns>True if the member is accessible; otherwise, false.</returns>
-		public static bool IsAccessible(AccessLevel access, Type instType, Type declType, Type fromType)
+		public static bool IsAccessible(Accessibility access, Type instType, Type declType, Type fromType)
 		{
 			// Note: this algorithm is basically lifted straight from Ovum,
 			// though it does not take shared types into account (because all
 			// accessibility checking is done before the compiler extracts
 			// closure classes and the like, i.e. the things that make use
 			// of type sharing).
-			if (access == AccessLevel.Private)
+			if (access == Accessibility.Private)
 				return fromType != null && (declType == fromType || declType == fromType.SharedType);
-			else if (access == AccessLevel.Protected)
+			else if (access == Accessibility.Protected)
 			{
 				if (fromType == null)
 					return false;
@@ -190,7 +190,7 @@ namespace Osprey.Members
 				while (fromType != null && fromType != declType)
 					fromType = fromType.BaseType;
 			}
-			else if (access == AccessLevel.Internal)
+			else if (access == Accessibility.Internal)
 			{
 				return declType.Module == null || !declType.Module.Imported;
 			}
@@ -209,7 +209,7 @@ namespace Osprey.Members
 			foreach (var member in node.Members)
 				DeclareField(new EnumField(member, this));
 		}
-		public Enum(string name, AccessLevel access, bool isSet, Namespace parent)
+		public Enum(string name, Accessibility access, bool isSet, Namespace parent)
 			: base(name, MemberKind.Enum, access, parent)
 		{
 			IsPrimitive = true;
@@ -274,13 +274,13 @@ namespace Osprey.Members
 	public class EnumField : NamedMember, IConstantMember
 	{
 		public EnumField(EnumMember node, Enum parent)
-			: base(node.Name, MemberKind.EnumField, node, AccessLevel.Public)
+			: base(node.Name, MemberKind.EnumField, node, Accessibility.Public)
 		{
 			Parent = parent;
 			node.Field = this;
 		}
 		public EnumField(string name, long value, Enum parent)
-			: base(name, MemberKind.EnumField, null, AccessLevel.Public)
+			: base(name, MemberKind.EnumField, null, Accessibility.Public)
 		{
 			this.state = ConstantState.HasValue;
 			this.value = ConstantValue.CreateEnumValue(value, parent);
@@ -337,7 +337,7 @@ namespace Osprey.Members
 			this.IsStatic = node.IsStatic;
 			this.initializer = node.Initializer;
 		}
-		public Class(string name, AccessLevel access, Namespace parent)
+		public Class(string name, Accessibility access, Namespace parent)
 			: base(name, MemberKind.Class, access, parent)
 		{
 			state = ClassState.Inited;
@@ -575,7 +575,7 @@ namespace Osprey.Members
 					"The class '{0}' is static, and therefore cannot declare instance constructors.",
 					FullName));
 
-			if (ctor.Access == AccessLevel.Private && this.CanInherit)
+			if (ctor.Access == Accessibility.Private && this.CanInherit)
 				throw new DeclarationException(ctor.Node, string.Format(
 					"The class '{0}' is inheritable or abstract, and therefore cannot declare private constructors.",
 					FullName));
@@ -603,8 +603,8 @@ namespace Osprey.Members
 			if (members.ContainsKey(field.Name))
 				throw new DuplicateNameException(field.Node, field.Name);
 
-			if (field.Access == AccessLevel.None)
-				field.Access = AccessLevel.Private;
+			if (field.Access == Accessibility.None)
+				field.Access = Accessibility.Private;
 
 			members.Add(field.Name, field);
 			field.Parent = this;
@@ -624,8 +624,8 @@ namespace Osprey.Members
 			if (members.ContainsKey(constant.Name))
 				throw new DuplicateNameException(constant.Node, constant.Name);
 
-			if (constant.Access == AccessLevel.None)
-				constant.Access = AccessLevel.Private;
+			if (constant.Access == Accessibility.None)
+				constant.Access = Accessibility.Private;
 
 			members.Add(constant.Name, constant);
 			constant.Parent = this;
@@ -730,8 +730,8 @@ namespace Osprey.Members
 			string name = method.Name;
 
 			EnsureDeclarable(method.Node, method);
-			if (method.Access == AccessLevel.None)
-				method.Access = AccessLevel.Private;
+			if (method.Access == Accessibility.None)
+				method.Access = Accessibility.Private;
 
 			MethodGroup group;
 			if (members.ContainsKey(name))
@@ -866,7 +866,7 @@ namespace Osprey.Members
 			while (baseClass != null)
 			{
 				NamedMember mem;
-				if (((Class)baseClass).members.TryGetValue(name, out mem) && mem.Access != AccessLevel.Private)
+				if (((Class)baseClass).members.TryGetValue(name, out mem) && mem.Access != Accessibility.Private)
 					return mem;
 				baseClass = baseClass.BaseType;
 			}
@@ -922,7 +922,7 @@ namespace Osprey.Members
 				if (@class != null)
 				{
 					if (@class.members.ContainsKey(name) &&
-						@class.members[name].Access != AccessLevel.Private)
+						@class.members[name].Access != Accessibility.Private)
 					{
 						declType = @class;
 						return @class.members[name];
@@ -1040,7 +1040,7 @@ namespace Osprey.Members
 						if (method.IsAutoOverride)
 							method.IsOverride = true;
 
-						if (method.Access == AccessLevel.None) // no explicitly declared accessibility
+						if (method.Access == Accessibility.None) // no explicitly declared accessibility
 							method.Access = overrideCandidate.Access; // inherit from base method
 						else if (method.Access != overrideCandidate.Access)
 							throw new InconsistentAccessibilityException(errorNode,
@@ -1065,7 +1065,7 @@ namespace Osprey.Members
 					// We cannot add overloads to protected method groups outside
 					// the originating class, that is, the class that introduced
 					// the method group.
-					if (baseGroup.Access == AccessLevel.Protected)
+					if (baseGroup.Access == Accessibility.Protected)
 					{
 						// ... but we don't throw that error until we actually reach the base group.
 						if (baseGroup.BaseGroup == null)
@@ -1146,13 +1146,13 @@ namespace Osprey.Members
 							baseProp.FullName,
 							PropertyKindToString(property.PropertyKind)));
 
-				if (property.Access == AccessLevel.None)
+				if (property.Access == Accessibility.None)
 				{
 					property.Access = baseProp.Access;
 
 					var getter = property.Getter;
 					if (getter != null)
-						if (getter.Access == AccessLevel.None)
+						if (getter.Access == Accessibility.None)
 							getter.Access = baseProp.Access;
 						else if (getter.Access != baseProp.Access)
 							throw new InconsistentAccessibilityException(errorNode,
@@ -1161,7 +1161,7 @@ namespace Osprey.Members
 
 					var setter = property.Setter;
 					if (setter != null)
-						if (setter.Access == AccessLevel.None)
+						if (setter.Access == Accessibility.None)
 							setter.Access = baseProp.Access;
 						else if (setter.Access != baseProp.Access)
 							throw new InconsistentAccessibilityException(errorNode,
@@ -1241,13 +1241,13 @@ namespace Osprey.Members
 									baseIndexer.GetDisplayName(),
 									PropertyKindToString(indexer.PropertyKind)));
 
-						if (indexer.Access == AccessLevel.None)
+						if (indexer.Access == Accessibility.None)
 						{
 							indexer.Access = baseIndexer.Access;
 
 							var getter = indexer.IndexerGetter;
 							if (getter != null)
-								if (getter.Access == AccessLevel.None)
+								if (getter.Access == Accessibility.None)
 									getter.Access = baseIndexer.Access;
 								else if (getter.Access != baseIndexer.Access)
 									throw new InconsistentAccessibilityException(errorNode,
@@ -1256,7 +1256,7 @@ namespace Osprey.Members
 
 							var setter = indexer.IndexerSetter;
 							if (setter != null)
-								if (setter.Access == AccessLevel.None)
+								if (setter.Access == Accessibility.None)
 									setter.Access = baseIndexer.Access;
 								else if (setter.Access != baseIndexer.Access)
 									throw new InconsistentAccessibilityException(errorNode,
@@ -1372,7 +1372,7 @@ namespace Osprey.Members
 
 	public abstract class ClassMember : NamedMember
 	{
-		public ClassMember(string name, MemberKind kind, ParseNode node, AccessLevel access, Class parent)
+		public ClassMember(string name, MemberKind kind, ParseNode node, Accessibility access, Class parent)
 			: base(name, kind, node, access)
 		{
 			Parent = parent;
@@ -1434,13 +1434,13 @@ namespace Osprey.Members
 	public class ClassMemberMethod : Method
 	{
 		public ClassMemberMethod(ParseNode node, string name, NamedMember owner,
-			AccessLevel access, Statement body, Splat splat, params Parameter[] parameters)
+			Accessibility access, Statement body, Splat splat, params Parameter[] parameters)
 			: base(node, name, access, body, splat, parameters)
 		{
 			this.owner = owner;
 		}
 		public ClassMemberMethod(ParseNode node, string name, NamedMember owner,
-			AccessLevel access, Statement body, Signature signature)
+			Accessibility access, Statement body, Signature signature)
 			: base(node, name, access, body, signature)
 		{
 			this.owner = owner;
@@ -1452,10 +1452,10 @@ namespace Osprey.Members
 
 	public class Field : ClassMember
 	{
-		public Field(VariableDeclarator node, AccessLevel access, Class parent)
+		public Field(VariableDeclarator node, Accessibility access, Class parent)
 			: base(node.Name, MemberKind.Field, node, access, parent)
 		{ }
-		public Field(string name, AccessLevel access, Class parent)
+		public Field(string name, Accessibility access, Class parent)
 			: base(name, MemberKind.Field, null, access, parent)
 		{ }
 
@@ -1464,10 +1464,10 @@ namespace Osprey.Members
 
 	public class ClassConstant : ClassMember, IConstantMember
 	{
-		public ClassConstant(VariableDeclarator node, AccessLevel access, Class parent) :
+		public ClassConstant(VariableDeclarator node, Accessibility access, Class parent) :
 			base(node.Name, MemberKind.Constant, node, access, parent)
 		{ }
-		protected ClassConstant(string name, AccessLevel access, Class parent)
+		protected ClassConstant(string name, Accessibility access, Class parent)
 			: base(name, MemberKind.Constant, null, access, parent)
 		{
 			state = ConstantState.HasValue;
@@ -1500,7 +1500,7 @@ namespace Osprey.Members
 
 	public class ImportedClassConstant : ClassConstant
 	{
-		public ImportedClassConstant(string name, AccessLevel access, Class parent, ConstantValue value)
+		public ImportedClassConstant(string name, Accessibility access, Class parent, ConstantValue value)
 			: base(name, access, parent)
 		{
 			this.value = value;
@@ -1518,10 +1518,10 @@ namespace Osprey.Members
 	public class Property : ClassMember
 	{
 		public Property(string name, Class parent)
-			: base(name, MemberKind.Property, null, AccessLevel.None, parent)
+			: base(name, MemberKind.Property, null, Accessibility.None, parent)
 		{ }
 		protected internal Property(string name, Class parent, bool isIndexer)
-			: base(name, isIndexer ? MemberKind.Indexer : MemberKind.Property, null, AccessLevel.None, parent)
+			: base(name, isIndexer ? MemberKind.Indexer : MemberKind.Property, null, Accessibility.None, parent)
 		{ }
 
 		private PropertyAccessor getter, setter;
@@ -1772,7 +1772,7 @@ namespace Osprey.Members
 	public class IndexerMember : ClassMember
 	{
 		public IndexerMember(Class parent)
-			: base(Indexer.MemberName, MemberKind.IndexerMember, null, AccessLevel.None, parent)
+			: base(Indexer.MemberName, MemberKind.IndexerMember, null, Accessibility.None, parent)
 		{
 			Indexers = new List<Indexer>(1);
 		}
@@ -1928,7 +1928,7 @@ namespace Osprey.Members
 			}
 			method.Parameters = parameters;
 		}
-		public Constructor(Block body, AccessLevel access, Class parent, Splat splat, params Parameter[] parameters)
+		public Constructor(Block body, Accessibility access, Class parent, Splat splat, params Parameter[] parameters)
 			: base(InstanceCtorName, MemberKind.Constructor, null, access, parent)
 		{
 			method = new ClassMemberMethod(null, InstanceCtorName, this,
@@ -1938,7 +1938,7 @@ namespace Osprey.Members
 			};
 			this.IsStatic = false;
 		}
-		public Constructor(Block body, AccessLevel access, Class parent, Signature signature)
+		public Constructor(Block body, Accessibility access, Class parent, Signature signature)
 			: base(InstanceCtorName, MemberKind.Constructor, null, access, parent)
 		{
 			method = new ClassMemberMethod(null, InstanceCtorName, this,
@@ -1949,10 +1949,10 @@ namespace Osprey.Members
 			this.IsStatic = false;
 		}
 		public Constructor(Block body, Class parent)
-			: base(StaticCtorName, MemberKind.Constructor, null, AccessLevel.Private, parent)
+			: base(StaticCtorName, MemberKind.Constructor, null, Accessibility.Private, parent)
 		{
 			method = new ClassMemberMethod(null, StaticCtorName, this,
-				AccessLevel.Private, body, Signature.Empty)
+				Accessibility.Private, body, Signature.Empty)
 			{
 				Flags = MemberFlags.Constructor,
 			};
@@ -1984,10 +1984,10 @@ namespace Osprey.Members
 	public class Iterator : ClassMember
 	{
 		public Iterator(IteratorDeclaration node, Class parent)
-			: base(MemberName, MemberKind.Iterator, node, AccessLevel.None, parent)
+			: base(MemberName, MemberKind.Iterator, node, Accessibility.None, parent)
 		{
 			method = new ClassMemberMethod(node, MemberName, this,
-				AccessLevel.Public, node.Body, Splat.None, new Parameter[0])
+				Accessibility.Public, node.Body, Splat.None, new Parameter[0])
 			{
 				Flags = MemberFlags.Instance | MemberFlags.AutoOverride | MemberFlags.Overridable | MemberFlags.ImplDetail,
 			};
@@ -2003,7 +2003,7 @@ namespace Osprey.Members
 	public class OperatorOverload : ClassMember
 	{
 		public OperatorOverload(BinaryOperatorOverload node, Class parent)
-			: base(null, MemberKind.Operator, node, AccessLevel.Public, parent)
+			: base(null, MemberKind.Operator, node, Accessibility.Public, parent)
 		{
 			index = node.GetIndex();
 
@@ -2012,25 +2012,25 @@ namespace Osprey.Members
 				new Parameter(node.Right, null),
 			};
 			method = new ClassMemberMethod(node, node.GetMethodName(), this,
-				AccessLevel.Public, node.Body, Splat.None, parameters)
+				Accessibility.Public, node.Body, Splat.None, parameters)
 			{
 				Flags = MemberFlags.Operator,
 			};
 		}
 		public OperatorOverload(UnaryOperatorOverload node, Class parent)
-			: base(null, MemberKind.Operator, node, AccessLevel.Public, parent)
+			: base(null, MemberKind.Operator, node, Accessibility.Public, parent)
 		{
 			index = node.GetIndex();
 
 			Parameter[] parameters = { new Parameter(node.Operand, null) };
 			method = new ClassMemberMethod(node, node.GetMethodName(), this,
-				AccessLevel.Public, node.Body, Splat.None, parameters)
+				Accessibility.Public, node.Body, Splat.None, parameters)
 			{
 				Flags = MemberFlags.Operator,
 			};
 		}
 		internal OperatorOverload(int index, Class parent, ClassMemberMethod method)
-			: base(null, MemberKind.Operator, null, AccessLevel.Public, parent)
+			: base(null, MemberKind.Operator, null, Accessibility.Public, parent)
 		{
 			this.index = index;
 			this.method = method;
@@ -2049,7 +2049,7 @@ namespace Osprey.Members
 	public class ClosureClass : Class
 	{
 		public ClosureClass(string name, BlockSpace parentBlock, Namespace parent, Compiler compiler)
-			: base(name, AccessLevel.None, parent)
+			: base(name, Accessibility.None, parent)
 		{
 			BaseType = compiler.ObjectType;
 
@@ -2078,7 +2078,7 @@ namespace Osprey.Members
 		{
 			if (variable.CaptureField == null)
 			{
-				variable.CaptureField = new Field(GetFieldName(variable), AccessLevel.Internal, this)
+				variable.CaptureField = new Field(GetFieldName(variable), Accessibility.Internal, this)
 				{
 					IsStatic = false,
 				};
@@ -2106,7 +2106,7 @@ namespace Osprey.Members
 			else if (blockToField.ContainsKey(block))
 				return blockToField[block];
 
-			var field = new Field(GetFieldName(block), AccessLevel.Internal, this);
+			var field = new Field(GetFieldName(block), Accessibility.Internal, this);
 			field.IsStatic = false;
 
 			DeclareField(field);
@@ -2119,7 +2119,7 @@ namespace Osprey.Members
 		{
 			if (thisField == null)
 			{
-				thisField = new Field(ThisFieldName, AccessLevel.Internal, this)
+				thisField = new Field(ThisFieldName, Accessibility.Internal, this)
 				{
 					IsStatic = false,
 				};
@@ -2154,7 +2154,7 @@ namespace Osprey.Members
 	public class GeneratorClass : Class
 	{
 		public GeneratorClass(string name, Method owner, Namespace parent, Compiler compiler)
-			: base(name, AccessLevel.Private, parent)
+			: base(name, Accessibility.Private, parent)
 		{
 			BaseType = compiler.IteratorType;
 
@@ -2188,14 +2188,14 @@ namespace Osprey.Members
 
 		private void AddDefaultMembers()
 		{
-			stateField = new Field(StateFieldName, AccessLevel.Private, this)
+			stateField = new Field(StateFieldName, Accessibility.Private, this)
 			{
 				IsStatic = false,
 				IsImplDetail = true,
 			};
 			DeclareField(stateField);
 
-			currentValueField = new Field(CurrentValueFieldName, AccessLevel.Private, this)
+			currentValueField = new Field(CurrentValueFieldName, Accessibility.Private, this)
 			{
 				IsStatic = false,
 				IsImplDetail = true,
@@ -2204,7 +2204,7 @@ namespace Osprey.Members
 
 			var currentValueGetterMethod = new ClassMemberMethod(null,
 				PropertyAccessor.GetAccessorMethodName(false, "current"),
-				null, AccessLevel.Public,
+				null, Accessibility.Public,
 				new Block(
 					new ReturnStatement(
 						new InstanceMemberAccess(new ThisAccess(), this, currentValueField)
@@ -2244,7 +2244,7 @@ namespace Osprey.Members
 					) { IgnoreValue = true }
 				),
 			};
-			var ctor = new Constructor(new Block(ctorBody), AccessLevel.Internal, this, Signature.Empty);
+			var ctor = new Constructor(new Block(ctorBody), Accessibility.Internal, this, Signature.Empty);
 			DeclareConstructor(ctor);
 		}
 
@@ -2261,7 +2261,7 @@ namespace Osprey.Members
 				var name = ClosureClass.GetFieldName(variable);
 				if (!members.ContainsKey(name))
 				{
-					var field = new Field(name, AccessLevel.Internal, this)
+					var field = new Field(name, Accessibility.Internal, this)
 					{
 						IsStatic = false,
 					};
@@ -2288,7 +2288,7 @@ namespace Osprey.Members
 				}
 
 			{
-				var field = new Field(GetAnonFieldName(anonFields.Count), AccessLevel.Internal, this);
+				var field = new Field(GetAnonFieldName(anonFields.Count), Accessibility.Internal, this);
 				field.IsStatic = false;
 				field.IsImplDetail = true;
 				DeclareField(field);
@@ -2301,7 +2301,7 @@ namespace Osprey.Members
 		{
 			if (thisField == null)
 			{
-				thisField = new Field(ClosureClass.ThisFieldName, AccessLevel.Internal, this)
+				thisField = new Field(ClosureClass.ThisFieldName, Accessibility.Internal, this)
 				{
 					IsStatic = false,
 				};

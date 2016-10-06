@@ -231,14 +231,14 @@ namespace Osprey
 
 			if (globalsClass == null)
 			{
-				globalsClass = new Class("<global>", AccessLevel.Internal, projectNamespace);
+				globalsClass = new Class("<global>", Accessibility.Internal, projectNamespace);
 				globalsClass.BaseType = ObjectType;
 				globalsClass.IsStatic = true;
 				AddType(globalsClass);
 			}
 
 			var name = string.Format("{0}@{1}", variable.Name, documents.IndexOf(parentDocument));
-			variable.CaptureField = new Field(name, AccessLevel.Internal, globalsClass);
+			variable.CaptureField = new Field(name, Accessibility.Internal, globalsClass);
 			globalsClass.DeclareField(variable.CaptureField);
 		}
 
@@ -254,7 +254,7 @@ namespace Osprey
 		{
 			if (lambdaOpClass == null)
 			{
-				lambdaOpClass = new Class("<lambda>", AccessLevel.Internal, projectNamespace);
+				lambdaOpClass = new Class("<lambda>", Accessibility.Internal, projectNamespace);
 				lambdaOpClass.BaseType = ObjectType;
 				lambdaOpClass.IsStatic = true;
 				AddType(lambdaOpClass);
@@ -272,7 +272,7 @@ namespace Osprey
 					case LambdaOperator.Minus:
 					case LambdaOperator.BitwiseNot:
 						{
-							var unaryMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None, new Parameter("a", null));
+							var unaryMethod = new BytecodeMethod(name, Accessibility.Internal, Splat.None, new Parameter("a", null));
 							unaryMethod.IsStatic = true;
 							unaryMethod.IsImplDetail = true;
 							unaryMethod.Append(new LoadLocal(new LocalVariable(0, null, false, true)));
@@ -286,7 +286,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Or:
 						{
-							var orMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
+							var orMethod = new BytecodeMethod(name, Accessibility.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							orMethod.IsStatic = true;
 							orMethod.IsImplDetail = true;
@@ -310,7 +310,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Xor:
 						{
-							var xorMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
+							var xorMethod = new BytecodeMethod(name, Accessibility.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							xorMethod.IsStatic = true;
 							xorMethod.IsImplDetail = true;
@@ -357,7 +357,7 @@ namespace Osprey
 						}
 					case LambdaOperator.And:
 						{
-							var andMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
+							var andMethod = new BytecodeMethod(name, Accessibility.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							andMethod.IsStatic = true;
 							andMethod.IsImplDetail = true;
@@ -381,7 +381,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Inequality:
 						{
-							var neqMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
+							var neqMethod = new BytecodeMethod(name, Accessibility.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							neqMethod.IsStatic = true;
 							neqMethod.IsImplDetail = true;
@@ -404,7 +404,7 @@ namespace Osprey
 						}
 					case LambdaOperator.Not:
 						{
-							var notMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None, new Parameter("a", null));
+							var notMethod = new BytecodeMethod(name, Accessibility.Internal, Splat.None, new Parameter("a", null));
 							notMethod.IsStatic = true;
 							notMethod.IsImplDetail = true;
 
@@ -425,7 +425,7 @@ namespace Osprey
 					default:
 						{
 							// Regular binary operator
-							var binaryMethod = new BytecodeMethod(name, AccessLevel.Internal, Splat.None,
+							var binaryMethod = new BytecodeMethod(name, Accessibility.Internal, Splat.None,
 								new Parameter("a", null), new Parameter("b", null));
 							binaryMethod.IsStatic = true;
 							binaryMethod.IsImplDetail = true;
@@ -784,9 +784,9 @@ namespace Osprey
 
 				Notice("Initializing main method...", CompilerVerbosity.Verbose);
 				mainMethodBody = new Block(mainMethodContents.ToArray());
-				mainMethod = new Method(null, DefaultMainMethodName, AccessLevel.Internal, mainMethodBody, Splat.None, null);
+				mainMethod = new Method(null, DefaultMainMethodName, Accessibility.Internal, mainMethodBody, Splat.None, null);
 
-				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, AccessLevel.Internal);
+				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, Accessibility.Internal);
 				mainMethodGroup.AddOverload(mainMethod);
 				AddGlobalFunction(mainMethodGroup); // Always first!
 			}
@@ -959,7 +959,7 @@ namespace Osprey
 							if (!ns.ContainsMember(lastPart))
 							{
 								ns.DeclareConstant(new GlobalConstant(lastPart,
-									ConstantValue.CreateBoolean(kvp.Value), AccessLevel.Internal));
+									ConstantValue.CreateBoolean(kvp.Value), Accessibility.Internal));
 								Notice(CompilerVerbosity.Verbose, "Declared constant: {0} = {1}", kvp.Key, kvp.Value);
 							}
 							else
@@ -1124,7 +1124,7 @@ namespace Osprey
 
 			var classDecl = (ClassDeclaration)typeDecl;
 			if (classDecl.IsStatic || classDecl.IsAbstract || classDecl.IsPrimitive ||
-				!classDecl.IsInheritable || classDecl.Access == AccessLevel.Internal)
+				!classDecl.IsInheritable || classDecl.Access == Accessibility.Internal)
 				throw new CompileTimeException(classDecl, "Invalid aves.Object declaration: cannot be marked static, abstract, __primitive or private, and must be marked inheritable. Otherwise you'll break the type hierarchy!");
 			if (classDecl.BaseClass != null)
 				throw new CompileTimeException(classDecl,
@@ -1144,7 +1144,7 @@ namespace Osprey
 
 			var classDecl = (ClassDeclaration)typeDecl;
 			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable ||
-				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Internal)
+				!classDecl.IsAbstract || classDecl.Access == Accessibility.Internal)
 				throw new CompileTimeException(classDecl, "Invalid aves.Enum declaration: cannot be marked static, __primitive, inheritable or private, and must be marked abstract.");
 			if (type.BaseType != ObjectType)
 				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.Enum declaration: must inherit from aves.Object.");
@@ -1159,7 +1159,7 @@ namespace Osprey
 
 			var classDecl = (ClassDeclaration)typeDecl;
 			if (classDecl.IsStatic || classDecl.IsPrimitive || classDecl.IsInheritable ||
-				!classDecl.IsAbstract || classDecl.Access == AccessLevel.Internal)
+				!classDecl.IsAbstract || classDecl.Access == Accessibility.Internal)
 				throw new CompileTimeException(classDecl, "Invalid aves.EnumSet declaration: cannot be marked static, __primitive, inheritable or private, and must be marked abstract.");
 			if (type.BaseType != EnumType)
 				throw new CompileTimeException(classDecl.BaseClass, "Invalid aves.EnumSet declaration: must inherit from aves.Enum.");
@@ -1405,7 +1405,7 @@ namespace Osprey
 
 				// Rename the method to make it unique within the container!
 				localMethod.Name = LocalMethod.GetExtractedName(parentMethod ?? localMethod, localMethod);
-				localMethod.Access = AccessLevel.Private; // hidd'n from view
+				localMethod.Access = Accessibility.Private; // hidd'n from view
 
 				if (parentClass != null)
 					parentClass.DeclareMethod(localMethod);
@@ -1417,7 +1417,7 @@ namespace Osprey
 			}
 			else
 			{
-				localMethod.Access = AccessLevel.Internal; // not hidd'n, technically speakin'
+				localMethod.Access = Accessibility.Internal; // not hidd'n, technically speakin'
 				localMethod.IsStatic = false;
 
 				// If the function captures variables, then we need to create a closure class for

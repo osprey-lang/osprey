@@ -94,7 +94,7 @@ namespace Osprey.ModuleFile
 		{
 			var flags = (Raw.TypeFlags)0;
 
-			if (type.Access == AccessLevel.Public)
+			if (type.Access == Accessibility.Public)
 				flags |= Raw.TypeFlags.Public;
 			else
 				flags |= Raw.TypeFlags.Internal;
@@ -124,7 +124,7 @@ namespace Osprey.ModuleFile
 			flags |= Raw.TypeFlags.Primitive;
 			flags |= Raw.TypeFlags.Sealed;
 
-			if (type.Access == AccessLevel.Public)
+			if (type.Access == Accessibility.Public)
 				flags |= Raw.TypeFlags.Public;
 			else
 				flags |= Raw.TypeFlags.Internal;
@@ -243,13 +243,13 @@ namespace Osprey.ModuleFile
 
 			switch (Field.Access)
 			{
-				case AccessLevel.Public:
+				case Accessibility.Public:
 					flags |= Raw.FieldFlags.Public;
 					break;
-				case AccessLevel.Internal:
+				case Accessibility.Internal:
 					flags |= Raw.FieldFlags.Internal;
 					break;
-				case AccessLevel.Protected:
+				case Accessibility.Protected:
 					flags |= Raw.FieldFlags.Protected;
 					break;
 				default:
@@ -296,13 +296,13 @@ namespace Osprey.ModuleFile
 
 			switch (Constant.Access)
 			{
-				case AccessLevel.Public:
+				case Accessibility.Public:
 					flags |= Raw.FieldFlags.Public;
 					break;
-				case AccessLevel.Internal:
+				case Accessibility.Internal:
 					flags |= Raw.FieldFlags.Internal;
 					break;
-				case AccessLevel.Protected:
+				case Accessibility.Protected:
 					flags |= Raw.FieldFlags.Protected;
 					break;
 				default:
@@ -396,13 +396,13 @@ namespace Osprey.ModuleFile
 			var parentClass = Method.ParentAsClass;
 			switch (Method.Access)
 			{
-				case AccessLevel.Public:
+				case Accessibility.Public:
 					flags |= Raw.MethodFlags.Public;
 					break;
-				case AccessLevel.Internal:
+				case Accessibility.Internal:
 					flags |= Raw.MethodFlags.Internal;
 					break;
-				case AccessLevel.Protected:
+				case Accessibility.Protected:
 					flags |= Raw.MethodFlags.Protected;
 					break;
 				default:
@@ -558,7 +558,7 @@ namespace Osprey.ModuleFile
 		{
 			var flags = (Raw.ConstantFlags)0;
 
-			if (Constant.Access == AccessLevel.Public)
+			if (Constant.Access == Accessibility.Public)
 				flags |= Raw.ConstantFlags.Public;
 			else
 				flags |= Raw.ConstantFlags.Internal;

@@ -20,7 +20,7 @@ namespace Osprey.Members
 		/// <param name="kind">The type of the member.</param>
 		/// <param name="node">The <see cref="Node"/> that declares the member.</param>
 		/// <param name="access">The declared accessibility of the member.</param>
-		protected Member(MemberKind kind, ParseNode node, AccessLevel access)
+		protected Member(MemberKind kind, ParseNode node, Accessibility access)
 		{
 			this.kind = kind;
 			this.node = node;
@@ -35,9 +35,9 @@ namespace Osprey.Members
 		/// <summary>Gets the node that declares the member.</summary>
 		public ParseNode Node { get { return node; } }
 
-		private AccessLevel access;
+		private Accessibility access;
 		/// <summary>Gets the declared accessibility of the member.</summary>
-		public AccessLevel Access { get { return access; } internal set { access = value; } }
+		public Accessibility Access { get { return access; } internal set { access = value; } }
 
 		public abstract Namespace GetContainingNamespace();
 	}
@@ -47,7 +47,7 @@ namespace Osprey.Members
 	/// </summary>
 	public abstract class NamedMember : Member
 	{
-		public NamedMember(string name, MemberKind kind, ParseNode node, AccessLevel access)
+		public NamedMember(string name, MemberKind kind, ParseNode node, Accessibility access)
 			: base(kind, node, access)
 		{
 			this.name = name;
@@ -78,12 +78,12 @@ namespace Osprey.Members
 	public class AmbiguousMember : NamedMember
 	{
 		public AmbiguousMember(string name, NamedMember firstMember)
-			: base(name, MemberKind.Ambiguous, null, AccessLevel.None)
+			: base(name, MemberKind.Ambiguous, null, Accessibility.None)
 		{
 			Members.Add(firstMember);
 		}
 		public AmbiguousMember(string name, params NamedMember[] members)
-			: base(name, MemberKind.Ambiguous, null, AccessLevel.None)
+			: base(name, MemberKind.Ambiguous, null, Accessibility.None)
 		{
 			Members.AddRange(members);
 		}
@@ -170,7 +170,7 @@ namespace Osprey.Members
 	public class AmbiguousTypeName : Type
 	{
 		public AmbiguousTypeName(TypeName name, params Type[] types)
-			: base(null, MemberKind.Ambiguous, AccessLevel.None, null)
+			: base(null, MemberKind.Ambiguous, Accessibility.None, null)
 		{
 			typeName = name;
 			Types.AddRange(types);
@@ -291,7 +291,7 @@ namespace Osprey.Members
 		/// Initializes a new, top-level namespace; a global declaration space, in other words.
 		/// </summary>
 		internal Namespace()
-			: base(null, MemberKind.Namespace, null, AccessLevel.Public)
+			: base(null, MemberKind.Namespace, null, Accessibility.Public)
 		{ }
 		/// <summary>
 		/// Initializes a new <see cref="Namespace"/> member with the specified name.
@@ -300,7 +300,7 @@ namespace Osprey.Members
 		/// <remarks>Only the global declaration space should have a name of null.</remarks>
 		/// <remarks>This constructor should only ever be called from outside <see cref="Namespace"/> by classes that inherit from it. Use <see cref="GetNamespace"/> to create and access namespaces within any given namespace.</remarks>
 		protected Namespace(string name)
-			: base(name, MemberKind.Namespace, null, AccessLevel.Public)
+			: base(name, MemberKind.Namespace, null, Accessibility.Public)
 		{ }
 
 		private Namespace parent;
@@ -849,10 +849,10 @@ namespace Osprey.Members
 	public class GlobalConstant : NamedMember, IConstantMember
 	{
 		public GlobalConstant(string name, VariableDeclarator node, bool isPublic)
-			: base(name, MemberKind.GlobalConstant, node, isPublic ? AccessLevel.Public : AccessLevel.Internal)
+			: base(name, MemberKind.GlobalConstant, node, isPublic ? Accessibility.Public : Accessibility.Internal)
 		{ }
 
-		internal GlobalConstant(string name, ConstantValue value, AccessLevel access)
+		internal GlobalConstant(string name, ConstantValue value, Accessibility access)
 			: base(name, MemberKind.GlobalConstant, null, access)
 		{
 			this.state = ConstantState.HasValue;
@@ -1503,7 +1503,7 @@ namespace Osprey.Members
 					)
 				)
 			};
-			var ctor = new Constructor(new Block(ctorBody), AccessLevel.Internal, closure, Signature.Empty);
+			var ctor = new Constructor(new Block(ctorBody), Accessibility.Internal, closure, Signature.Empty);
 			closure.DeclareConstructor(ctor);
 
 			// And return the method! Simple, innit?
@@ -1570,7 +1570,7 @@ namespace Osprey.Members
 	public abstract class LocalMember : NamedMember
 	{
 		public LocalMember(string name, MemberKind kind, ParseNode node)
-			: base(name, kind, node, AccessLevel.None)
+			: base(name, kind, node, Accessibility.None)
 		{ }
 
 		public BlockSpace Parent { get; internal set; }
@@ -1947,7 +1947,7 @@ namespace Osprey.Members
 	public class LocalMethod : Method, IDeclarationSpace
 	{
 		public LocalMethod(string name, LocalFunction function, Statement body, Splat splat, params Parameter[] parameters)
-			: base(function.Node, name, AccessLevel.Internal, body, new Signature(parameters, splat))
+			: base(function.Node, name, Accessibility.Internal, body, new Signature(parameters, splat))
 		{
 			this.function = function;
 			IsImplDetail = true;

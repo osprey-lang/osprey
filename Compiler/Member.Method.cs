@@ -13,7 +13,7 @@ namespace Osprey.Members
 	[DebuggerDisplay("Method {FullName} (overloads: {Count})")]
 	public class MethodGroup : NamedMember, IEnumerable<Method>
 	{
-		public MethodGroup(string name, NamedMember parent, AccessLevel access)
+		public MethodGroup(string name, NamedMember parent, Accessibility access)
 			: base(name, MemberKind.MethodGroup, null, access)
 		{
 			Parent = parent;
@@ -200,7 +200,7 @@ namespace Osprey.Members
 			node.DeclSpace = this;
 		}
 		public Method(GlobalFunctionDeclaration node)
-			: base(node.Function.Name, MemberKind.Method, node, node.IsPublic ? AccessLevel.Public : AccessLevel.Internal)
+			: base(node.Function.Name, MemberKind.Method, node, node.IsPublic ? Accessibility.Public : Accessibility.Internal)
 		{
 			var func = node.Function;
 			this.body = BlockSpace.FromStatement(func.Body, this);
@@ -219,7 +219,7 @@ namespace Osprey.Members
 
 			node.DeclSpace = this;
 		}
-		public Method(ParseNode node, string name, AccessLevel access, Statement body, Splat splat, params Parameter[] parameters)
+		public Method(ParseNode node, string name, Accessibility access, Statement body, Splat splat, params Parameter[] parameters)
 			: base(name, MemberKind.Method, node, access)
 		{
 			this.body = BlockSpace.FromStatement(body, this);
@@ -243,7 +243,7 @@ namespace Osprey.Members
 				Parameters = EmptyArrays.Parameters;
 			}
 		}
-		public Method(ParseNode node, string name, AccessLevel access, Statement body, Signature signature)
+		public Method(ParseNode node, string name, Accessibility access, Statement body, Signature signature)
 			: base(name, MemberKind.Method, node, access)
 		{
 			this.body = BlockSpace.FromStatement(body, this);
@@ -639,7 +639,7 @@ namespace Osprey.Members
 			genClass = new GeneratorClass(GetGeneratorClassName(namePrefix), this, ns, compiler);
 			genClass.SharedType = @class;
 
-			var moveNext = new Method(this.Node, "moveNext", AccessLevel.Public, null, Signature.Empty)
+			var moveNext = new Method(this.Node, "moveNext", Accessibility.Public, null, Signature.Empty)
 			{
 				IsStatic = false,
 				IsOverride = true,
@@ -799,7 +799,7 @@ namespace Osprey.Members
 
 	internal class BytecodeMethod : Method
 	{
-		public BytecodeMethod(string name, AccessLevel access, Splat splat, params Parameter[] parameters)
+		public BytecodeMethod(string name, Accessibility access, Splat splat, params Parameter[] parameters)
 			: base(null, name, access, null, new Signature(parameters, splat))
 		{
 			if (parameters != null)
