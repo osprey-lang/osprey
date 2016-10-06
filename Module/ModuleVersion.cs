@@ -154,12 +154,15 @@ namespace Osprey
 
 		public static bool operator ==(ModuleVersion a, ModuleVersion b)
 		{
+			if (object.ReferenceEquals(a, null) ||
+				object.ReferenceEquals(b, null))
+				return object.ReferenceEquals(a, b);
 			return a.Equals(b);
 		}
 
 		public static bool operator !=(ModuleVersion a, ModuleVersion b)
 		{
-			return !a.Equals(b);
+			return !(a == b);
 		}
 
 		public static bool operator <(ModuleVersion a, ModuleVersion b)
