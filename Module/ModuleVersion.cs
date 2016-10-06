@@ -89,7 +89,7 @@ namespace Osprey
 			);
 		}
 
-		public ModuleVersion Parse(string value)
+		public static ModuleVersion Parse(string value)
 		{
 			ModuleVersion result;
 			switch (TryParseValue(value, out result))
@@ -107,7 +107,7 @@ namespace Osprey
 			}
 		}
 
-		public bool TryParse(string value, out ModuleVersion result)
+		public static bool TryParse(string value, out ModuleVersion result)
 		{
 			switch (TryParseValue(value, out result))
 			{
@@ -121,7 +121,7 @@ namespace Osprey
 			}
 		}
 
-		private ParseResult TryParseValue(string value, out ModuleVersion result)
+		private static ParseResult TryParseValue(string value, out ModuleVersion result)
 		{
 			result = null;
 			int major = -1,
@@ -143,7 +143,7 @@ namespace Osprey
 			return ParseResult.Ok;
 		}
 
-		private bool TryParseComponent(string component, out int result)
+		private static bool TryParseComponent(string component, out int result)
 		{
 			return int.TryParse(component, NumberStyles.None, CI.InvariantCulture, out result);
 		}
