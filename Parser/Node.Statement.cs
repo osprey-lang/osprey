@@ -1195,12 +1195,6 @@ namespace Osprey.Nodes
 		/// <summary>
 		/// Temporary/anon fields used in generators.
 		/// </summary>
-		/// <remarks>
-		/// If this loop has a <see cref="RangeExpression"/> as its list, then this array contains two fields:
-		/// one for the high end of the range, one for the step. Either of these may be null, if the corresponding
-		/// expression can be safely inlined.
-		/// Otherwise, this array only contains a single field, namely the Iterator that the loop loops over.
-		/// </remarks>
 		private Field[] tempFields;
 
 		public override bool CanReturn
@@ -1309,19 +1303,7 @@ namespace Osprey.Nodes
 			if (forGenerator && Body.CanYield)
 			{
 				var genClass = currentBlock.Method.GeneratorClass;
-				if (List is RangeExpression)
-				{
-					var range = (RangeExpression)List;
-					tempFields = new Field[2];
-					if (!range.High.CanSafelyInline)
-						tempFields[0] = genClass.DeclareAnonField(BodyBlock);
-					if (!range.Step.CanSafelyInline)
-						tempFields[1] = genClass.DeclareAnonField(BodyBlock);
-				}
-				else
-				{
-					tempFields = new Field[] { genClass.DeclareAnonField(BodyBlock) };
-				}
+				tempFields = new Field[] { genClass.DeclareAnonField(BodyBlock) };
 			}
 
 			List = List.TransformClosureLocals(currentBlock, forGenerator);
@@ -1333,90 +1315,9 @@ namespace Osprey.Nodes
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
 			if (Else == null)
-			{
-				if (List is RangeExpression)
-					CompileWithRange(compiler, method);
-				else
-					CompileWithIterator(compiler, method);
-			}
+				CompileWithIterator(compiler, method);
 			else
-			{
-				if (List is RangeExpression)
-					CompileWithRangeAndElse(compiler, method);
-				else
-					CompileWithIteratorAndElse(compiler, method);
-			}
-		}
-
-		private void CompileWithRange(Compiler compiler, MethodBuilder method)
-		{
-			/* The loop form
-			 *   for x in [n to m, s] { ... }
-			 * is equivalent to:
-			 *   var x = n;
-			 *   var high = m; // evaluate only once
-			 *   var step = s; //     --- " ---
-			 *   while x <= high {
-			 *       ...
-			 *       x += step;
-			 *   }
-			 * And note that another part of the compiler makes sure there's
-			 * only one variable to the left of 'in'. In other words, the
-			 * following is invalid and checked elsewhere:
-			 *   for a, b in [1 to 10] { }
-			 */
-
-			var rangeState = new RangeState
-			{
-				Counter = Variables[0],
-				Range = (RangeExpression)List,
-			};
-			if (tempFields != null)
-			{
-				rangeState.HighField = tempFields[0];
-				rangeState.StepField = tempFields[1];
-			}
-
-			rangeState.Init(compiler, method);
-
-			var loopCond = new Label("for-cond");
-			var loopNext = new Label("for-next");
-			var loopEnd = new Label("for-end");
-
-			var loopState = new LoopState(Label, loopNext, loopEnd);
-			method.PushState(loopState); // Enter loop
-
-			// Output order: condition, body, increment
-			{ // Loop condition
-				method.PushLocation(this);
-				method.Append(loopCond);
-
-				rangeState.LoadCounter(compiler, method); // Load the counter
-				rangeState.LoadHighValue(compiler, method); // Load the high value
-
-				method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= high
-				method.Append(Branch.IfFalse(loopEnd)); // If false, branch to end
-				// If true, run loop body
-				method.PopLocation(); // this
-			}
-			{ // Loop body
-				Body.Compile(compiler, method);
-			}
-			{ // Loop increment
-				method.PushLocation(this);
-				method.Append(loopNext); // 'next' target
-
-				rangeState.Increment(compiler, method); // counter += step
-
-				method.Append(Branch.Always(loopCond)); // Jump to condition (to re-test the counter)
-				method.PopLocation(); // this
-			}
-			if (this.IsEndReachable)
-				method.Append(loopEnd); // end of loop; also 'break' target
-
-			method.PopState(expected: loopState); // Exit loop
-
-			rangeState.Done();
+				CompileWithIteratorAndElse(compiler, method);
 		}
 
 		private void CompileWithIterator(Compiler compiler, MethodBuilder method)
@@ -1472,93 +1373,6 @@ namespace Osprey.Nodes
 			method.PopState(expected: loopState); // Exit the loop
 
 			iterState.Done();
-		}
-
-		private void CompileWithRangeAndElse(Compiler compiler, MethodBuilder method)
-		{
-			/* The loop form
-			 *   for x in [n to m, s] { ... } else { ... }
-			 * is equivalent to:
-			 *   var x = n;
-			 *   var high = m; // evaluate only once
-			 *   if (x <= high) {
-			 *       var step = s; //     --- " ---
-			 *       do {
-			 *           ...
-			 *           x += step;
-			 *       } while x <= high;
-			 *   } else {
-			 *       ...
-			 *   }
-			 */
-			var rangeState = new RangeState
-			{
-				Counter = Variables[0],
-				Range = (RangeExpression)List,
-			};
-			if (tempFields != null)
-			{
-				rangeState.HighField = tempFields[0];
-				rangeState.StepField = tempFields[1];
-			}
-
-			rangeState.Init(compiler, method);
-
-			var loopBody = new Label("for-body");
-			var loopNext = new Label("for-next");
-			var loopEnd = new Label("for-end");
-			var elseLabel = new Label("for-else");
-
-			method.PushLocation(this);
-			rangeState.LoadCounter(compiler, method); // Load the counter
-			rangeState.LoadHighValue(compiler, method); // Load high value
-			method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= high
-
-			method.Append(Branch.IfFalse(elseLabel)); // branch to else if not (counter <= high)
-			method.PopLocation(); // this
-
-			{ // Main body
-				var loopState = new LoopState(Label, loopNext, loopEnd);
-				method.PushState(loopState); // Enter the loop
-
-				{ // Loop body
-					method.Append(loopBody);
-					Body.Compile(compiler, method);
-				}
-				{ // Loop increment
-					method.PushLocation(this);
-					method.Append(loopNext);
-
-					rangeState.Increment(compiler, method);
-				}
-				{ // Loop condition
-					rangeState.LoadCounter(compiler, method); // Load counter
-					rangeState.LoadHighValue(compiler, method);// Load high
-
-					method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= high
-
-					method.Append(Branch.IfTrue(loopBody)); // Run another iteration if counter <= high
-					method.PopLocation(); // this
-				}
-				method.PopState(expected: loopState); // Exit the loop
-
-				if (this.IsEndReachable)
-				{
-					method.PushLocation(this);
-					method.Append(Branch.Always(loopEnd)); // Jump past the else
-					method.PopLocation(); // this
-				}
-
-				rangeState.Done();
-			}
-
-			{ // Else
-				method.Append(elseLabel);
-				Else.Compile(compiler, method);
-			}
-
-			if (this.IsEndReachable)
-				method.Append(loopEnd);
 		}
 
 		private void CompileWithIteratorAndElse(Compiler compiler, MethodBuilder method)
@@ -1641,134 +1455,6 @@ namespace Osprey.Nodes
 				method.Append(loopEnd);
 
 			iterState.Done();
-		}
-
-		private struct RangeState
-		{
-			public Variable Counter;
-			public LocalVariable CounterLoc;
-
-			public RangeExpression Range;
-
-			public LocalVariable HighLoc;
-			public LocalVariable StepLoc;
-			public Field HighField;
-			public Field StepField;
-
-			public void Init(Compiler compiler, MethodBuilder method)
-			{
-				method.PushLocation(Range.Low);
-				if (Counter.IsCaptured && Counter.CaptureField.Parent is GeneratorClass)
-				{
-					method.Append(new LoadLocal(method.GetParameter(0)));
-					Range.Low.Compile(compiler, method);
-					method.Append(StoreField.Create(method.Module, Counter.CaptureField));
-				}
-				else
-				{
-					CounterLoc = method.GetLocal(Counter.Name);
-					Range.Low.Compile(compiler, method);
-					method.Append(new StoreLocal(CounterLoc));
-				}
-				method.PopLocation();
-
-				if (!Range.High.CanSafelyInline)
-				{
-					method.PushLocation(Range.High);
-					if (HighField != null)
-					{
-						method.Append(new LoadLocal(method.GetParameter(0)));
-						Range.High.Compile(compiler, method);
-						method.Append(StoreField.Create(method.Module, HighField));
-					}
-					else
-					{
-						HighLoc = method.GetAnonymousLocal();
-						Range.High.Compile(compiler, method);
-						method.Append(new StoreLocal(HighLoc));
-					}
-					method.PopLocation();
-				}
-
-				if (!Range.Step.CanSafelyInline)
-				{
-					method.PushLocation(Range.Step);
-					if (StepField != null)
-					{
-						method.Append(new LoadLocal(method.GetParameter(0)));
-						Range.Step.Compile(compiler, method);
-						method.Append(StoreField.Create(method.Module, StepField));
-					}
-					else
-					{
-						StepLoc = method.GetAnonymousLocal();
-						Range.Step.Compile(compiler, method);
-						method.Append(new StoreLocal(StepLoc));
-					}
-					method.PopLocation();
-				}
-			}
-
-			public void Done()
-			{
-				if (HighLoc != null)
-					HighLoc.Done();
-				if (StepLoc != null)
-					StepLoc.Done();
-			}
-
-			public void LoadCounter(Compiler compiler, MethodBuilder method)
-			{
-				if (CounterLoc != null)
-					method.Append(new LoadLocal(CounterLoc));
-				else
-				{
-					method.Append(new LoadLocal(method.GetParameter(0)));
-					method.Append(LoadField.Create(method.Module, Counter.CaptureField));
-				}
-			}
-
-			public void Increment(Compiler compiler, MethodBuilder method)
-			{
-				if (CounterLoc == null)
-					method.Append(new LoadLocal(method.GetParameter(0)));
-
-				LoadCounter(compiler, method); // Load the counter
-				LoadStepValue(compiler, method); // Load step value
-				method.Append(new SimpleInstruction(Opcode.Add)); // counter + step
-
-				// counter += step
-				if (CounterLoc != null)
-					method.Append(new StoreLocal(CounterLoc));
-				else
-					method.Append(StoreField.Create(method.Module, Counter.CaptureField));
-			}
-
-			public void LoadHighValue(Compiler compiler, MethodBuilder method)
-			{
-				if (Range.High.CanSafelyInline)
-					Range.High.Compile(compiler, method);
-				else if (HighField != null)
-				{
-					method.Append(new LoadLocal(method.GetParameter(0)));
-					method.Append(LoadField.Create(method.Module, HighField));
-				}
-				else
-					method.Append(new LoadLocal(HighLoc));
-			}
-
-			public void LoadStepValue(Compiler compiler, MethodBuilder method)
-			{
-				if (Range.Step.CanSafelyInline)
-					Range.Step.Compile(compiler, method);
-				else if (StepField != null)
-				{
-					method.Append(new LoadLocal(method.GetParameter(0)));
-					method.Append(LoadField.Create(method.Module, StepField));
-				}
-				else
-					method.Append(new LoadLocal(StepLoc));
-			}
 		}
 
 		private struct IterState

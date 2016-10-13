@@ -2833,35 +2833,13 @@ namespace Osprey
 					.At(start, tok[i++].EndIndex, document);
 
 			var items = new TempList<Expression>();
+
 			// [,] is an illegal list in Osprey: trailing commas are allowed only if
 			// there is at least one item.
-			// At least one expression is needed now:
-			//   [for i in [1 to 10]]
-			// is not allowed
-			items.Add(ParseExpression(ref i));
-
-			if (AcceptContextual(ref i, ContextualType.To)) // range expression, e.g. [1 to 10] or [something.length - x() to 12 + hi/mom];
+			do
 			{
 				items.Add(ParseExpression(ref i));
-
-				Expression step = null;
-				if (Accept(ref i, TokenType.Comma)) // step
-					step = ParseExpression(ref i);
-
-				Expect(i, TokenType.SquareClose);
-
-				return new RangeExpression(items[0], items[1], step)
-					.At(start, tok[i++].EndIndex, document);
-			}
-
-			// If there are commas not followed by ], there are more items in the list
-			while (Accept(i, TokenType.Comma) && !Accept(i + 1, TokenType.SquareClose))
-			{
-				i++;
-				items.Add(ParseExpression(ref i));
-			}
-
-			Accept(ref i, TokenType.Comma); // trailing comma; if it were followed by anything but ], it would have been caught above
+			} while (Accept(ref i, TokenType.Comma) && !Accept(i, TokenType.SquareClose));
 
 			Expect(i, TokenType.SquareClose);
 

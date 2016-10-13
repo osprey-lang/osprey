@@ -19,8 +19,6 @@ namespace Osprey
 		Get = 1,
 		/// <summary>set</summary>
 		Set = 2,
-		/// <summary>to</summary>
-		To = 3,
 		/// <summary>__primitive</summary>
 		Primitive = 5,
 		/// <summary>__init_type</summary>

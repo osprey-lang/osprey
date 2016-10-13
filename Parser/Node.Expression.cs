@@ -3706,25 +3706,18 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public abstract class ListExpression : Expression
+	public sealed class ListLiteralExpression : Expression, ILocalResultExpression
 	{
+		public ListLiteralExpression(Expression[] values)
+		{
+			Values = values;
+		}
+
 		public override bool IsTypeKnown(Compiler compiler) { return true; }
 
 		public override Type GetKnownType(Compiler compiler)
 		{
 			return compiler.ListType;
-		}
-
-		public abstract override Expression ResolveNames(IDeclarationSpace context, FileNamespace document);
-
-		public abstract override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator);
-	}
-
-	public sealed class ListLiteralExpression : ListExpression, ILocalResultExpression
-	{
-		public ListLiteralExpression(Expression[] values)
-		{
-			Values = values;
 		}
 
 		/// <summary>The values contained in the list.</summary>
@@ -3792,148 +3785,6 @@ namespace Osprey.Nodes
 					listLocal.Done();
 				}
 			}
-		}
-
-		public void SetTargetVariable(LocalVariable target)
-		{
-			this.target = target;
-		}
-	}
-
-	public sealed class RangeExpression : ListExpression, ILocalResultExpression
-	{
-		public RangeExpression(Expression low, Expression high, Expression step)
-		{
-			Low = low;
-			High = high;
-			Step = step;
-		}
-
-		/// <summary>The low value of the range.</summary>
-		public Expression Low;
-		/// <summary>The high value of the range.</summary>
-		public Expression High;
-		/// <summary>The distance between each item in the range.</summary>
-		public Expression Step;
-
-		private LocalVariable target;
-
-		public override string ToString(int indent)
-		{
-			return "[" + Low.ToString(indent) + " to " + High.ToString(indent) +
-				(Step == null ? "]" : ", " + Step.ToString(indent) + "]");
-		}
-
-		public override Expression FoldConstant()
-		{
-			Low = Low.FoldConstant();
-			High = High.FoldConstant();
-			Step = Step == null ? new ConstantExpression(ConstantValue.CreateInt(1)) : Step.FoldConstant();
-
-			return this;
-		}
-
-		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
-		{
-			Low = Low.ResolveNames(context, document, false, false);
-			High = High.ResolveNames(context, document, false, false);
-			if (Step != null)
-				Step = Step.ResolveNames(context, document, false, false);
-			return this;
-		}
-
-		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
-		{
-			Low = Low.TransformClosureLocals(currentBlock, forGenerator);
-			High = High.TransformClosureLocals(currentBlock, forGenerator);
-			if (Step != null)
-				Step = Step.TransformClosureLocals(currentBlock, forGenerator);
-			return this;
-		}
-
-		public override void Compile(Compiler compiler, MethodBuilder method)
-		{
-			// [low to high, step]
-			var highInlined = High.CanSafelyInline;
-			var stepInlined = Step.CanSafelyInline;
-
-			LocalVariable highLoc = null;
-			if (!highInlined)
-			{
-				// initialize highLoc
-				highLoc = method.GetAnonymousLocal();
-				High.Compile(compiler, method); // Evaluate the high expression
-				method.Append(new StoreLocal(highLoc)); // Store it in highLoc
-			}
-
-			LocalVariable stepLoc = null;
-			if (!stepInlined)
-			{
-				// initialize stepLoc
-				stepLoc = method.GetAnonymousLocal();
-				Step.Compile(compiler, method); // Evaluate the step expression
-				method.Append(new StoreLocal(stepLoc)); // Store it in stepLoc
-			}
-
-			// Create the list
-			var listLoc = target ?? method.GetAnonymousLocal();
-			method.Append(new CreateList(4));
-			method.Append(new StoreLocal(listLoc));
-
-			// Get a MethodGroup for aves.List.add
-			var listAdd = (MethodGroup)compiler.ListType.GetMember("add");
-
-			// Create the main loop
-
-			var counter = method.GetAnonymousLocal();
-			// Put low value in counter
-			Low.Compile(compiler, method); // Evaluate low expression
-			method.Append(new StoreLocal(counter)); // Put the low value in the counter
-
-			var loopCond = new Label("range-start");
-			var loopStart = new Label("range-end");
-
-			method.Append(Branch.Always(loopCond)); // Jump to loop condition
-			{ // Loop body
-				method.Append(loopStart);
-				method.Append(new LoadLocal(listLoc)); // Load the list
-				method.Append(new LoadLocal(counter)); // Load counter
-				method.Append(new StaticCall(method.Module.GetMethodId(listAdd), 1)); // Call list.add(counter)
-				method.Append(new SimpleInstruction(Opcode.Pop));
-			}
-			{ // Loop increment
-				method.Append(new LoadLocal(counter)); // Load counter
-				if (stepInlined) // Load step value
-					Step.Compile(compiler, method);
-				else
-					method.Append(new LoadLocal(stepLoc));
-				method.Append(new SimpleInstruction(Opcode.Add)); // Add counter + step value
-
-				method.Append(new StoreLocal(counter)); // counter += step
-			}
-			{ // Loop condition
-				method.Append(loopCond);
-
-				method.Append(new LoadLocal(counter)); // Load counter
-				if (highInlined) // Load high value
-					High.Compile(compiler, method);
-				else
-					method.Append(new LoadLocal(highLoc));
-
-				method.Append(new SimpleInstruction(Opcode.Lte)); // counter <= highLoc?
-				method.Append(Branch.IfTrue(loopStart)); // If so, branch to start of body
-				// If false, fall through to the end
-			}
-
-			if (listLoc.IsAnonymous)
-			{
-				method.Append(new LoadLocal(listLoc)); // Load the list (result of expression)
-				listLoc.Done();
-			}
-
-			counter.Done();
-			if (!highInlined) highLoc.Done();
-			if (!stepInlined) stepLoc.Done();
 		}
 
 		public void SetTargetVariable(LocalVariable target)
