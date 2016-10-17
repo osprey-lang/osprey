@@ -114,7 +114,7 @@ namespace Osprey
 
 			// If a is variadic, then b must not have more than a.paramCount - 1 required params.
 			// E.g.:
-			//    foo(a, b, c, d...)  paramCount = 4
+			//    foo(a, b, c, ...d)  paramCount = 4
 			//    foo(a, b)           OK    (2 >= 3 == false)
 			//    foo()               OK    (0 >= 3 == false)
 			//    foo(a, b, c)        Error (3 >= 3 == true)

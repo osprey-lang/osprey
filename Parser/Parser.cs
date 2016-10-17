@@ -971,12 +971,11 @@ namespace Osprey
 			if (Accept(i, TokenType.ParenClose))
 				return output;
 
-			var optionalSeen = false;
-			bool isByRef;
 			do
 			{
-				isByRef = Accept(ref i, TokenType.Ref);
+				var isByRef = Accept(ref i, TokenType.Ref);
 				output.HasRefParams |= isByRef;
+				var isVariadic = Accept(ref i, TokenType.Splat);
 				var thisPrefix = Accept(ref i, TokenType.This);
 
 				Token nameTok = null;
@@ -984,6 +983,8 @@ namespace Osprey
 				{
 					if (isByRef)
 						ParseError(i, "A 'this' parameter cannot be passed by reference.");
+					if (isVariadic)
+						ParseError(i, "A 'this' parameter cannot be variadic.");
 
 					Expect(ref i, TokenType.Dot);
 					nameTok = Expect(ref i, TokenType.Identifier);
@@ -997,6 +998,8 @@ namespace Osprey
 				{
 					if (isByRef)
 						ParseError(i, CannotPassOptionalParamByRef);
+					if (isVariadic)
+						ParseError(i, VariadicParamCannotBeOptional);
 					i++;
 
 					var value = ParseExpression(ref i);
@@ -1007,28 +1010,36 @@ namespace Osprey
 						EndIndex = nameTok.EndIndex,
 						Document = document,
 					});
-					output.HasOptionalParams = optionalSeen = true;
+					output.HasOptionalParams = true;
 				}
-				else if (optionalSeen)
-					ParseError(nameTok, RequiredParamAfterOptional);
+				else if (output.HasOptionalParams)
+				{
+					if (isVariadic)
+						ParseError(nameTok, CannotMixOptionalAndVariadicParams);
+					else
+						ParseError(nameTok, RequiredParamAfterOptional);
+				}
 				else
+				{
+					if (isVariadic)
+					{
+						if (isByRef)
+							ParseError(i, CannotPassVariadicParamByRef);
+						if (output.Splat != Splat.None)
+							ParseError(i, MoreThanOneVariadicParam);
+						if (Accept(i, TokenType.Comma))
+							ParseError(i, VariadicParamMustBeLast);
+						output.Splat = Splat.End;
+					}
+
 					parameters.Add(new ConstructorParam(nameTok.Value, thisPrefix, isByRef)
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
 						Document = document,
 					});
+				}
 			} while (Accept(ref i, TokenType.Comma));
-
-			if (Accept(i, TokenType.Splat))
-			{
-				if (optionalSeen)
-					ParseError(i, CannotMixOptionalAndVariadicParams);
-				if (isByRef)
-					ParseError(i, CannotPassVariadicParamByRef);
-				i++;
-				output.Splat = Splat.End;
-			}
 
 			output.Parameters = parameters.ToArray();
 			return output;
@@ -1463,18 +1474,20 @@ namespace Osprey
 				return output;
 			}
 
-			var optionalSeen = false;
-			bool isByRef;
 			do
 			{
-				isByRef = Accept(ref i, TokenType.Ref);
+				var isByRef = Accept(ref i, TokenType.Ref);
 				output.HasRefParams |= isByRef;
+				var isVariadic = Accept(ref i, TokenType.Splat);
+
 				var nameTok = Expect(ref i, TokenType.Identifier);
 
 				if (Accept(i, TokenType.Assign)) // optional parameter/argument
 				{
 					if (isByRef)
 						ParseError(i, CannotPassOptionalParamByRef);
+					if (isVariadic)
+						ParseError(i, VariadicParamCannotBeOptional);
 					i++;
 
 					var value = ParseExpression(ref i);
@@ -1487,28 +1500,36 @@ namespace Osprey
 						EndIndex = value.EndIndex,
 						Document = document
 					});
-					output.HasOptionalParams = optionalSeen = true;
+					output.HasOptionalParams = true;
 				}
-				else if (optionalSeen)
-					ParseError(i - 1, RequiredParamAfterOptional);
+				else if (output.HasOptionalParams)
+				{
+					if (isVariadic)
+						ParseError(i - 1, CannotMixOptionalAndVariadicParams);
+					else
+						ParseError(i - 1, RequiredParamAfterOptional);
+				}
 				else
+				{
+					if (isVariadic)
+					{
+						if (isByRef)
+							ParseError(i, CannotPassVariadicParamByRef);
+						if (output.Splat != Splat.None)
+							ParseError(i, MoreThanOneVariadicParam);
+						if (Accept(i, TokenType.Comma))
+							ParseError(i, VariadicParamMustBeLast);
+						output.Splat = Splat.End;
+					}
+
 					parameters.Add(new Parameter(nameTok.Value, isByRef)
 					{
 						StartIndex = nameTok.Index,
 						EndIndex = nameTok.EndIndex,
 						Document = document,
 					});
+				}
 			} while (Accept(ref i, TokenType.Comma));
-
-			if (Accept(i, TokenType.Splat))
-			{
-				if (optionalSeen)
-					ParseError(i, CannotMixOptionalAndVariadicParams);
-				if (isByRef)
-					ParseError(i, CannotPassVariadicParamByRef);
-				output.Splat = Splat.End;
-				i++;
-			}
 
 			output.Parameters = parameters.ToArray();
 			return output;
@@ -3013,8 +3034,12 @@ namespace Osprey
 			"An optional parameter cannot be passed by reference.";
 		private const string CannotPassVariadicParamByRef =
 			"A variadic parameter cannot be passed by reference.";
+		private const string VariadicParamCannotBeOptional =
+			"A variadic parameter cannot be optional.";
+		private const string VariadicParamMustBeLast =
+			"A variadic parameter must be the last parameter.";
 		private const string MoreThanOneVariadicParam =
-			"There can only be one variadic parameter, and it must be at the very first or the very last parameter.";
+			"Multiple variadic parameters are not supported.";
 
 		public static Document Parse(string input, ParseFlags flags)
 		{
