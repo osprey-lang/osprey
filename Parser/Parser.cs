@@ -983,8 +983,6 @@ namespace Osprey
 				{
 					if (isByRef)
 						ParseError(i, "A 'this' parameter cannot be passed by reference.");
-					if (isVariadic)
-						ParseError(i, "A 'this' parameter cannot be variadic.");
 
 					Expect(ref i, TokenType.Dot);
 					nameTok = Expect(ref i, TokenType.Identifier);
