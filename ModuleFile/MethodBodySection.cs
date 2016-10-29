@@ -268,6 +268,8 @@ namespace Osprey.ModuleFile
 
 		private void AddTryFinallyBlock(TryBlock tryBlock)
 		{
+			if (tryBlock.Finally.HasChildTryBlocks)
+				AddTryBlocks(tryBlock.Finally.childTryBlocks);
 			tryBlocks.Add(new TryFinallyBlock(tryBlock));
 		}
 
