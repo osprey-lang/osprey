@@ -1745,8 +1745,8 @@ namespace Osprey
 			if (SilenceWarnings || level > verbosity)
 				return;
 
-			Console.Write("[warn] ");
-			Console.WriteLine(message);
+			Console.Error.Write("[warn] ");
+			Console.Error.WriteLine(message);
 		}
 		/// <summary>
 		/// Outputs a warning-type compiler message.
@@ -1759,8 +1759,8 @@ namespace Osprey
 			if (SilenceWarnings || level > verbosity)
 				return;
 
-			Console.Write("[warn {0}] ", location.ToString(1));
-			Console.WriteLine(message);
+			Console.Error.Write("[warn {0}] ", location.ToString(1));
+			Console.Error.WriteLine(message);
 		}
 
 		internal void Warning(CompilerVerbosity level, string format, object arg0)
