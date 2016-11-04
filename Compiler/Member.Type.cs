@@ -1753,7 +1753,7 @@ namespace Osprey.Members
 				if (method.IsGenerator)
 					throw new CompileTimeException(method.Yields[0], "A property setter may not be a generator.");
 
-				Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValues.Length > 0;
+				Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValue != null;
 				if (method.Returns != null && method.Returns.Any(hasReturnValue))
 					throw new CompileTimeException(method.Returns.First(hasReturnValue),
 						"A property setter can only contain empty return statements.");
@@ -1971,7 +1971,7 @@ namespace Osprey.Members
 			if (method.IsGenerator)
 				throw new CompileTimeException(method.Yields[0], "Constructors are not allowed to be generators.");
 
-			Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValues.Length > 0;
+			Func<ReturnStatement, bool> hasReturnValue = ret => ret.ReturnValue != null;
 			if (method.Returns != null && method.Returns.Any(hasReturnValue))
 				throw new CompileTimeException(method.Returns.First(hasReturnValue),
 					"Constructors can only contain empty return statements.");

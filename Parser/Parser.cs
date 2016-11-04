@@ -1858,32 +1858,15 @@ namespace Osprey
 					return new ReturnStatement() { StartIndex = start, EndIndex = end, Document = document };
 				}
 
-			var values = new TempList<Expression>(1);
-			do
-			{
-				try { values.Add(ParseExpression(ref i)); }
-				catch (ParseException e) { throw e.Extend("Expected expression."); }
-			} while (Accept(ref i, TokenType.Comma));
+			var value = ParseExpression(ref i);
 
 			Expect(ref i, TokenType.Semicolon);
 
-			if (values.Count > 1 && SimplifiedTree)
-			{
-				var list = new ListLiteralExpression(values.ToNewArray())
-				{
-					StartIndex = values[0].StartIndex,
-					EndIndex = values[values.Count - 1].EndIndex,
-					Document = document,
-				};
-				values.Clear();
-				values.Add(list);
-			}
-
 			Statement result;
 			if (isYield)
-				result = new YieldStatement(values.ToArray());
+				result = new YieldStatement(value);
 			else
-				result = new ReturnStatement(values.ToArray());
+				result = new ReturnStatement(value);
 			result.StartIndex = start;
 			result.EndIndex = end;
 			result.Document = document;

@@ -2098,21 +2098,15 @@ namespace Osprey.Nodes
 	public sealed class ReturnStatement : Statement
 	{
 		public ReturnStatement()
-			: this(EmptyArrays.Expressions)
+			: this(null)
 		{ }
-		public ReturnStatement(Expression[] returnValues)
+		public ReturnStatement(Expression returnValue)
 		{
-			if (returnValues == null)
-				throw new ArgumentNullException("returnValues");
-			ReturnValues = returnValues;
+			ReturnValue = returnValue;
 		}
 
-		internal ReturnStatement(Expression returnValue)
-			: this(new[] { returnValue })
-		{ }
-
-		/// <summary>The return values of the return statement.</summary>
-		public Expression[] ReturnValues;
+		/// <summary>The return value of the return statement, or null if the return statement is empty.</summary>
+		public Expression ReturnValue;
 
 		private Field stateField;
 
@@ -2122,14 +2116,13 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			return new string('\t', indent) + (ReturnValues == null ? "return;" :
-				"return " + ReturnValues.JoinString(", ", indent) + ";");
+			return new string('\t', indent) + (ReturnValue == null ? "return;" :
+				"return " + ReturnValue.ToString(indent) + ";");
 		}
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < ReturnValues.Length; i++)
-				ReturnValues[i] = ReturnValues[i].FoldConstant();
+			ReturnValue = ReturnValue.FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
@@ -2137,7 +2130,7 @@ namespace Osprey.Nodes
 			var block = context as BlockSpace;
 			if (block != null)
 			{
-				if (ReturnValues.Length > 0 && block.Method is ClassMemberMethod)
+				if (ReturnValue != null && block.Method is ClassMemberMethod)
 				{
 					var member = ((ClassMemberMethod)block.Method).Owner;
 					string error = null;
@@ -2161,16 +2154,14 @@ namespace Osprey.Nodes
 				block.Method.AddReturn(this);
 			}
 
-			for (var i = 0; i < ReturnValues.Length; i++)
-				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
+			ReturnValue = ReturnValue.ResolveNames(context, document, false, false);
 		}
 
 		public override void DeclareNames(BlockSpace parent) { }
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < ReturnValues.Length; i++)
-				ReturnValues[i] = ReturnValues[i].TransformClosureLocals(currentBlock, forGenerator);
+			ReturnValue = ReturnValue.TransformClosureLocals(currentBlock, forGenerator);
 
 			if (forGenerator)
 				stateField = currentBlock.Method.GeneratorClass.StateField;
@@ -2196,10 +2187,10 @@ namespace Osprey.Nodes
 				// and then leave the block.
 				if (inGenerator)
 					method.Append(LoadConstant.False());
-				else if (ReturnValues.Length == 0)
+				else if (ReturnValue == null)
 					method.Append(LoadConstant.Null());
 				else
-					ReturnValues[0].Compile(compiler, method);
+					ReturnValue.Compile(compiler, method);
 				method.Append(new StoreLocal(tryState.ReturnLocal));
 
 				method.Append(Branch.Leave(tryState.ReturnLabel));
@@ -2209,13 +2200,13 @@ namespace Osprey.Nodes
 				method.Append(LoadConstant.False());
 				method.Append(new SimpleInstruction(Opcode.Ret));
 			}
-			else if (ReturnValues.Length == 0 || ReturnValues[0].IsNull)
+			else if (ReturnValue == null || ReturnValue.IsNull)
 			{
 				method.Append(new SimpleInstruction(Opcode.Retnull));
 			}
 			else
 			{
-				ReturnValues[0].Compile(compiler, method);
+				ReturnValue.Compile(compiler, method);
 				method.Append(new SimpleInstruction(Opcode.Ret));
 			}
 
@@ -2226,13 +2217,15 @@ namespace Osprey.Nodes
 
 	public sealed class YieldStatement : Statement
 	{
-		public YieldStatement(Expression[] returnValues)
+		public YieldStatement(Expression returnValue)
 		{
-			ReturnValues = returnValues;
+			if (returnValue == null)
+				throw new ArgumentNullException("returnValue");
+			ReturnValue = returnValue;
 		}
 
 		/// <summary>The return values of the yield statement.</summary>
-		public Expression[] ReturnValues;
+		public Expression ReturnValue;
 
 		public override bool CanYield { get { return true; } }
 
@@ -2242,13 +2235,12 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			return new string('\t', indent) + "yield " + ReturnValues.JoinString(", ", indent) + ";";
+			return new string('\t', indent) + "yield " + ReturnValue.ToString(indent) + ";";
 		}
 
 		public override void FoldConstant()
 		{
-			for (var i = 0; i < ReturnValues.Length; i++)
-				ReturnValues[i] = ReturnValues[i].FoldConstant();
+			ReturnValue = ReturnValue.FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
@@ -2278,16 +2270,14 @@ namespace Osprey.Nodes
 
 			block.Method.AddYield(this);
 
-			for (var i = 0; i < ReturnValues.Length; i++)
-				ReturnValues[i] = ReturnValues[i].ResolveNames(context, document, false, false);
+			ReturnValue = ReturnValue.ResolveNames(context, document, false, false);
 		}
 
 		public override void DeclareNames(BlockSpace parent) { }
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			for (var i = 0; i < ReturnValues.Length; i++)
-				ReturnValues[i] = ReturnValues[i].TransformClosureLocals(currentBlock, forGenerator);
+			ReturnValue = ReturnValue.TransformClosureLocals(currentBlock, forGenerator);
 
 			if (forGenerator)
 			{
@@ -2298,15 +2288,12 @@ namespace Osprey.Nodes
 
 		public override void Compile(Compiler compiler, MethodBuilder method)
 		{
-			// Note: parser wraps multiple yield values in a ListLiteralExpression.
-			// Hence, ReturnValues only ever contains a single value.
-
 			ParentMethod.Yields.Add(this); // Mark this yield as reachable
 
 			method.PushLocation(this);
 
 			method.Append(new LoadLocal(method.GetParameter(0))); // Load 'this'
-			ReturnValues[0].Compile(compiler, method); // Evaluate yield value
+			ReturnValue.Compile(compiler, method); // Evaluate yield value
 			method.Append(StoreField.Create(method.Module, genClass.CurrentValueField)); // Update the current value field
 
 			var generatorState = ParentMethod.Yields.Count - 1;

@@ -14,9 +14,7 @@ The following transformations are performed when `ParseFlags.SimplifiedTree` is 
 
 6. The locals and stack parameters of an `__extern` declaration get initialised to 0 and 8, respectively, if missing.
 
-7. If a `return` or `yield` has multiple return values, they're wrapped in a `ListLiteralExpression`.
-
-8. Binary operator expressions of the form `a != b` get turned into `not (a == b)`.
+7. Binary operator expressions of the form `a != b` get turned into `not (a == b)`.
 
 Notably, parenthesized expressions are _not_ stripped. There are two reasons for this. Firstly, it is invalid for the inner expression in a parenthesized expression to refer to a namespace or type. In other words, the following should not compile:
 

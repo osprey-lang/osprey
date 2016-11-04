@@ -370,7 +370,7 @@ namespace Osprey.Members
 
 		internal void AddReturn(ReturnStatement value)
 		{
-			if (value.ReturnValues.Length > 0 && Yields != null)
+			if (value.ReturnValue != null && Yields != null)
 				throw new CompileTimeException(value,
 					"Generator methods may only contain empty return statements.");
 
@@ -381,7 +381,7 @@ namespace Osprey.Members
 
 		internal void AddYield(YieldStatement value)
 		{
-			Func<ReturnStatement, bool> hasReturnValue = stmt => stmt.ReturnValues.Length > 0;
+			Func<ReturnStatement, bool> hasReturnValue = stmt => stmt.ReturnValue != null;
 
 			if (Returns != null && Returns.Any(hasReturnValue))
 				throw new CompileTimeException(Returns.First(hasReturnValue),
