@@ -401,21 +401,16 @@ namespace Osprey.Nodes
 	public abstract class LocalDeclaration : Statement
 	{ }
 
-	public abstract class LocalVariableDeclaration : LocalDeclaration
+	public sealed class LocalVariableDeclaration : LocalDeclaration
 	{
-		/// <summary>Indicates whether the declaration is for one or more global variables.</summary>
-		public bool IsGlobal;
-	}
-
-	// var a = 1, b = 2, c = 3;
-	// const x = 24, y = 25, z = 26;
-	public sealed class SimpleLocalVariableDeclaration : LocalVariableDeclaration
-	{
-		public SimpleLocalVariableDeclaration(bool isConst, VariableDeclarator[] declarators)
+		public LocalVariableDeclaration(bool isConst, VariableDeclarator[] declarators)
 		{
 			IsConst = isConst;
 			Declarators = declarators;
 		}
+
+		/// <summary>Indicates whether the declaration is for one or more global variables.</summary>
+		public bool IsGlobal;
 
 		/// <summary>Indicates whether the declaration is for a set of constant values.</summary>
 		public bool IsConst;
@@ -576,129 +571,6 @@ namespace Osprey.Nodes
 					((LambdaMemberExpression)Initializer).NameHint = this.Name;
 				Initializer = Initializer.ResolveNames(context, document, false, false);
 			}
-		}
-	}
-
-	// var (a, b, c) = expr;
-	public sealed class ParallelLocalVariableDeclaration : LocalVariableDeclaration
-	{
-		public ParallelLocalVariableDeclaration(string[] names, Expression value)
-		{
-			Names = names;
-			Value = value;
-		}
-
-		/// <summary>The names that are being declared.</summary>
-		public string[] Names;
-
-		/// <summary>The expression that is being assigned.</summary>
-		public Expression Value;
-
-		internal Variable[] Variables;
-
-		public override string ToString(int indent)
-		{
-			return new string('\t', indent) + "var (" + Names.JoinString(", ") + ") = " + Value.ToString(indent) + ";";
-		}
-
-		public override void FoldConstant()
-		{
-			Value = Value.FoldConstant();
-		}
-
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
-		{
-			Value = Value.ResolveNames(context, document, false, false);
-			if (Value.IsTypeKnown(document.Compiler) &&
-				!Value.GetKnownType(document.Compiler).InheritsFrom(document.Compiler.ListType))
-				throw new CompileTimeException(Value,
-					"The value in a parallel local variable declaration must be of type aves.List.");
-		}
-
-		public override void DeclareNames(BlockSpace parent)
-		{
-			if (!IsGlobal)
-				Variables = new Variable[Names.Length];
-
-			for (var i = 0; i < Names.Length; i++)
-			{
-				if (!IsGlobal)
-				{
-					var name = Names[i];
-					Variables[i] = new Variable(name, new VariableDeclarator(name, null)
-					{
-						StartIndex = Value.StartIndex,
-						EndIndex = Value.EndIndex,
-						Document = Document,
-					});
-					Variables[i].AssignmentCount++; // Always initialized
-				}
-				parent.DeclareVariable(Variables[i]);
-			}
-		}
-
-		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
-		{
-			Value = Value.TransformClosureLocals(currentBlock, forGenerator);
-		}
-
-		public override void Compile(Compiler compiler, MethodBuilder method)
-		{
-			var assigners = new Compiler.UnpackAssigner[Variables.Length];
-
-			for (var i = 0; i < Variables.Length; i++)
-			{
-				if (IsGlobal && Variables[i].IsCaptured)
-				{
-					var field = Variables[i].CaptureField;
-					assigners[i] = (_method, isAssignment) =>
-					{
-						if (isAssignment)
-							_method.Append(StoreField.Create(_method.Module, field));
-					};
-				}
-				else if (Variables[i].IsCaptured)
-				{
-					var variable = Variables[i];
-					assigners[i] = (_method, isAssignment) =>
-					{
-						if (!isAssignment) // Load closure class instance
-						{
-							if (variable.CaptureField.Parent is GeneratorClass)
-								_method.Append(new LoadLocal(_method.GetParameter(0)));
-							else
-							{
-								var block = variable.Parent;
-								if (block.ClosureVariable.IsCaptured &&
-									block.ClosureVariable.CaptureField.Parent is GeneratorClass)
-								{
-									// Load closure variable through 'this'
-									_method.Append(new LoadLocal(_method.GetParameter(0)));
-									_method.Append(LoadField.Create(_method.Module, block.ClosureVariable.CaptureField));
-								}
-								else
-									_method.Append(new LoadLocal(block.ClosureLocal));
-							}
-						}
-						else // Store the value in the capture field
-							_method.Append(StoreField.Create(_method.Module, variable.CaptureField));
-					};
-				}
-				else
-				{
-					var variable = Variables[i];
-					assigners[i] = (_method, isAssignment) =>
-					{
-						if (isAssignment)
-							_method.Append(new StoreLocal(_method.GetLocal(variable.Name)));
-					};
-				}
-			}
-
-			method.PushLocation(Value);
-			Value.Compile(compiler, method);
-			compiler.Unpack(method, assigners);
-			method.PopLocation(); // Value
 		}
 	}
 
@@ -2542,7 +2414,7 @@ namespace Osprey.Nodes
 				EndIndex = this.EndIndex,
 				Document = this.Document,
 			};
-			var declaration = new SimpleLocalVariableDeclaration(false, new[] { declarator })
+			var declaration = new LocalVariableDeclaration(false, new[] { declarator })
 			{
 				StartIndex = this.StartIndex,
 				EndIndex = this.EndIndex,

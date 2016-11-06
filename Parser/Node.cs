@@ -367,7 +367,7 @@ namespace Osprey.Nodes
 
 	public sealed class GlobalConstantDeclaration : ParseNode
 	{
-		public GlobalConstantDeclaration(bool isPublic, SimpleLocalVariableDeclaration declaration)
+		public GlobalConstantDeclaration(bool isPublic, LocalVariableDeclaration declaration)
 		{
 			if (!declaration.IsConst)
 				throw new ArgumentException("The simple local variable declaration must be constant.");
@@ -384,7 +384,7 @@ namespace Osprey.Nodes
 		/// <summary>
 		/// The constant that were declared.
 		/// </summary>
-		public SimpleLocalVariableDeclaration Declaration;
+		public LocalVariableDeclaration Declaration;
 
 		public Token DocString;
 

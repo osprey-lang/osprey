@@ -907,31 +907,12 @@ namespace Osprey
 
 				foreach (var stmt in doc.Statements)
 				{
-					if (stmt is SimpleLocalVariableDeclaration) // var a = x;
+					if (stmt is LocalVariableDeclaration) // var a = x;
 					{
-						foreach (var decl in ((SimpleLocalVariableDeclaration)stmt).Declarators)
+						foreach (var decl in ((LocalVariableDeclaration)stmt).Declarators)
 						{
 							var globalVar = new GlobalVariable(decl.Name, decl, doc);
 							decl.Variable = globalVar;
-							doc.Namespace.DeclareGlobalVariable(globalVar);
-						}
-					}
-					else if (stmt is ParallelLocalVariableDeclaration) // var (a, b) = list;
-					{
-						var declaration = (ParallelLocalVariableDeclaration)stmt;
-						declaration.Variables = new Variable[declaration.Names.Length];
-						for (var i = 0; i < declaration.Names.Length; i++)
-						{
-							var name = declaration.Names[i];
-
-							var globalVar = new GlobalVariable(name,
-								new VariableDeclarator(name, null)
-								{
-									StartIndex = stmt.StartIndex,
-									EndIndex = stmt.EndIndex,
-									Document = stmt.Document,
-								}, doc);
-							declaration.Variables[i] = globalVar;
 							doc.Namespace.DeclareGlobalVariable(globalVar);
 						}
 					}

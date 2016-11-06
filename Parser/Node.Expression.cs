@@ -2127,7 +2127,7 @@ namespace Osprey.Nodes
 
 			var vars = Variables;
 			VariableBlock = new Block(
-				new SimpleLocalVariableDeclaration(false, vars)
+				new LocalVariableDeclaration(false, vars)
 				{
 					StartIndex = vars[0].StartIndex,
 					EndIndex = vars[vars.Length - 1].EndIndex,

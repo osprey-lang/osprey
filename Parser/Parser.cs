@@ -673,18 +673,18 @@ namespace Osprey
 					// which is not constant.
 					var decl = ParseLocalVariableDeclaration(ref i);
 
-					var simpleDecl = decl as SimpleLocalVariableDeclaration;
+					var varDecl = decl as LocalVariableDeclaration;
 #if DEBUG
-					if (simpleDecl == null || !simpleDecl.IsConst)
+					if (varDecl == null || !varDecl.IsConst)
 						throw new ParseException(decl,
-							"Internal error: global constant declaration should be a simple declaration and marked IsConst.");
+							"Internal error: global constant declaration should be a local variable declaration and marked IsConst.");
 #endif
 
-					var constDecl = new GlobalConstantDeclaration(modifiers.Access == Accessibility.Public, simpleDecl)
+					var constDecl = new GlobalConstantDeclaration(modifiers.Access == Accessibility.Public, varDecl)
 					{
 						Document = document
 					};
-					if (simpleDecl.Declarators.Length == 1)
+					if (varDecl.Declarators.Length == 1)
 						constDecl.DocString = startTok.Documentation;
 
 					target.Constants.Add(constDecl);
@@ -1593,35 +1593,6 @@ namespace Osprey
 			var isConst = Accept(i, TokenType.Const);
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
-			// parallel declaration, e.g. var (x, y, z) = someList;
-			if (Accept(i, TokenType.ParenOpen))
-			{
-				if (isConst)
-					ParseError(i, "Parallel declaration is not allowed for constants.");
-
-				i++;
-
-				var names = new TempList<string>();
-				do
-				{
-					names.Add(Expect(ref i, TokenType.Identifier).Value);
-				} while (Accept(ref i, TokenType.Comma));
-
-				Expect(ref i, TokenType.ParenClose);
-				Expect(ref i, TokenType.Assign, "Parallel declaration without initializer.");
-
-				var value = ParseExpression(ref i);
-
-				Expect(ref i, TokenType.Semicolon);
-
-				return new ParallelLocalVariableDeclaration(names.ToArray(), value)
-				{
-					StartIndex = start,
-					EndIndex = end,
-					Document = document,
-				};
-			}
-
 			var vars = new TempList<VariableDeclarator>();
 			do
 			{
@@ -1644,7 +1615,7 @@ namespace Osprey
 
 			Expect(ref i, TokenType.Semicolon);
 
-			return new SimpleLocalVariableDeclaration(isConst, vars.ToArray())
+			return new LocalVariableDeclaration(isConst, vars.ToArray())
 			{
 				StartIndex = start,
 				EndIndex = end,
