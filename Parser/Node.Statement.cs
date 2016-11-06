@@ -2122,7 +2122,8 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			ReturnValue = ReturnValue.FoldConstant();
+			if (ReturnValue != null)
+				ReturnValue = ReturnValue.FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
@@ -2154,14 +2155,16 @@ namespace Osprey.Nodes
 				block.Method.AddReturn(this);
 			}
 
-			ReturnValue = ReturnValue.ResolveNames(context, document, false, false);
+			if (ReturnValue != null)
+				ReturnValue = ReturnValue.ResolveNames(context, document, false, false);
 		}
 
 		public override void DeclareNames(BlockSpace parent) { }
 
 		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
 		{
-			ReturnValue = ReturnValue.TransformClosureLocals(currentBlock, forGenerator);
+			if (ReturnValue != null)
+				ReturnValue = ReturnValue.TransformClosureLocals(currentBlock, forGenerator);
 
 			if (forGenerator)
 				stateField = currentBlock.Method.GeneratorClass.StateField;
