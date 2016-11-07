@@ -2237,11 +2237,9 @@ namespace Osprey.Members
 						EmptyArrays.Expressions // ()
 					)
 				),
-				new ExpressionStatement(
-					new AssignmentExpression( // this.'<>state' = -1
-						new InstanceMemberAccess(new ThisAccess(), (Class)BaseType, stateField) { IsAssignment = true },
-						new ConstantExpression(ConstantValue.CreateInt(-1))
-					) { IgnoreValue = true }
+				new SimpleAssignment( // this.'<>state' = -1
+					new InstanceMemberAccess(new ThisAccess(), (Class)BaseType, stateField) { IsAssignment = true },
+					new ConstantExpression(ConstantValue.CreateInt(-1))
 				),
 			};
 			var ctor = new Constructor(new Block(ctorBody), Accessibility.Internal, this, Signature.Empty);

@@ -150,7 +150,7 @@ namespace Osprey.Nodes
 			}
 		}
 
-		internal List<AssignmentExpression> Initializer;
+		internal List<SimpleAssignment> Initializer;
 
 		public override string ToString(int indent)
 		{
@@ -257,14 +257,14 @@ namespace Osprey.Nodes
 					var variable = member as Variable;
 					if (variable != null && variable.IsCaptured &&
 						variable.VariableKind == VariableKind.IterationVariable)
-						Initializer.Add(new AssignmentExpression(
+						Initializer.Add(new SimpleAssignment(
 							new InstanceMemberAccess(
 								new LocalVariableAccess(DeclSpace.ClosureVariable, LocalAccessKind.ClosureLocal),
 								DeclSpace.ClosureClass,
 								variable.CaptureField
 							) { IsAssignment = true },
 							new LocalVariableAccess(variable, LocalAccessKind.NonCapturing)
-						) { IgnoreValue = true });
+						));
 				}
 			}
 			else if (CanYield)
@@ -312,10 +312,10 @@ namespace Osprey.Nodes
 					// the way it already is, including the bit where it initializes the closure
 					// class instance into a local variable. Instead, we just copy that value
 					// to the correct field afterwards.
-					Initializer.Add(new AssignmentExpression(
+					Initializer.Add(new SimpleAssignment(
 						new InstanceMemberAccess(new ThisAccess(), genClass, field) { IsAssignment = true },
 						new LocalVariableAccess(DeclSpace.ClosureVariable, LocalAccessKind.ClosureLocal)
-					) { IgnoreValue = true });
+					));
 					// This leads to simpler and smaller bytecode.
 
 					// However, we still need to make sure that any captured parameters are
@@ -702,8 +702,7 @@ namespace Osprey.Nodes
 			var hasLoc = method.PushLocation(Expression);
 
 			Expression.Compile(compiler, method);
-			if (!(Expression is AssignmentExpression))
-				method.Append(new SimpleInstruction(Opcode.Pop));
+			method.Append(new SimpleInstruction(Opcode.Pop));
 
 			if (hasLoc)
 				method.PopLocation(); // Expression
@@ -2453,6 +2452,88 @@ namespace Osprey.Nodes
 		}
 	}
 
+	// Simple assignments only; that is, one value to one storage location.
+	public class SimpleAssignment : Statement
+	{
+		public SimpleAssignment(AssignableExpression target, Expression value)
+		{
+			var assignableTarget = target as AssignableExpression;
+			if (assignableTarget != null)
+				assignableTarget.IsAssignment = true;
+			Target = target;
+			Value = value;
+		}
+
+		/// <summary>The target of the assignment.</summary>
+		public AssignableExpression Target;
+		/// <summary>The value to be assigned.</summary>
+		public Expression Value;
+
+		public override string ToString(int indent)
+		{
+			return Target.ToString(indent) + " = " + Value.ToString(indent + 1);
+		}
+
+		public override void FoldConstant()
+		{
+			Target = (AssignableExpression)Target.FoldConstant();
+			Value = Value.FoldConstant();
+		}
+
+		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
+		{
+			var target = Target.ResolveNames(context, document, ExpressionAccessKind.Write);
+			Target = EnsureAssignable(target);
+			Value = Value.ResolveNames(context, document, false, false);
+		}
+
+		public override void DeclareNames(BlockSpace parent) { }
+
+		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
+		{
+			Target = (AssignableExpression)Target.TransformClosureLocals(currentBlock, forGenerator);
+			Value = Value.TransformClosureLocals(currentBlock, forGenerator);
+		}
+
+		public override void Compile(Compiler compiler, MethodBuilder method)
+		{
+			Target.CompileSimpleAssignment(compiler, method, Value);
+		}
+
+		internal static AssignableExpression EnsureAssignable(Expression expr)
+		{
+			var assignableExpr = expr as AssignableExpression;
+			if (assignableExpr == null)
+				throw new CompileTimeException(expr, "This expression cannot be assigned to.");
+
+			assignableExpr.IsAssignment = true;
+			return assignableExpr;
+		}
+	}
+
+	// Field initializer (generated inside a constructor)
+	// This differs from AssignmentExpression only in that it updates
+	// the Value field immediately before compilation, since the field
+	// initializer expression can change if it contains or consists of
+	// a lambda expression.
+	internal class FieldInitializer : SimpleAssignment
+	{
+		public FieldInitializer(AssignableExpression target, VariableDeclarator declarator)
+			: base(target, declarator.Initializer)
+		{
+			this.declarator = declarator;
+		}
+
+		private VariableDeclarator declarator;
+
+		public override void Compile(Compiler compiler, MethodBuilder method)
+		{
+			// Update the value in case the declarator has changed
+			this.Value = declarator.Initializer;
+			base.Compile(compiler, method);
+		}
+	}
+
 	public sealed class CompoundAssignment : Statement
 	{
 		public CompoundAssignment(AssignableExpression target, Expression value, BinaryOperator op)
@@ -2490,7 +2571,7 @@ namespace Osprey.Nodes
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable)
 		{
 			var target = Target.ResolveNames(context, document, ExpressionAccessKind.ReadWrite);
-			Target = AssignmentExpression.EnsureAssignable(target);
+			Target = SimpleAssignment.EnsureAssignable(target);
 			Value = Value.ResolveNames(context, document, false, false);
 		}
 
@@ -2543,7 +2624,7 @@ namespace Osprey.Nodes
 			for (var i = 0; i < Targets.Length; i++)
 			{
 				var result = Targets[i].ResolveNames(context, document, ExpressionAccessKind.Write);
-				Targets[i] = AssignmentExpression.EnsureAssignable(result);
+				Targets[i] = SimpleAssignment.EnsureAssignable(result);
 			}
 
 			for (var i = 0; i < Values.Length; i++)

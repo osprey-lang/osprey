@@ -898,9 +898,9 @@ namespace Osprey.Nodes
 					if (param.HasThisPrefix)
 					{
 						if (Body.Initializer == null)
-							Body.Initializer = new List<AssignmentExpression>();
+							Body.Initializer = new List<SimpleAssignment>();
 
-						var expr = new AssignmentExpression(
+						var stmt = new SimpleAssignment(
 							new InstanceMemberAccess(new ThisAccess(), @class, param.Member)
 							{
 								IsAssignment = true
@@ -909,9 +909,13 @@ namespace Osprey.Nodes
 								(Variable)Body.DeclSpace.members[param.DeclaredName],
 								LocalAccessKind.NonCapturing
 							)
-						) { IgnoreValue = true };
-						expr.At(param.StartIndex, param.EndIndex, param.Document);
-						Body.Initializer.Add(expr);
+						)
+						{
+							StartIndex = param.StartIndex,
+							EndIndex = param.EndIndex,
+							Document = param.Document,
+						};
+						Body.Initializer.Add(stmt);
 					}
 				}
 			}
@@ -925,7 +929,7 @@ namespace Osprey.Nodes
 				return; // No field initializers for extern bodies or ctors with 'new this(...);'
 
 			if (Body.Initializer == null)
-				Body.Initializer = new List<AssignmentExpression>();
+				Body.Initializer = new List<SimpleAssignment>();
 
 			// Note: for field initializers, we use the special class FieldInitializer,
 			// which updates its Value immediately before compilation, because it might
@@ -948,13 +952,16 @@ namespace Osprey.Nodes
 					if (fieldParams.Contains(f))
 						continue;
 
-					var expr = new FieldInitializer(
+					var stmt = new FieldInitializer(
 						new InstanceMemberAccess(new ThisAccess(), @class, f) { IsAssignment = true },
 						field
-					);
-					expr.IgnoreValue = true;
-					expr.At(field.Initializer);
-					Body.Initializer.Insert(index++, expr);
+					)
+					{
+						StartIndex = field.Initializer.StartIndex,
+						EndIndex = field.Initializer.EndIndex,
+						Document = field.Initializer.Document,
+					};
+					Body.Initializer.Insert(index++, stmt);
 				}
 			}
 			else
@@ -964,9 +971,12 @@ namespace Osprey.Nodes
 					var expr = new FieldInitializer(
 						new StaticFieldAccess((Field)@class.GetMember(field.Name)) { IsAssignment = true },
 						field
-					);
-					expr.IgnoreValue = true;
-					expr.At(field.Initializer);
+					)
+					{
+						StartIndex = field.Initializer.StartIndex,
+						EndIndex = field.Initializer.EndIndex,
+						Document = field.Initializer.Document,
+					};
 					Body.Initializer.Insert(index++, expr);
 				}
 			}

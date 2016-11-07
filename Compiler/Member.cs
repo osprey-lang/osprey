@@ -1375,7 +1375,7 @@ namespace Osprey.Members
 		// DeclareThisField is called on the ClosureClass.
 		private void AddInitializers(ClosureClass closure)
 		{
-			var init = new List<AssignmentExpression>(2 + (capturedBlocks == null ? 0 : capturedBlocks.Count));
+			var init = new List<SimpleAssignment>(2 + (capturedBlocks == null ? 0 : capturedBlocks.Count));
 
 			{ // Call the constructor for the closure class and assign it to the closure local
 				var ctorMethod = AddClosureConstructor(closure);
@@ -1384,10 +1384,7 @@ namespace Osprey.Members
 				closureLocalAccess.IsAssignment = true;
 
 				var newExpr = new ObjectCreationExpression(null, EmptyArrays.Expressions, false) { Constructor = ctorMethod };
-				init.Add(new AssignmentExpression(closureLocalAccess, newExpr)
-					{
-						IgnoreValue = true,
-					});
+				init.Add(new SimpleAssignment(closureLocalAccess, newExpr));
 			}
 
 			if (capturedBlocks != null)
@@ -1425,7 +1422,7 @@ namespace Osprey.Members
 						}
 					}
 
-					init.Add(new AssignmentExpression(target, value) { IgnoreValue = true });
+					init.Add(new SimpleAssignment(target, value));
 				}
 			}
 
@@ -1445,10 +1442,7 @@ namespace Osprey.Members
 						var target = new InstanceMemberAccess(closureLocalAccess, closure, variable.CaptureField);
 						target.IsAssignment = true;
 
-						init.Add(new AssignmentExpression(target, new LocalVariableAccess(variable, LocalAccessKind.NonCapturing))
-							{
-								IgnoreValue = true
-							});
+						init.Add(new SimpleAssignment(target, new LocalVariableAccess(variable, LocalAccessKind.NonCapturing)));
 					}
 
 			this.Node.Initializer = init;
@@ -1485,7 +1479,7 @@ namespace Osprey.Members
 			else
 				value = new ThisAccess();
 
-			this.Node.Initializer.Add(new AssignmentExpression(target, value) { IgnoreValue = true });
+			this.Node.Initializer.Add(new SimpleAssignment(target, value));
 		}
 
 		private Method AddClosureConstructor(ClosureClass closure)

@@ -2010,39 +2010,14 @@ namespace Osprey
 			var start = tok[i].Index;
 			var expr = ParseExpression(ref i);
 
-			if (expr is AssignmentExpression)
+			if (Accept(i, TokenType.Assign))
 			{
-				Expect(ref i, TokenType.Semicolon);
-				((AssignmentExpression)expr).IgnoreValue = true;
-				return new ExpressionStatement(expr)
-				{
-					StartIndex = start,
-					EndIndex = expr.EndIndex,
-					Document = document,
-				};
+				return ParseSimpleAssignment(ref i, expr, start);
 			}
-
 			if (Accept(i, TokenType.CompoundAssign))
 			{
-				var assignableExpr = EnsureAssignable(expr);
-
-				var op = GetCompoundAssignmentOp(tok[i].Type);
-				i++;
-
-				Expression value;
-				try { value = ParseExpression(ref i); }
-				catch (ParseException e) { throw e.Extend("Expected expression."); }
-
-				Expect(ref i, TokenType.Semicolon);
-
-				return new CompoundAssignment(assignableExpr, value, op)
-				{
-					StartIndex = start,
-					EndIndex = value.EndIndex,
-					Document = document,
-				};
+				return ParseCompoundAssignment(ref i, expr, start);
 			}
-
 			if (Accept(i, TokenType.Comma)) // parallel assignment
 			{
 				return ParseParallelAssignment(ref i, expr, start);
@@ -2062,6 +2037,44 @@ namespace Osprey
 			{
 				StartIndex = start,
 				EndIndex = end,
+				Document = document,
+			};
+		}
+
+		private SimpleAssignment ParseSimpleAssignment(ref int i, Expression expr, int startIndex)
+		{
+			Expect(ref i, TokenType.Assign);
+
+			var target = EnsureAssignable(expr);
+			var value = ParseExpression(ref i);
+
+			Expect(ref i, TokenType.Semicolon);
+
+			return new SimpleAssignment(target, value)
+			{
+				StartIndex = startIndex,
+				EndIndex = value.EndIndex,
+				Document = document,
+			};
+		}
+
+		private CompoundAssignment ParseCompoundAssignment(ref int i, Expression expr, int startIndex)
+		{
+			var target = EnsureAssignable(expr);
+
+			var op = GetCompoundAssignmentOp(tok[i].Type);
+			i++;
+
+			Expression value;
+			try { value = ParseExpression(ref i); }
+			catch (ParseException e) { throw e.Extend("Expected expression."); }
+
+			Expect(ref i, TokenType.Semicolon);
+
+			return new CompoundAssignment(target, value, op)
+			{
+				StartIndex = startIndex,
+				EndIndex = value.EndIndex,
 				Document = document,
 			};
 		}
@@ -2193,17 +2206,7 @@ namespace Osprey
 			if (Accept(i, TokenType.Use))
 				return ParseUseInExpression(ref i);
 
-			var left = ParseConditionalExpr(ref i);
-			if (Accept(i, TokenType.Assign))
-			{
-				var leftAssignable = EnsureAssignable(left);
-				i++;
-
-				var value = ParseExpression(ref i);
-				return new AssignmentExpression(leftAssignable, value)
-					.At(left.StartIndex, value.EndIndex, document);
-			}
-			return left;
+			return ParseConditionalExpr(ref i);
 		}
 
 		private Expression ParseConditionalExpr(ref int i)

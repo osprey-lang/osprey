@@ -176,12 +176,9 @@ namespace Osprey.Nodes
 			method.Append(new LoadLocal(local));
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			value.Compile(compiler, method);
-			if (useValue)
-				method.Append(new SimpleInstruction(Opcode.Dup));
-
 			method.Append(new StoreLocal(GetLocal(method)));
 		}
 
@@ -510,21 +507,13 @@ namespace Osprey.Nodes
 			}
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			// Note: the member is either a field or a property. Method groups cannot be assigned to,
 			// which is caught by AssignmentExpression.EnsureAssignable.
 
 			Inner.Compile(compiler, method); // Always evaluate the instance
-
-			LocalVariable valueLocal = null;
 			value.Compile(compiler, method); // And the value
-			if (useValue && !value.CanSafelyInline)
-			{
-				valueLocal = method.GetAnonymousLocal();
-				method.Append(new SimpleInstruction(Opcode.Dup));
-				method.Append(new StoreLocal(valueLocal));
-			}
 
 			if (Member.Kind == MemberKind.Field)
 				method.Append(StoreField.Create(method.Module, (Field)Member)); // Store the field
@@ -540,15 +529,6 @@ namespace Osprey.Nodes
 					method.Append(new SimpleInstruction(Opcode.Pop)); // Pop the result of the call
 				}
 			}
-
-			if (useValue)
-				if (value.CanSafelyInline)
-					value.Compile(compiler, method);
-				else
-				{
-					method.Append(new LoadLocal(valueLocal));
-					valueLocal.Done();
-				}
 		}
 
 		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)
@@ -659,11 +639,9 @@ namespace Osprey.Nodes
 			method.Append(LoadField.Create(method.Module, Field));
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			value.Compile(compiler, method);
-			if (useValue)
-				method.Append(new SimpleInstruction(Opcode.Dup));
 			method.Append(StoreField.Create(method.Module, Field));
 		}
 
@@ -754,12 +732,9 @@ namespace Osprey.Nodes
 			method.Append(new StaticCall(method.Module.GetMethodId(Property.Getter.Method.Group), 0));
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			value.Compile(compiler, method); // Evaluate the value
-			if (useValue)
-				method.Append(new SimpleInstruction(Opcode.Dup));
-
 			method.Append(new StaticCall(method.Module.GetMethodId(Property.Setter.Method.Group), 1)); // Set the property
 			method.Append(new SimpleInstruction(Opcode.Pop)); // Pop the result of the call
 		}
@@ -984,11 +959,9 @@ namespace Osprey.Nodes
 			Load(compiler, method);
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			value.Compile(compiler, method);
-			if (useValue)
-				method.Append(new SimpleInstruction(Opcode.Dup));
 			Store(compiler, method);
 		}
 

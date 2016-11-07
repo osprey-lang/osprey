@@ -301,7 +301,7 @@ namespace Osprey.Nodes
 
 		public abstract Expression ResolveNames(IDeclarationSpace context, FileNamespace document, ExpressionAccessKind kind);
 
-		public abstract void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue);
+		public abstract void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value);
 
 		public abstract void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op);
 
@@ -1397,110 +1397,6 @@ namespace Osprey.Nodes
 		}
 	}
 
-	// Simple assignments only; that is, one value to one storage location.
-	public class AssignmentExpression : Expression
-	{
-		public AssignmentExpression(AssignableExpression target, Expression value)
-		{
-			var assignableTarget = target as AssignableExpression;
-			if (assignableTarget != null)
-				assignableTarget.IsAssignment = true;
-			Target = target;
-			Value = value;
-		}
-
-		/// <summary>The target of the assignment.</summary>
-		public AssignableExpression Target;
-		/// <summary>The value to be assigned.</summary>
-		public Expression Value;
-
-		/// <summary>
-		/// If true, the assignment is an expression on its own; otherwise,
-		/// the assignment occurs inside another expression, so the rhs value
-		/// must be put on the stack after assignment.
-		/// </summary>
-		/// <remarks>
-		/// This is not needed for parallel assignments or compound assignments,
-		/// because they are always statements.
-		/// </remarks>
-		internal bool IgnoreValue;
-
-		public override bool IsTypeKnown(Compiler compiler)
-		{
-			return Value.IsTypeKnown(compiler);
-		}
-
-		public override Type GetKnownType(Compiler compiler)
-		{
-			return Value.GetKnownType(compiler);
-		}
-
-		public override string ToString(int indent)
-		{
-			return Target.ToString(indent) + " = " + Value.ToString(indent + 1);
-		}
-
-		public override Expression FoldConstant()
-		{
-			Target = (AssignableExpression)Target.FoldConstant();
-			Value = Value.FoldConstant();
-			return this;
-		}
-
-		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
-		{
-			var target = Target.ResolveNames(context, document, ExpressionAccessKind.Write);
-			Target = EnsureAssignable(target);
-			Value = Value.ResolveNames(context, document, false, false);
-			return this;
-		}
-
-		public override Expression TransformClosureLocals(BlockSpace currentBlock, bool forGenerator)
-		{
-			Target = (AssignableExpression)Target.TransformClosureLocals(currentBlock, forGenerator);
-			Value = Value.TransformClosureLocals(currentBlock, forGenerator);
-			return this;
-		}
-
-		public override void Compile(Compiler compiler, MethodBuilder method)
-		{
-			Target.CompileSimpleAssignment(compiler, method, Value, !IgnoreValue);
-		}
-
-		internal static AssignableExpression EnsureAssignable(Expression expr)
-		{
-			var assignableExpr = expr as AssignableExpression;
-			if (assignableExpr == null)
-				throw new CompileTimeException(expr, "This expression cannot be assigned to.");
-
-			assignableExpr.IsAssignment = true;
-			return assignableExpr;
-		}
-	}
-
-	// Field initializer (generated inside a constructor)
-	// This differs from AssignmentExpression only in that it updates
-	// the Value field immediately before compilation, since the field
-	// initializer expression can change if it contains or consists of
-	// a lambda expression.
-	internal class FieldInitializer : AssignmentExpression
-	{
-		public FieldInitializer(AssignableExpression target, VariableDeclarator declarator)
-			: base(target, declarator.Initializer)
-		{
-			this.declarator = declarator;
-		}
-
-		private VariableDeclarator declarator;
-
-		public override void Compile(Compiler compiler, MethodBuilder method)
-		{
-			// Update the value in case the declarator has changed
-			this.Value = declarator.Initializer;
-			base.Compile(compiler, method);
-		}
-	}
-
 	public sealed class SimpleNameExpression : AssignableExpression
 	{
 		public SimpleNameExpression(string name)
@@ -1721,7 +1617,7 @@ namespace Osprey.Nodes
 			throw new InvalidOperationException(NotResolved);
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			throw new InvalidOperationException(NotResolved);
 		}
@@ -2364,29 +2260,14 @@ namespace Osprey.Nodes
 			method.Append(new LoadMember(method.Module.GetStringId(Member))); // Load the member
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			Inner.Compile(compiler, method); // Evaluate the instance
 
 			LocalVariable valueLocal = null;
 			value.Compile(compiler, method); // Evaluate the value
-			if (useValue && !value.CanSafelyInline)
-			{
-				valueLocal = method.GetAnonymousLocal();
-				method.Append(new SimpleInstruction(Opcode.Dup));
-				method.Append(new StoreLocal(valueLocal));
-			}
 
 			method.Append(new StoreMember(method.Module.GetStringId(Member))); // Store the value in the member
-
-			if (useValue)
-				if (value.CanSafelyInline)
-					value.Compile(compiler, method);
-				else
-				{
-					method.Append(new LoadLocal(valueLocal));
-					valueLocal.Done();
-				}
 		}
 
 		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)
@@ -2848,7 +2729,7 @@ namespace Osprey.Nodes
 				method.Append(new LoadIndexer(Arguments.Length));
 		}
 
-		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value, bool useValue)
+		public override void CompileSimpleAssignment(Compiler compiler, MethodBuilder method, Expression value)
 		{
 			Inner.Compile(compiler, method);
 
@@ -2857,23 +2738,8 @@ namespace Osprey.Nodes
 
 			value.Compile(compiler, method);
 			LocalVariable valueLocal = null;
-			if (useValue && !value.CanSafelyInline)
-			{
-				valueLocal = method.GetAnonymousLocal();
-				method.Append(new SimpleInstruction(Opcode.Dup));
-				method.Append(new StoreLocal(valueLocal));
-			}
 
 			AppendStoreInstruction(method);
-
-			if (useValue)
-				if (value.CanSafelyInline)
-					value.Compile(compiler, method);
-				else
-				{
-					method.Append(new LoadLocal(valueLocal));
-					valueLocal.Done();
-				}
 		}
 
 		public override void CompileCompoundAssignment(Compiler compiler, MethodBuilder method, Expression value, BinaryOperator op)
@@ -3920,6 +3786,7 @@ namespace Osprey.Nodes
 		{
 			Inner = inner;
 		}
+
 		/// <summary>The expression that starts the safe access.</summary>
 		public Expression Inner;
 

@@ -673,26 +673,26 @@ namespace Osprey.Members
 				var generatorLocal = new Variable("<generator>", (VariableDeclarator)null);
 
 				var body = new TempList<Statement>();
-				body.Add(new ExpressionStatement(new AssignmentExpression(
+				body.Add(new SimpleAssignment(
 					new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing) { IsAssignment = true },
 					new ObjectCreationExpression(null, EmptyArrays.Expressions, false) { Constructor = ctor }
-				) { IgnoreValue = true }));
+				));
 
 				if (hasThisField)
-					body.Add(new ExpressionStatement(new AssignmentExpression(
+					body.Add(new SimpleAssignment(
 						new InstanceMemberAccess(new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing),
 							genClass, genClass.ThisField) { IsAssignment = true },
 						new ThisAccess()
-					) { IgnoreValue = true }));
+					));
 
 				for (var i = 0; i < Parameters.Length; i++)
 				{
 					var paramVar = (Variable)this.body.members[Parameters[i].DeclaredName];
-					body.Add(new ExpressionStatement(new AssignmentExpression(
+					body.Add(new SimpleAssignment(
 						new InstanceMemberAccess(new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing),
 							genClass, paramVar.CaptureField) { IsAssignment = true },
 						new LocalVariableAccess(paramVar, LocalAccessKind.NonCapturing)
-					) { IgnoreValue = true }));
+					));
 				}
 
 				body.Add(new ReturnStatement(new LocalVariableAccess(generatorLocal, LocalAccessKind.NonCapturing)));
