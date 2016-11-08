@@ -1159,7 +1159,7 @@ namespace Osprey
 			Statement body;
 			if (Accept(i, TokenType.Semicolon))
 				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
-			else if (!isSetter && Accept(i, TokenType.Assign)) // get x = expr;
+			else if (!isSetter && Accept(i, TokenType.FatArrow)) // get x => expr;
 			{
 				i++;
 				body = ExpressionToStatement(ParseExpression(ref i));
@@ -1203,7 +1203,7 @@ namespace Osprey
 			Statement body;
 			if (Accept(i, TokenType.Semicolon))
 				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
-			else if (!isSetter && Accept(i, TokenType.Assign)) // get this[x] = expr;
+			else if (!isSetter && Accept(i, TokenType.FatArrow)) // get this[x] => expr;
 			{
 				i++;
 				body = ExpressionToStatement(ParseExpression(ref i));

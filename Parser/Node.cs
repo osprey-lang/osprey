@@ -1231,7 +1231,7 @@ namespace Osprey.Nodes
 			sb.Append(GetName());
 			if (Body is ExpressionStatement)
 			{
-				sb.Append(" = ");
+				sb.Append(" => ");
 				sb.Append(((ExpressionStatement)Body).Expression.ToString(indent + 1));
 				sb.Append(";");
 			}
