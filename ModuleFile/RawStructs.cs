@@ -133,7 +133,7 @@ namespace Osprey.ModuleFile.Raw
 		public VersionConstraint VersionConstraint;
 		public ModuleVersionStruct Version;
 
-		public const uint Size = 12u;
+		public const uint Size = 20u;
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
