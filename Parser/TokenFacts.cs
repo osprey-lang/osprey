@@ -31,6 +31,7 @@ namespace Osprey
 			{"internal", TokenType.Internal},
 			{"is", TokenType.Is},
 			{"iter", TokenType.Iter},
+			{"let", TokenType.Let},
 			{"namespace", TokenType.Namespace},
 			{"new", TokenType.New},
 			{"next", TokenType.Next},

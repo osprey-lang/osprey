@@ -84,47 +84,49 @@ namespace Osprey
 		/// <summary>function</summary>
 		Function = 15 | Keyword,
 		/// <summary>global</summary>
-		Global = 17 | Keyword,
+		Global = 16 | Keyword,
 		/// <summary>if</summary>
-		If = 18 | Keyword,
+		If = 17 | Keyword,
 		/// <summary>in</summary>
-		In = 19 | Keyword,
+		In = 18 | Keyword,
 		/// <summary>inheritable</summary>
-		Inheritable = 20 | Keyword | MemberModifier,
+		Inheritable = 19 | Keyword | MemberModifier,
 		/// <summary>internal</summary>
-		Internal = 51 | Keyword | MemberModifier,
+		Internal = 20 | Keyword | MemberModifier,
 		/// <summary>is</summary>
 		Is = 21 | Keyword,
 		/// <summary>iter</summary>
 		Iter = 22 | Keyword,
+		/// <summary>let</summary>
+		Let = 23 | Keyword,
 		/// <summary>namespace</summary>
-		Namespace = 23 | Keyword,
+		Namespace = 24 | Keyword,
 		/// <summary>new</summary>
-		New = 24 | Keyword,
+		New = 25 | Keyword,
 		/// <summary>next</summary>
-		Next = 25 | Keyword,
+		Next = 26 | Keyword,
 		/// <summary>not</summary>
-		Not = 26 | Keyword | LambdaOperator,
+		Not = 27 | Keyword | LambdaOperator,
 		/// <summary>null</summary>
-		Null = 27 | Keyword | Literal,
+		Null = 28 | Keyword | Literal,
 		/// <summary>operator</summary>
-		Operator = 28 | Keyword,
+		Operator = 29 | Keyword,
 		/// <summary>or</summary>
-		Or = 29 | Keyword | LambdaOperator,
+		Or = 30 | Keyword | LambdaOperator,
 		/// <summary>overridable</summary>
-		Overridable = 30 | Keyword | MemberModifier,
+		Overridable = 31 | Keyword | MemberModifier,
 		/// <summary>override</summary>
-		Override = 31 | Keyword | MemberModifier,
+		Override = 32 | Keyword | MemberModifier,
 		/// <summary>private</summary>
-		Private = 32 | Keyword | MemberModifier,
+		Private = 33 | Keyword | MemberModifier,
 		/// <summary>protected</summary>
-		Protected = 33 | Keyword | MemberModifier,
+		Protected = 34 | Keyword | MemberModifier,
 		/// <summary>public</summary>
-		Public = 34 | Keyword | MemberModifier,
+		Public = 35 | Keyword | MemberModifier,
 		/// <summary>refeq</summary>
-		Refeq = 35 | Keyword,
+		Refeq = 36 | Keyword,
 		/// <summary>return</summary>
-		Return = 36 | Keyword,
+		Return = 37 | Keyword,
 		/// <summary>static</summary>
 		Static = 38 | Keyword | MemberModifier,
 		/// <summary>this</summary>
