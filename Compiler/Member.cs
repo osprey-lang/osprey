@@ -1613,6 +1613,25 @@ namespace Osprey.Members
 
 		public bool IsCaptured { get { return isCaptured; } }
 
+		public bool IsAssignable
+		{
+			get
+			{
+				switch (varKind)
+				{
+					case VariableKind.Regular:
+					case VariableKind.Parameter:
+					case VariableKind.Global:
+						return true;
+					case VariableKind.IterationVariable:
+					case VariableKind.CatchVariable:
+					case VariableKind.WithVariable:
+					default:
+						return false;
+				}
+			}
+		}
+
 		/// <summary>
 		/// The field that the variable is captured in, if it is captured.
 		/// For global variables, this is the field that contains the variable value.
@@ -1638,14 +1657,9 @@ namespace Osprey.Members
 			get
 			{
 				var kind = varKind;
-				if (kind == VariableKind.IterationVariable ||
-					kind == VariableKind.WithVariable)
+				if (!IsAssignable)
 					// These variables cannot be reassigned
 					return true;
-				if (kind == VariableKind.CatchVariable)
-					// Catch variables get assigned once by the catch block;
-					// they have AssignmentCount = 1 if never reassigned
-					return AssignmentCount == 1;
 				if (kind == VariableKind.Parameter)
 					// Parameters have AssignmentCount = 0 if never reassigned
 					return AssignmentCount == 0;
@@ -1698,12 +1712,23 @@ namespace Osprey.Members
 
 		public void EnsureAssignable(ParseNode errorNode)
 		{
-			if (VariableKind == VariableKind.IterationVariable ||
-				VariableKind == VariableKind.WithVariable)
-				throw new CompileTimeException(errorNode,
-					string.Format("The variable '{0}' cannot be reassigned to because it is {1}.",
-						Name,
-						VariableKind == VariableKind.IterationVariable ? "an iteration variable" : "a 'with' variable"));
+			if (!IsAssignable)
+			{
+				var message = "";
+				switch (VariableKind)
+				{
+					case VariableKind.IterationVariable:
+						message = "The variable '{0}' cannot be reassigned because it is declared in a 'for' statement.";
+						break;
+					case VariableKind.CatchVariable:
+						message = "The variable '{0}' cannot be reassigned because it is declared in a 'catch' clause.";
+						break;
+					case VariableKind.WithVariable:
+						message = "The variable '{0}' cannot be reassigned because it is declared in a 'with' statement.";
+						break;
+				}
+				throw new CompileTimeException(errorNode, string.Format(message, Name));
+			}
 		}
 	}
 

@@ -354,9 +354,7 @@ namespace Osprey.Nodes
 			if (Inner is LocalVariableAccess)
 			{
 				var access = (LocalVariableAccess)Inner;
-				if (access.Variable.VariableKind == VariableKind.IterationVariable ||
-					access.Variable.VariableKind == VariableKind.WithVariable)
-					throw new CompileTimeException(Inner, "An iteration variable or with variable cannot be passed by reference.");
+				access.Variable.EnsureAssignable(Inner);
 				// Passing a variable by ref also counts as assigning to it
 				access.Variable.AssignmentCount++;
 			}
