@@ -529,23 +529,11 @@ namespace Osprey
 				case '_': codepoint = (int)'\xA0'; break; // non-breaking space
 				case '-': codepoint = (int)'\xAD'; break; // soft hyphen
 				case 'u':
-				case 'U':
-					len = ch == 'U' ? 9 : 5; // \uxxxx or \Uxxxxxxxx
-					for (var k = 1; k < len; k++)
-						if (IsEOF(i + k) || !IsHex(source[i + k]))
-							throw new ParseException(GetErrorToken(i - 1, 2),
-								ch == 'U'
-									? "'\\U' must be followed by 8 hexadecimal digits."
-									: "'\\u' must be followed by 4 hexadecimal digits.");
-
-					var charCode = uint.Parse(source.Substring(i + 1, len - 1),
-						NumberStyles.AllowHexSpecifier, CI.InvariantCulture);
-
-					if (charCode > 0x10FFFF)
-						throw new ParseException(GetErrorToken(i + 1, len - 1),
-							"Code point in a Unicode escape sequence cannot be greater than U+10FFFF");
-
-					codepoint = unchecked((int)charCode);
+					{
+						i++; // skip u
+						codepoint = ScanUnicodeEscape(ref i);
+						len = 0; // don't skip anything extra
+					}
 					break;
 				default:
 					throw new ParseException(GetErrorToken(i - 1, 2), "Invalid escape sequence.");
@@ -553,6 +541,46 @@ namespace Osprey
 			i += len; // skip escape sequence :D
 
 			return codepoint;
+		}
+
+		private int ScanUnicodeEscape(ref int i)
+		{
+			if (!IsChar(i, '{'))
+				throw new ParseException(
+					GetErrorToken(i, 1),
+					"Expected '{' after '\\u'."
+				);
+			i++; // Skip {
+
+			var startIndex = i;
+			while (!IsEOF(i) && IsHex(source[i]))
+				i++;
+
+			if (i == startIndex)
+				throw new ParseException(
+					GetErrorToken(i, 1),
+					"Expected one or more hexadecimal digits in Unicode escape sequence."
+				);
+
+			var codepoint = uint.Parse(
+				source.Substring(startIndex, i - startIndex),
+				NumberStyles.AllowHexSpecifier,
+				CI.InvariantCulture
+			);
+			if (codepoint > 0x10FFFF)
+				throw new ParseException(
+					GetErrorToken(startIndex, i - startIndex),
+					"The code point in a Unicode escape sequence cannot be greater than U+10FFFF."
+				);
+
+			if (!IsChar(i, '}'))
+				throw new ParseException(
+					GetErrorToken(i, 1),
+					"Expected '}' at the end of the Unicode escape sequence."
+				);
+			i++; // Skip }
+
+			return unchecked((int)codepoint);
 		}
 
 		private Token ScanIdentifier(ref int i)
