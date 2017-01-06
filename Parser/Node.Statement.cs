@@ -715,13 +715,13 @@ namespace Osprey.Nodes
 	/// </summary>
 	public abstract class CompoundStatement : Statement
 	{
-		protected CompoundStatement(Statement body)
+		protected CompoundStatement(Block body)
 		{
 			Body = body;
 		}
 
 		/// <summary>The body of the statement.</summary>
-		public Statement Body;
+		public Block Body;
 
 		internal BlockSpace BodyBlock { get { return ((Block)Body).DeclSpace; } }
 
@@ -758,22 +758,9 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class EmbeddedStatement : CompoundStatement
-	{
-		// Used in control structures; followed by a single embedded-statement.
-		public EmbeddedStatement(Statement body)
-			: base(body)
-		{ }
-
-		public override string ToString(int indent)
-		{
-			return ":\r\n" + Body.ToString(indent + 1); // always on same line as "owner"
-		}
-	}
-
 	public sealed class IfStatement : CompoundStatement
 	{
-		public IfStatement(Expression cond, Statement body, ElseClause @else)
+		public IfStatement(Expression cond, Block body, Statement @else)
 			: base(body)
 		{
 			Condition = cond;
@@ -784,7 +771,7 @@ namespace Osprey.Nodes
 		public Expression Condition;
 
 		/// <summary>The else clause of the if statement, or null if there is none.</summary>
-		public ElseClause Else;
+		public Statement Else;
 
 		public override bool CanReturn
 		{
@@ -844,13 +831,7 @@ namespace Osprey.Nodes
 			sb.Append(Body.ToString(indent));
 			if (Else != null)
 			{
-				if (Body is EmbeddedStatement)
-				{
-					sb.Append("\r\n");
-					sb.Append('\t', indent);
-				}
-				else
-					sb.Append(' ');
+				sb.Append(" else ");
 				sb.Append(Else.ToString(indent));
 			}
 			return sb.ToString();
@@ -950,39 +931,11 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class ElseClause : CompoundStatement
-	{
-		public ElseClause(Statement body)
-			: base(body)
-		{ }
-
-		public override string ToString(int indent)
-		{
-			var sb = new StringBuilder("else");
-			if (Body is Block)
-			{
-				sb.Append(" ");
-				sb.Append(Body.ToString(indent));
-			}
-			else if (Body is IfStatement)
-			{
-				sb.Append(" ");
-				sb.Append(Body.ToString(indent).TrimStart('\t'));
-			}
-			else
-			{
-				sb.Append("\r\n");
-				sb.Append(Body.ToString(indent + 1));
-			}
-			return sb.ToString();
-		}
-	}
-
 	#region Iteration statements
 
 	public abstract class IterationStatement : CompoundStatement
 	{
-		protected IterationStatement(string label, Statement body)
+		protected IterationStatement(string label, Block body)
 			: base(body)
 		{
 			Label = label;
@@ -1044,7 +997,7 @@ namespace Osprey.Nodes
 
 	public sealed class ForStatement : IterationStatement
 	{
-		public ForStatement(string label, string[] variables, Expression list, Statement body, ElseClause @else)
+		public ForStatement(string label, string[] variables, Expression list, Block body, Statement @else)
 			: base(label, body)
 		{
 			VariableNames = variables;
@@ -1059,7 +1012,7 @@ namespace Osprey.Nodes
 		public Expression List;
 
 		/// <summary>The else clause associated with the for loop, or null if there is none.</summary>
-		public ElseClause Else;
+		public Statement Else;
 
 		internal Variable[] Variables;
 
@@ -1106,13 +1059,7 @@ namespace Osprey.Nodes
 			sb.Append(Body.ToString(indent));
 			if (Else != null)
 			{
-				if (Body is EmbeddedStatement)
-				{
-					sb.Append("\r\n");
-					sb.Append('\t', indent);
-				}
-				else
-					sb.Append(' ');
+				sb.Append(" else ");
 				sb.Append(Else.ToString(indent));
 			}
 			return sb.ToString();
@@ -1434,7 +1381,7 @@ namespace Osprey.Nodes
 
 	public sealed class WhileStatement : IterationStatement
 	{
-		public WhileStatement(string label, Expression cond, Statement body)
+		public WhileStatement(string label, Expression cond, Block body)
 			: base(label, body)
 		{
 			Condition = cond;
@@ -2368,7 +2315,7 @@ namespace Osprey.Nodes
 
 	public sealed class WithStatement : CompoundStatement
 	{
-		public WithStatement(string variableName, Expression initializer, Statement body)
+		public WithStatement(string variableName, Expression initializer, Block body)
 			: base(body)
 		{
 			VariableName = variableName;
@@ -2402,7 +2349,7 @@ namespace Osprey.Nodes
 
 		public override void DeclareNames(BlockSpace parent)
 		{
-			var block = (Block)Body;
+			var body = Body;
 			// Add a variable declarator to the beginning of the block,
 			// it's the easiest way of doing it!
 			var variable = new Variable(VariableName, this, VariableKind.WithVariable);
@@ -2419,10 +2366,10 @@ namespace Osprey.Nodes
 				EndIndex = this.EndIndex,
 				Document = this.Document,
 			};
-			var stmtCount = block.Statements.Length;
-			Array.Resize(ref block.Statements, stmtCount + 1);
-			Array.Copy(block.Statements, 0, block.Statements, 1, stmtCount);
-			block.Statements[0] = declaration;
+			var stmtCount = body.Statements.Length;
+			Array.Resize(ref body.Statements, stmtCount + 1);
+			Array.Copy(body.Statements, 0, body.Statements, 1, stmtCount);
+			body.Statements[0] = declaration;
 
 			// And now let's initialize the finally clause
 			var ifStmt = new IfStatement(
@@ -2445,8 +2392,8 @@ namespace Osprey.Nodes
 			ifStmt.EndIndex = this.EndIndex;
 			ifStmt.Document = this.Document;
 
-			block = ((TryStatement)block.Statements[block.Statements.Length - 1]).Finally.Body as Block;
-			block.Statements = new Statement[] { ifStmt };
+			body = ((TryStatement)body.Statements[body.Statements.Length - 1]).Finally.Body;
+			body.Statements = new Statement[] { ifStmt };
 
 			base.DeclareNames(parent);
 		}

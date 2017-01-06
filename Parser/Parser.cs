@@ -1676,70 +1676,46 @@ namespace Osprey
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
 			Expression cond;
-			try { cond = ParseExpression(ref i); }
-			catch (ParseException e) { throw new ParseException(e.Token ?? tok[i], "Expected expression.", e); }
+			try
+			{
+				cond = ParseExpression(ref i);
+			}
+			catch (ParseException e)
+			{
+				throw new ParseException(e.Token ?? tok[i], "Expected expression.", e);
+			}
 
-			var body = ParseControlBody(ref i);
+			var body = ParseBlock(ref i);
 
-			ElseClause @else = null;
+			Statement @else = null;
 			if (Accept(i, TokenType.Else))
 				@else = ParseElseClause(ref i);
 
-			return new IfStatement(cond, body, @else) { StartIndex = start, EndIndex = end, Document = document };
-		}
-
-		private Statement ParseControlBody(ref int i)
-		{
-			if (Accept(ref i, TokenType.Colon))
+			return new IfStatement(cond, body, @else)
 			{
-				var stmt = ParseStatement(ref i);
-				if (stmt is LocalDeclaration)
-					ParseError(stmt, "Embedded statement cannot be a declaration.");
-
-				Statement result;
-				if (!SimplifiedTree)
-					result = new EmbeddedStatement(stmt);
-				else
-					result = new Block(new[] { stmt });
-
-				result.StartIndex = stmt.StartIndex;
-				result.EndIndex = stmt.EndIndex;
-				result.Document = document;
-				return result;
-			}
-			if (!Accept(i, TokenType.CurlyOpen))
-				ParseError(i, "Expected ': <statement>' or block.");
-
-			return ParseBlock(ref i);
+				StartIndex = start,
+				EndIndex = end,
+				Document = document
+			};
 		}
 
-		private ElseClause ParseElseClause(ref int i)
+		private Statement ParseElseClause(ref int i)
 		{
 			Expect(i, TokenType.Else);
 			int start = tok[i].Index, end = tok[i++].EndIndex;
 
-			Statement body;
-			if (Accept(i, TokenType.CurlyOpen))
-				body = ParseBlock(ref i);
+			if (Accept(i, TokenType.If))
+			{
+				return ParseIfStatement(ref i);
+			}
+			else if (Accept(i, TokenType.CurlyOpen))
+			{
+				return ParseBlock(ref i);
+			}
 			else
 			{
-				Accept(ref i, TokenType.Colon); // Optional ':'
-
-				body = ParseStatement(ref i);
-				if (body is LocalDeclaration)
-					ParseError(body, "Embedded statement cannot be a declaration.");
-
-				if (SimplifiedTree)
-					// Force the embedded statement into a block
-					body = new Block(new[] { body })
-					{
-						StartIndex = body.StartIndex,
-						EndIndex = body.EndIndex,
-						Document = document,
-					};
+				throw new ParseException(tok[i], "Expected 'if' statement or block after 'else'");
 			}
-
-			return new ElseClause(body) { Document = document };
 		}
 
 		private Statement ParseTryStatement(ref int i)
@@ -1902,8 +1878,8 @@ namespace Osprey
 			Expect(ref i, TokenType.In);
 
 			var expr = ParseExpression(ref i);
-			var body = ParseControlBody(ref i);
-			ElseClause @else = null;
+			var body = ParseBlock(ref i);
+			Statement @else = null;
 
 			if (Accept(i, TokenType.Else))
 				@else = ParseElseClause(ref i);
@@ -1925,9 +1901,14 @@ namespace Osprey
 			try { cond = ParseExpression(ref i); }
 			catch (ParseException e) { throw e.Extend("Expected expression."); }
 
-			var body = ParseControlBody(ref i);
+			var body = ParseBlock(ref i);
 
-			return new WhileStatement(label, cond, body) { StartIndex = start, EndIndex = end, Document = document };
+			return new WhileStatement(label, cond, body)
+			{
+				StartIndex = start,
+				EndIndex = end,
+				Document = document
+			};
 		}
 
 		private Statement ParseDoWhileStatement(ref int i, string label = null)
@@ -1959,7 +1940,7 @@ namespace Osprey
 			Expect(ref i, TokenType.Assign);
 
 			var initializer = ParseExpression(ref i);
-			var body = ParseControlBody(ref i);
+			var body = ParseBlock(ref i);
 
 			if (SimplifiedTree)
 			{
@@ -1968,9 +1949,16 @@ namespace Osprey
 				// it's not possible to yield inside a try), while also letting us
 				// declare and initialize the 'with' variable in the surrounding block.
 				// Code will be injected later into the finally clause.
-				var @try = new TryStatement((Block)body,
+				var @try = new TryStatement(
+					(Block)body,
 					catches: EmptyArrays.CatchClauses,
-					fin: new FinallyClause(new Block()) { StartIndex = start, EndIndex = end, Document = document })
+					fin: new FinallyClause(new Block())
+					{
+						StartIndex = start,
+						EndIndex = end,
+						Document = document
+					}
+				)
 				{
 					StartIndex = start,
 					EndIndex = end,
@@ -1980,11 +1968,11 @@ namespace Osprey
 			}
 
 			return new WithStatement(varName, initializer, body)
-				{
-					StartIndex = start,
-					EndIndex = end,
-					Document = document,
-				};
+			{
+				StartIndex = start,
+				EndIndex = end,
+				Document = document,
+			};
 		}
 
 		private Statement ParseConstructorCall(ref int i)
