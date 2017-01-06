@@ -2262,7 +2262,6 @@ namespace Osprey.Nodes
 		{
 			Inner.Compile(compiler, method); // Evaluate the instance
 
-			LocalVariable valueLocal = null;
 			value.Compile(compiler, method); // Evaluate the value
 
 			method.Append(new StoreMember(method.Module.GetStringId(Member))); // Store the value in the member
@@ -2735,7 +2734,6 @@ namespace Osprey.Nodes
 				arg.Compile(compiler, method);
 
 			value.Compile(compiler, method);
-			LocalVariable valueLocal = null;
 
 			AppendStoreInstruction(method);
 		}
