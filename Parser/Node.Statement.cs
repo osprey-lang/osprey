@@ -50,31 +50,6 @@ namespace Osprey.Nodes
 		public abstract void Compile(Compiler compiler, MethodBuilder method);
 	}
 
-	public sealed class EmptyStatement : Statement
-	{
-		public EmptyStatement() { }
-		public EmptyStatement(int startIndex, int endIndex)
-		{
-			StartIndex = startIndex;
-			EndIndex = endIndex;
-		}
-
-		public override string ToString(int indent)
-		{
-			return new string('\t', indent) + ";";
-		}
-
-		public override void FoldConstant() { }
-
-		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable) { }
-
-		public override void DeclareNames(BlockSpace parent) { }
-
-		public override void TransformClosureLocals(BlockSpace currentBlock, bool forGenerator) { }
-
-		public override void Compile(Compiler compiler, MethodBuilder method) { }
-	}
-
 	public class Block : Statement
 	{
 		internal Block()

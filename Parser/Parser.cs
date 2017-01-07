@@ -1122,9 +1122,10 @@ namespace Osprey
 			var parameters = ParseParameterList(ref i);
 			Expect(ref i, TokenType.ParenClose);
 
-			Statement body = null;
+			Block body = null;
 			if (Accept(i, TokenType.Semicolon))
-				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
+				// Let body remain null
+				i++;
 			else if (Accept(i, TokenType.CurlyOpen))
 				body = ParseBlock(ref i);
 			else if (AcceptExtension(i, ContextualType.Extern))
@@ -1132,11 +1133,14 @@ namespace Osprey
 			else
 				ParseError(i, "Expected block or ';'.");
 
-			if (modifiers.IsAbstract != (body is EmptyStatement))
+			if (modifiers.IsAbstract != (body == null))
 			{
-				ParseError(nameTok, modifiers.IsAbstract ?
-					"Abstract methods cannot have a body." :
-					"Non-abstract methods cannot have empty bodies.");
+				ParseError(
+					nameTok,
+					modifiers.IsAbstract
+						? "Abstract methods cannot have a body."
+						: "Non-abstract methods cannot have empty bodies."
+				);
 			}
 
 			return new MethodDeclaration(nameTok.Value, modifiers.Access, parameters.Parameters, parameters.Splat, body)
@@ -1156,9 +1160,12 @@ namespace Osprey
 			var nameTok = Expect(ref i, TokenType.Identifier);
 			modifiers.ValidateForMethodOrProperty(nameTok);
 
-			Statement body;
+			Statement body = null;
 			if (Accept(i, TokenType.Semicolon))
-				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
+			{
+				// Let body remain null
+				i++;
+			}
 			else if (!isSetter && Accept(i, TokenType.FatArrow)) // get x => expr;
 			{
 				i++;
@@ -1166,13 +1173,19 @@ namespace Osprey
 				Expect(ref i, TokenType.Semicolon);
 			}
 			else
+			{
 				body = ParseBlockOrExtern(ref i);
+			}
 
-			if (modifiers.IsAbstract && !(body is EmptyStatement))
-				ParseError(nameTok, "Abstract property accessors cannot have a body.");
-
-			if (!modifiers.IsAbstract && body is EmptyStatement)
-				ParseError(nameTok, "Non-abstract property accessors cannot have empty bodies.");
+			if (modifiers.IsAbstract != (body == null))
+			{
+				ParseError(
+					nameTok,
+					modifiers.IsAbstract
+						? "Abstract property accessors cannot have a body."
+						: "Non-abstract property accessors cannot have empty bodies."
+				);
+			}
 
 			return new PropertyAccessorDeclaration(nameTok.Value, modifiers.Access, isSetter, body)
 			{
@@ -1200,9 +1213,12 @@ namespace Osprey
 
 			Expect(ref i, TokenType.SquareClose);
 
-			Statement body;
+			Statement body = null;
 			if (Accept(i, TokenType.Semicolon))
-				body = new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
+			{
+				// Let body remain null
+				i++;
+			}
 			else if (!isSetter && Accept(i, TokenType.FatArrow)) // get this[x] => expr;
 			{
 				i++;
@@ -1210,14 +1226,18 @@ namespace Osprey
 				Expect(ref i, TokenType.Semicolon);
 			}
 			else
-				body = ParseBlockOrExtern(ref i);
-
-			if (modifiers.IsAbstract != (body is EmptyStatement))
 			{
-				if (modifiers.IsAbstract)
-					ParseError(startTok, modifiers.IsAbstract ?
-						"Abstract indexer accessors cannot have a body." :
-						"Non-abstract indexer accessors cannot have empty bodies.");
+				body = ParseBlockOrExtern(ref i);
+			}
+
+			if (modifiers.IsAbstract != (body == null))
+			{
+				ParseError(
+					startTok,
+					modifiers.IsAbstract
+						? "Abstract indexer accessors cannot have a body."
+						: "Non-abstract indexer accessors cannot have empty bodies."
+				);
 			}
 
 			return new IndexerAccessorDeclaration(modifiers.Access, isSetter, parameters.Parameters, body)
@@ -1563,8 +1583,6 @@ namespace Osprey
 				return ParseWithStatement(ref i);
 			if (Accept(i, TokenType.New) && Accept(i + 1, TokenType.Base, TokenType.This))
 				return ParseConstructorCall(ref i);
-			if (Accept(i, TokenType.Semicolon))
-				return new EmptyStatement(tok[i].Index, tok[i++].EndIndex) { Document = document };
 
 			var loopLabelFound = Accept(i, TokenType.Identifier) && Accept(i + 1, TokenType.Colon);
 			string loopLabel = loopLabelFound ? tok[i].Value : null;

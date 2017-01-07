@@ -1063,7 +1063,7 @@ namespace Osprey.Nodes
 
 	public sealed class MethodDeclaration : MemberDeclaration
 	{
-		public MethodDeclaration(string name, Accessibility access, Parameter[] parameters, Splat splat, Statement body)
+		public MethodDeclaration(string name, Accessibility access, Parameter[] parameters, Splat splat, Block body)
 			: base(name, access)
 		{
 			Parameters = parameters;
@@ -1075,8 +1075,8 @@ namespace Osprey.Nodes
 		public Parameter[] Parameters;
 		/// <summary>The location of the splat, if any.</summary>
 		public Splat Splat;
-		/// <summary>The method body. This can be a <see cref="Block"/> or <see cref="EmptyStatement"/>.</summary>
-		public Statement Body;
+		/// <summary>The method body.</summary>
+		public Block Body;
 
 		public bool IsStatic, IsAbstract, IsOverride, IsOverridable;
 
@@ -1124,7 +1124,8 @@ namespace Osprey.Nodes
 			foreach (var param in Parameters)
 				param.FoldConstant();
 
-			Body.FoldConstant();
+			if (!IsAbstract)
+				Body.FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, Compiler compiler)
@@ -1132,7 +1133,8 @@ namespace Osprey.Nodes
 			foreach (var param in Parameters)
 				param.ResolveNames(context, document);
 
-			Body.ResolveNames(context, document, true);
+			if (!IsAbstract)
+				Body.ResolveNames(context, document, true);
 		}
 	}
 
@@ -1204,8 +1206,9 @@ namespace Osprey.Nodes
 		public bool IsSetter;
 		/// <summary>
 		/// The body of the property accessor.
-		/// On getters, this can be an ExpressionStatement, a Block or an EmptyStatement.
-		/// On setters, only the latter two are possible.
+		/// On getters, this can be an ExpressionStatement or a Block.
+		/// On setters, only Block is possible.
+		/// If the accessor is abstract, this field contains null.
 		/// </summary>
 		public Statement Body;
 
@@ -1253,12 +1256,14 @@ namespace Osprey.Nodes
 
 		public override void FoldConstant()
 		{
-			Body.FoldConstant();
+			if (!IsAbstract)
+				Body.FoldConstant();
 		}
 
 		public override void ResolveNames(IDeclarationSpace context, FileNamespace document, Compiler compiler)
 		{
-			Body.ResolveNames(context, document, true);
+			if (!IsAbstract)
+				Body.ResolveNames(context, document, true);
 		}
 	}
 
