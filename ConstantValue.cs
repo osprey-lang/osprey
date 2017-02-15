@@ -193,22 +193,16 @@ namespace Osprey
 		{
 			get
 			{
+				// Only null and false are false; everything else is true.
 				switch (type)
 				{
 					case ConstantValueType.Null:
 						return false;
 					case ConstantValueType.Boolean:
 						return num.BooleanValue;
-					case ConstantValueType.Int:
-					case ConstantValueType.Char:
-					case ConstantValueType.Enum:
-						return num.IntValue != 0;
-					case ConstantValueType.UInt:
-						return num.UIntValue != 0;
-					case ConstantValueType.Real:
-						return num.RealValue != 0.0;
+					default:
+						return true;
 				}
-				return true; // all other values are true!
 			}
 		}
 
@@ -1025,7 +1019,7 @@ namespace Osprey
 			throw new NotSupportedException();
 		}
 
-		/// <summary>Represents a null value.</summary>
+		/// <summary>Represents the null value.</summary>
 		public static readonly ConstantValue Null = new ConstantValue();
 
 		public static readonly ConstantValue False = CreateBoolean(false);
