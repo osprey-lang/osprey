@@ -273,8 +273,11 @@ namespace Osprey
 
 		public ConstantDef CreateConstantDef(Members.GlobalConstant constant)
 		{
+			var nameToken = module.GetStringId(constant.FullName);
 			var value = CreateConstantValue(constant.Value);
-			return new ConstantDef(constant, value);
+			var result = new ConstantDef(constant, nameToken, value);
+			definitions.ConstantDefs.Add(result);
+			return result;
 		}
 
 		public ModuleRef CreateModuleRef(Module module)
