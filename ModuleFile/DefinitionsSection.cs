@@ -532,13 +532,15 @@ namespace Osprey.ModuleFile
 
 	public class ConstantDef : FileObject
 	{
-		public ConstantDef(Members.GlobalConstant constant, ConstantValueObject value)
+		public ConstantDef(Members.GlobalConstant constant, uint nameToken, ConstantValueObject value)
 		{
 			this.Constant = constant;
+			this.NameToken = nameToken;
 			this.Value = value;
 		}
 
 		public readonly Members.GlobalConstant Constant;
+		public readonly uint NameToken;
 		public readonly ConstantValueObject Value;
 
 		public override uint Size { get { return 16; } }
@@ -549,9 +551,10 @@ namespace Osprey.ModuleFile
 		{
 			var data = new Raw.ConstantDefStruct();
 			data.Flags = GetConstantFlags();
-			data.Name = new MetadataToken(Constant.Module.GetStringId(Constant.FullName));
+			data.Name = new MetadataToken(NameToken);
 			data.Annotations = 0u; // not supported
 			data.Value = Value.ToRva<Raw.ConstantValueStruct>();
+			view.Write(this.Address, ref data);
 		}
 
 		private Raw.ConstantFlags GetConstantFlags()

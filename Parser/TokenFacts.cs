@@ -65,6 +65,7 @@ namespace Osprey
 		{
 			{"get", ContextualType.Get},
 			{"set", ContextualType.Set},
+			{"as", ContextualType.As},
 			{"__primitive", ContextualType.Primitive},
 			{"__init_type", ContextualType.InitType},
 			{"__extern", ContextualType.Extern},
