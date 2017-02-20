@@ -687,7 +687,7 @@ namespace Osprey.Members
 		/// </summary>
 		private Namespace projectNamespace;
 		private List<Namespace> importedNamespaces;
-		private Dictionary<string, NamedMember> aliases;
+		private Dictionary<string, NamedMember> importedMembers;
 
 		/// <summary>
 		/// Gets the namespace of the project that the file belongs to.
@@ -716,15 +716,19 @@ namespace Osprey.Members
 			Members.Add(variable.Name, variable);
 		}
 
-		public void DeclareAlias(ParseNode errorNode, string name, NamedMember member)
+		public void ImportMember(ParseNode errorNode, NamedMember member, string name)
 		{
-			if (aliases == null)
-				aliases = new Dictionary<string, NamedMember>();
+			name = name ?? member.Name;
 
-			if (aliases.ContainsKey(name))
-				throw new DuplicateNameException(errorNode,
-					string.Format("There is already an alias with the name '{0}'.", name));
-			aliases.Add(name, member);
+			if (importedMembers == null)
+				importedMembers = new Dictionary<string, NamedMember>();
+
+			if (importedMembers.ContainsKey(name))
+				throw new DuplicateNameException(
+					errorNode,
+					string.Format("A member has already been imported under the name '{0}'.", name)
+				);
+			importedMembers.Add(name, member);
 		}
 
 		public void ImportNamespace(Namespace ns)
@@ -745,11 +749,11 @@ namespace Osprey.Members
 			Type lastType = null;
 
 			NamedMember member;
-			// If the name is not global and has one part, see if there is an
-			// alias with that name.
-			if (aliases != null && !name.IsGlobal && name.Parts.Length == 1)
+			// If the name is not global and has one part, see if a type has been
+			// imported under that name.
+			if (importedMembers != null && !name.IsGlobal && name.Parts.Length == 1)
 			{
-				if (aliases.TryGetValue(name.Parts[0], out member))
+				if (importedMembers.TryGetValue(name.Parts[0], out member))
 				{
 					lastType = member as Type;
 					if (lastType != null)
@@ -817,7 +821,7 @@ namespace Osprey.Members
 			}
 
 			NamedMember member, lastMember = null;
-			if (aliases != null && aliases.TryGetValue(name, out member))
+			if (importedMembers != null && importedMembers.TryGetValue(name, out member))
 				return member;
 
 			var matches = new HashSet<NamedMember>();

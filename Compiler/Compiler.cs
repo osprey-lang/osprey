@@ -1022,12 +1022,15 @@ namespace Osprey
 				{
 					foreach (var use in doc.Uses)
 					{
+						// If the use directive tries to import a type member, we cannot resolve
+						// it right now; we have to wait until we've initialized all type members.
+						// This is done in ResolveAllNames().
 						if (use.ResolveNames(projectNamespace, firstPass: true))
 							doc.UseDirectivesRequireSecondPass = true;
 					}
 
 					// If the document has "namespace blah;" at the top,
-					// then we act as if it also had "use namespace blah;",
+					// then we act as if it also had "use blah.*;",
 					// for the benefit of global statements.
 					if (doc.GlobalDeclarationSpace.Name != null)
 						doc.Namespace.ImportNamespace(doc.GlobalDeclarationSpace.Namespace);
@@ -1160,10 +1163,6 @@ namespace Osprey
 				try
 				{
 					InitializeClassMembers(doc.GlobalDeclarationSpace);
-
-					if (doc.UseDirectivesRequireSecondPass)
-						foreach (var use in doc.Uses)
-							use.ResolveNames(projectNamespace, firstPass: false);
 				}
 				catch (CompileTimeException e)
 				{
@@ -1213,6 +1212,7 @@ namespace Osprey
 			Document doc = null;
 			try
 			{
+
 				// Names are resolved in two passes: first all global and class constants, then
 				// everything else. We do this so that said constants can be folded as necessary,
 				// without having to worry about whether their names have been resolved.
@@ -1222,6 +1222,13 @@ namespace Osprey
 				for (var i = 0; i < docCount; i++)
 				{
 					doc = documents[i];
+
+					// If there are any use directives that require a second pass, resolve them now.
+					// Constant declarations can contain references to imported class constants.
+					if (doc.UseDirectivesRequireSecondPass)
+						foreach (var use in doc.Uses)
+							use.ResolveNames(projectNamespace, firstPass: false);
+
 					ResolveAllNames(doc.GlobalDeclarationSpace, doc.Namespace, firstPass: true);
 				}
 

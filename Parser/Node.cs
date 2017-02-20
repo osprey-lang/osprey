@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -106,7 +107,7 @@ namespace Osprey.Nodes
 		/// used with aliases, and only aliases into type members, which are likely to be uncommon.
 		/// By returning a bool, we save ourselves unnecessary work in the common case.</para>
 		/// </remarks>
-		public virtual bool ResolveNames(Namespace globalNamespace, bool firstPass) { return false; }
+		public abstract bool ResolveNames(Namespace globalNamespace, bool firstPass);
 	}
 
 	public sealed class UseFileDirective : UseDirective
@@ -121,6 +122,11 @@ namespace Osprey.Nodes
 
 		/// <summary>The name of the script to import, which is a literal string.</summary>
 		public StringLiteral Name;
+
+		public override bool ResolveNames(Namespace globalNamespace, bool firstPass)
+		{
+			return false;
+		}
 
 		public override string ToString(int indent)
 		{
@@ -140,42 +146,178 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			return new string('\t', indent) + "use " + Name + ";";
+			return new string('\t', indent) + "use " + Name + ".*;";
 		}
 
 		public override bool ResolveNames(Namespace globalNamespace, bool firstPass)
 		{
-			var ns = globalNamespace.FindNamespace(Name);
-			Document.Namespace.ImportNamespace(ns);
+			if (firstPass)
+			{
+				var ns = globalNamespace.FindNamespace(Name);
+				Document.Namespace.ImportNamespace(ns);
+			}
 			return false;
 		}
 	}
 
-	public sealed class UseAliasDirective : UseDirective
+	internal static class ImportedNameResolutionHelper
 	{
-		public UseAliasDirective(string aliasName, QualifiedName fullName)
+		internal static NamedMember ResolveFirstPass(
+			Namespace globalNamespace,
+			QualifiedName fullName,
+			out bool fullyResolved
+		)
 		{
-			AliasName = aliasName;
-			FullName = fullName;
+			// When resolving a name like 'a.b.c.d', we have essentially two valid
+			// resolutions:
+			//   1. 'a.b.c' resolves to a namespace, and then 'd' can resolve to any
+			//      kind of global member (namespace, type, constant or function).
+			//   2. 'a.b.c' resolves to a class or enum, in which case 'd' has to
+			//      resolve to a static class member or enum field.
+			// In the second case, we need a second pass, because we need to wait
+			// for type members to be initialized.
+			//
+			// An imported name like 'a.b.c.{d1, d2, d3}' is equivalent to resolving
+			// each fully qualified name in sequence. This method resolves the name
+			// as far as it can, and sets fullyResolved to indicate whether a second
+			// pass is needed for the last component.
+
+			var path = fullName.Parts;
+			var index = 0;
+
+			// Let's consume namespace as far as we can
+			NamedMember member = globalNamespace;
+			Namespace ns = globalNamespace;
+			while (ns != null && index < path.Length)
+			{
+				if (!ns.ContainsMember(path[index]))
+					throw new CompileTimeException(
+						fullName,
+						string.Format(
+							"The member '{0}' could not be found. (Did you forget to import a module?)",
+							string.Join(".", path, 0, index + 1)
+						)
+					);
+
+				member = ns.GetMember(path[index]);
+				ns = member as Namespace;
+				index++;
+			}
+
+			// 'member' is now a namespace, class, enum, constant, function or
+			// ambiguous name.
+			switch (member.Kind)
+			{
+				case MemberKind.Namespace:
+					// Here index must equal path.Length; the only way we can end
+					// on a namespace is if the entire path resolves to one.
+					Debug.Assert(index == path.Length);
+					break;
+				case MemberKind.MethodGroup: // global function
+				case MemberKind.GlobalConstant:
+					if (index < path.Length)
+						// Partial resolution not allowed with functions and constants
+						ErrorAccessThroughInstance(fullName, path, index);
+					break;
+				case MemberKind.Class:
+				case MemberKind.Enum:
+					if (index < path.Length - 1)
+						// More than one remaining name: always an error
+						ErrorAccessThroughInstance(fullName, path, index);
+					break;
+				case MemberKind.Ambiguous:
+					throw new AmbiguousNameException(fullName, (AmbiguousMember)member);
+				default:
+					throw new InvalidOperationException("Unexpected member kind when resolving 'use' directive");
+			}
+
+			// index can equal path.Length - 1 here; if so, the last part must be
+			// a static class member or enum field, so a second pass is needed.
+			fullyResolved = index == path.Length;
+			return member;
 		}
 
-		/// <summary>The name of the alias.</summary>
-		public string AliasName;
+		internal static NamedMember ResolveTypeMember(ParseNode errorNode, Type type, string name)
+		{
+			NamedMember inaccessibleMember;
+			var member = type.GetMember(name, null, null, out inaccessibleMember);
 
-		/// <summary>The name of the member the alias refers to.</summary>
+			if (member == null)
+			{
+				if (inaccessibleMember != null)
+					throw new CompileTimeException(
+						errorNode,
+						string.Format(
+							"The member '{0}' is not accessible from this location.",
+							inaccessibleMember.FullName
+						)
+					);
+				else
+					throw new CompileTimeException(
+						errorNode,
+						string.Format(
+							"The type '{0}' does not contain a definition for '{1}'.",
+							type.FullName,
+							name
+						)
+					);
+			}
+
+			var isStatic = member is ClassMember ? ((ClassMember)member).IsStatic :
+				member is MethodGroup ? ((MethodGroup)member).IsStatic :
+				member is EnumField ? true :
+				false;
+			if (!isStatic)
+				throw new InstanceMemberAccessException(errorNode, member);
+
+			return member;
+		}
+
+		internal static void ErrorAccessThroughInstance(ParseNode errorNode, string[] path, int i)
+		{
+			throw new CompileTimeException(
+				errorNode,
+				string.Format(
+					"The member '{0}' cannot be imported because it is accessed through an instance.",
+					string.Join(".", path, 0, i + 1)
+				)
+			);
+		}
+	}
+
+	public sealed class UseSingleMemberDirective : UseDirective
+	{
+		public UseSingleMemberDirective(QualifiedName fullName, string alias)
+		{
+			FullName = fullName;
+			Alias = alias;
+		}
+
+		/// <summary>The full name of the member to imported.</summary>
 		public QualifiedName FullName;
 
-		// The type that was found during the first pass, if the alias
-		// refers to a member inside that type.
+		/// <summary>The name under which to import the member, or null to use the member's own name.</summary>
+		public string Alias;
+
+		// In case of a partial resolution, contains the type whose member is resolved
+		// in the second pass.
 		private Type foundType;
-		// The index of the type within the qualified name's parts.
-		private int foundIndex;
 
 		public override string ToString(int indent)
 		{
-			return string.Format("{0}use {1} = {2};",
-				new string('\t', indent), AliasName,
-				FullName.ToString(indent + 1));
+			if (Alias != null)
+				return string.Format(
+					"{0}use {1} as {2};",
+					new string('\t', indent),
+					FullName.ToString(indent + 1),
+					Alias
+				);
+			else
+				return string.Format(
+					"{0}use {1};",
+					new string('\t', indent),
+					FullName.ToString(indent + 1)
+				);
 		}
 
 		public override bool ResolveNames(Namespace globalNamespace, bool firstPass)
@@ -189,104 +331,168 @@ namespace Osprey.Nodes
 
 		private bool ResolveNamesFirstPass(Namespace globalNamespace)
 		{
-			NamedMember member = null;
+			bool fullyResolved;
+			var member = ImportedNameResolutionHelper.ResolveFirstPass(
+				globalNamespace,
+				FullName,
+				out fullyResolved
+			);
 
-			var path = FullName.Parts;
-			var i = 0;
-
-			// First, let's look for namespaces as far along the path as we can
-			Namespace ns = globalNamespace;
-			while (ns != null && i < path.Length)
-			{
-				if (!ns.ContainsMember(path[i]))
-					throw new CompileTimeException(this,
-						string.Format("The member '{0}' could not be found. (Did you forget to import a module?)",
-							string.Join(".", path, 0, i + 1)));
-				member = ns.GetMember(path[i++]);
-				ns = member as Namespace;
-			}
-
-			// If the member is not a namespace, then we may have stopped
-			// before the last component in the path. The member can only
-			// be a type, global function, global constant or ambiguous name.
-			switch (member.Kind)
-			{
-				case MemberKind.GlobalConstant:
-				case MemberKind.MethodGroup:
-					if (i < path.Length)
-						// This member is not the last; throw
-						ErrorAccessThroughInstance(path, i);
-					break;
-				case MemberKind.Class:
-				case MemberKind.Enum:
-					if (i < path.Length)
-					{
-						// Look for the type member in the next pass
-						foundIndex = i;
-						foundType = member as Type;
-						return true; // need second pass
-					}
-					break;
-				case MemberKind.Ambiguous:
-					throw new AmbiguousNameException(this, (AmbiguousMember)member);
-			}
-
-			Document.Namespace.DeclareAlias(this, AliasName, member);
-			return false;
+			if (!fullyResolved)
+				foundType = (Type)member;
+			else
+				Document.Namespace.ImportMember(this, member, Alias);
+			return !fullyResolved;
 		}
 
 		private void ResolveNamesSecondPass()
 		{
-			NamedMember member;
+			var member = ImportedNameResolutionHelper.ResolveTypeMember(
+				this,
+				foundType,
+				FullName.Parts.Last()
+			);
+			Document.Namespace.ImportMember(this, member, Alias);
+		}
+	}
 
-			var i = foundIndex;
-			var path = FullName.Parts;
-			if (foundType is Class)
-			{
-				var type = (Class)foundType;
-
-				NamedMember inaccessibleMember;
-				member = type.GetMember(path[i++], null, null, out inaccessibleMember);
-				if (inaccessibleMember != null)
-					throw new CompileTimeException(FullName,
-						string.Format("The member '{0}' is not accessible from this context.",
-							inaccessibleMember.FullName));
-				if (member == null)
-					throw new CompileTimeException(FullName,
-						string.Format("The type '{0}' does not contain a definition for '{1}'.",
-							type.FullName, path[i - 1]));
-
-				var classMember = member as ClassMember;
-				if (!(classMember != null ? classMember.IsStatic : ((MethodGroup)member).IsStatic))
-					throw new InstanceMemberAccessException(this, member);
-
-				if (i < path.Length)
-					// The member is not the last; throw
-					ErrorAccessThroughInstance(path, i);
-			}
-			else
-			{
-				var type = (Enum)foundType;
-
-				member = type.GetMember(path[i++], null, null);
-				if (member == null)
-					throw new CompileTimeException(FullName,
-						string.Format("The type '{0}' does not contain a definition for '{1}'.",
-							type.FullName, path[i - 1]));
-
-				if (i < path.Length)
-					// The member is not the last; throw
-					ErrorAccessThroughInstance(path, i);
-			}
-
-			Document.Namespace.DeclareAlias(this, AliasName, member);
+	public sealed class UseMultipleMembersDirective : UseDirective
+	{
+		public UseMultipleMembersDirective(QualifiedName parentName, ImportedMember[] importedMembers)
+		{
+			ParentName = parentName;
+			ImportedMembers = importedMembers;
 		}
 
-		private void ErrorAccessThroughInstance(string[] path, int i)
+		/// <summary>The full name of the member from which multiple names are imported.</summary>
+		public QualifiedName ParentName;
+
+		/// <summary>One or more members imported from the parent member.</summary>
+		public ImportedMember[] ImportedMembers;
+
+		// In case the first pass resolves ParentName to a type, contains that type.
+		// All the imported members belong to that type.
+		private Type foundType;
+
+		public override string ToString(int indent)
 		{
-			throw new CompileTimeException(this,
-				string.Format("The member '{0}' cannot be aliased because it is accessed through an instance.",
-					string.Join(".", path, 0, i + 1)));
+			return string.Format(
+				"use {0}.{1}{2}{3};",
+				ParentName.ToString(indent),
+				"{",
+				ImportedMembers.JoinString(", ", indent + 1),
+				"}"
+			);
+		}
+
+		public override bool ResolveNames(Namespace globalNamespace, bool firstPass)
+		{
+			if (firstPass)
+				return ResolveNamesFirstPass(globalNamespace);
+			else if (firstPass != null)
+				ResolveNamesSecondPass();
+			return false;
+		}
+
+		private bool ResolveNamesFirstPass(Namespace globalNamespace)
+		{
+			bool fullyResolved;
+			var member = ImportedNameResolutionHelper.ResolveFirstPass(
+				globalNamespace,
+				ParentName,
+				out fullyResolved
+			);
+			// Partial resolution is always an error here.
+			if (!fullyResolved)
+				ParentNameResolutionError();
+
+			switch (member.Kind)
+			{
+				case MemberKind.GlobalConstant:
+				case MemberKind.MethodGroup: // global function
+					// Cannot resolve members of global constants or functions.
+					ParentNameResolutionError();
+					return false;
+				case MemberKind.Namespace:
+					// All imported members are contained in the namespace,
+					// so no need for a second pass.
+					ResolveMembersInNamespace((Namespace)member);
+					return false;
+				case MemberKind.Class:
+				case MemberKind.Enum:
+					// Need a second pass to resolve type members
+					foundType = (Type)member;
+					return true;
+				default:
+					throw new InvalidOperationException("Unexpected member kind when resolving 'use' directive");
+			}
+		}
+
+		private void ResolveMembersInNamespace(Namespace ns)
+		{
+			foreach (var importedMember in ImportedMembers)
+			{
+				if (!ns.ContainsMember(importedMember.MemberName))
+					throw new CompileTimeException(
+						importedMember,
+						string.Format(
+							"The namespace '{0}' does not contain a definition for '{1}'.",
+							ns.FullName,
+							importedMember.MemberName
+						)
+					);
+				var member = ns.GetMember(importedMember.MemberName);
+				Document.Namespace.ImportMember(importedMember, member, importedMember.Alias);
+			}
+		}
+
+		private void ResolveNamesSecondPass()
+		{
+			// If we get a second pass, all members must belong to the type we found
+			// in the first pass, this.foundType.
+			foreach (var importedMember in ImportedMembers)
+			{
+				var member = ImportedNameResolutionHelper.ResolveTypeMember(
+					importedMember,
+					foundType,
+					importedMember.MemberName
+				);
+				Document.Namespace.ImportMember(importedMember, member, importedMember.Alias);
+			}
+		}
+
+		private void ParentNameResolutionError()
+		{
+			throw new CompileTimeException(
+				ParentName,
+				string.Format(
+					"The name '{0}' could not be resolved to a namespace or type.",
+					ParentName
+				)
+			);
+		}
+	}
+
+	public sealed class ImportedMember : ParseNode
+	{
+		public ImportedMember(string memberName, string alias)
+		{
+			MemberName = memberName;
+			Alias = alias;
+		}
+
+		/// <summary>The name of the imported member.</summary>
+		public string MemberName;
+
+		/// <summary>The name under which to import the member, or null to use the member's own name.</summary>
+		public string Alias;
+
+		public override string ToString(int indent)
+		{
+			if (Alias != null)
+				return string.Format("{0} as {1}", MemberName, Alias);
+			else
+				return MemberName;
 		}
 	}
 

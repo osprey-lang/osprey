@@ -555,21 +555,9 @@ namespace Osprey
 				Expect(ref i, TokenType.Semicolon);
 				result = new UseFileDirective(new StringLiteral((StringToken)token));
 			}
-			else if (Accept(i, TokenType.Identifier)) // use foo.bar.baz;  or  use alias = foo.bar.baz;
+			else if (Accept(i, TokenType.Identifier))
 			{
-				string aliasName = null;
-				if (Accept(i + 1, TokenType.Assign))
-				{
-					// use alias = foo.bar.baz;
-					aliasName = tok[i++].Value;
-					i++; // skip =
-				}
-				var name = ParseQualifiedName(ref i);
-				Expect(ref i, TokenType.Semicolon);
-				if (aliasName != null)
-					result = new UseAliasDirective(aliasName, name);
-				else
-					result = new UseNamespaceDirective(name);
+				result = ParseUseMemberDirective(ref i);
 			}
 			else
 				ParseError(i, "Expected identifier or string.");
@@ -578,6 +566,90 @@ namespace Osprey
 			result.EndIndex = end;
 			result.Document = document;
 			return result;
+		}
+
+		private UseDirective ParseUseMemberDirective(ref int i)
+		{
+			// There are three forms of use directives parsed here:
+			//   use foo.bar.*;
+			//   use foo.bar.baz;  or  use foo.bar.baz as baz2;
+			//   use foo.bar.{baz, quux as baz2};
+			// All begin with a qualified name, so let's parse one.
+			// Note: We have our own qualified name parser, because we need to
+			// accept non-identifier tokens after '.'.
+			var qualifiedName = ParseUseDirectiveName(ref i);
+
+			if (Accept(ref i, TokenType.Dot))
+			{
+				// use foo.bar.*;  or  use foo.bar.{...};
+				if (Accept(ref i, TokenType.Multiply))
+				{
+					Expect(ref i, TokenType.Semicolon);
+					return new UseNamespaceDirective(qualifiedName);
+				}
+				else if (Accept(ref i, TokenType.CurlyOpen))
+				{
+					var importedMembers = new TempList<ImportedMember>(2);
+
+					do
+					{
+						var start = tok[i].Index;
+
+						var memberName = Expect(ref i, TokenType.Identifier).Value;
+						string alias = null;
+						if (AcceptContextual(ref i, ContextualType.As))
+							alias = Expect(ref i, TokenType.Identifier).Value;
+
+						importedMembers.Add(new ImportedMember(memberName, alias)
+						{
+							StartIndex = start,
+							EndIndex = tok[i - 1].EndIndex,
+							Document = document,
+						});
+					} while (Accept(ref i, TokenType.Comma) && !Accept(i, TokenType.CurlyClose));
+
+					Expect(ref i, TokenType.CurlyClose);
+					Expect(ref i, TokenType.Semicolon);
+					return new UseMultipleMembersDirective(qualifiedName, importedMembers.ToArray());
+				}
+				else
+				{
+					ParseError(i, "Expected '*' or '{'.");
+					return null;
+				}
+			}
+			else
+			{
+				// use foo.bar.baz;  or  use foo.bar.baz as baz2;
+				string alias = null;
+				if (AcceptContextual(ref i, ContextualType.As))
+					alias = Expect(ref i, TokenType.Identifier).Value;
+				Expect(ref i, TokenType.Semicolon);
+
+				return new UseSingleMemberDirective(qualifiedName, alias);
+			}
+		}
+
+		private QualifiedName ParseUseDirectiveName(ref int i)
+		{
+			Expect(i, TokenType.Identifier);
+
+			var start = tok[i].Index;
+
+			var idents = new TempList<string>(1);
+			idents.Add(tok[i++].Value);
+			while (Accept(i, TokenType.Dot) && Accept(i + 1, TokenType.Identifier))
+			{
+				idents.Add(tok[i + 1].Value);
+				i += 2; // skip '.' and identifier
+			}
+
+			return new QualifiedName(idents.ToArray())
+			{
+				StartIndex = start,
+				EndIndex = tok[i - 1].EndIndex,
+				Document = document,
+			};
 		}
 
 		private MemberModifiers ParseModifiers(ref int i)
