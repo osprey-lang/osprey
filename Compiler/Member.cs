@@ -783,7 +783,7 @@ namespace Osprey.Members
 
 			// If the name is not global and has one part, try also to find
 			// type members from imported namespaces.
-			if (!name.IsGlobal && name.Parts.Length == 1)
+			if (importedNamespaces != null && !name.IsGlobal && name.Parts.Length == 1)
 			{
 				var first = name.Parts[0];
 				foreach (var ns in importedNamespaces)
