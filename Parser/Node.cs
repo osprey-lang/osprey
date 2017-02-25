@@ -46,9 +46,6 @@ namespace Osprey.Nodes
 		/// <remarks>If the document does not contain a file-namespace-declaration, the name of this namespace declaration is null.</remarks>
 		public NamespaceDeclaration GlobalDeclarationSpace = new NamespaceDeclaration(null);
 
-		/// <summary>Global statements.</summary>
-		public Statement[] Statements;
-
 		/// <summary>The <see cref="FileNamespace"/> associated with this document.</summary>
 		internal FileNamespace Namespace;
 		
@@ -70,8 +67,6 @@ namespace Osprey.Nodes
 
 			if (Uses.Count > 0)
 				sb.AppendLine(Uses.JoinString("\r\n", indent));
-
-			sb.AppendLine(Statements.JoinString("\r\n", indent));
 
 			sb.AppendLine(GlobalDeclarationSpace.ToString(indent));
 
@@ -389,7 +384,7 @@ namespace Osprey.Nodes
 		{
 			if (firstPass)
 				return ResolveNamesFirstPass(globalNamespace);
-			else if (firstPass != null)
+			else if (foundType != null)
 				ResolveNamesSecondPass();
 			return false;
 		}

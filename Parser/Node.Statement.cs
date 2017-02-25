@@ -39,7 +39,7 @@ namespace Osprey.Nodes
 		/// Performs name resolution on the statement.
 		/// </summary>
 		/// <param name="context">The context in which to resolve names.</param>
-		/// <param name="document">The file namespace in which to resolve global variables.</param>
+		/// <param name="document">The file namespace in which to resolve global members.</param>
 		/// <param name="reachable">Indicates whether the statement is reachable.</param>
 		public abstract void ResolveNames(IDeclarationSpace context, FileNamespace document, bool reachable);
 
@@ -384,9 +384,6 @@ namespace Osprey.Nodes
 			Declarators = declarators;
 		}
 
-		/// <summary>Indicates whether the declaration is for one or more global variables.</summary>
-		public bool IsGlobal;
-
 		/// <summary>Indicates whether the declaration is for a set of constant values.</summary>
 		public bool IsConst;
 
@@ -424,7 +421,7 @@ namespace Osprey.Nodes
 					parent.DeclareConstant(new LocalConstant(decl.Name, decl));
 				else
 				{
-					if (!IsGlobal && decl.Variable == null)
+					if (decl.Variable == null)
 						decl.Variable = new Variable(decl.Name, decl);
 					parent.DeclareVariable(decl.Variable);
 					if (decl.Initializer != null)
@@ -449,12 +446,7 @@ namespace Osprey.Nodes
 				if (decl.Initializer != null)
 				{
 					method.PushLocation(decl.Initializer);
-					if (IsGlobal && decl.Variable.IsCaptured)
-					{
-						decl.Initializer.Compile(compiler, method); // Evaluate expression
-						method.Append(StoreField.Create(method.Module, decl.Variable.CaptureField)); // Store value in field
-					}
-					else if (decl.Variable.IsCaptured)
+					if (decl.Variable.IsCaptured)
 					{
 						// Assign to the closure field
 						if (decl.Variable.CaptureField.Parent is GeneratorClass)
@@ -1938,9 +1930,6 @@ namespace Osprey.Nodes
 					if (error != null)
 						throw new CompileTimeException(this, error);
 				}
-				else if (document.Compiler.ProjectType == ProjectType.Application &&
-					block.Method == document.Compiler.MainMethod)
-					throw new CompileTimeException(this, "Cannot return from a global statement.");
 
 				if (block.IsInsideFinally())
 					throw new CompileTimeException(this, "Cannot return inside a finally clause.");
@@ -2056,10 +2045,7 @@ namespace Osprey.Nodes
 						"Constructors, property setters, indexer setters and operators cannot be generator methods.");
 			}
 			else if (block.Method == document.Compiler.MainMethod)
-				throw new CompileTimeException(this,
-					document.Compiler.ProjectType == ProjectType.Application ?
-						"Cannot yield from a global statement." :
-						"The main method cannot be a generator method.");
+				throw new CompileTimeException(this, "The main method cannot be a generator method.");
 
 			if (block.IsInsideProtectedBlock())
 				throw new CompileTimeException(this, "Cannot yield inside a try, catch or finally.");
@@ -2646,12 +2632,7 @@ namespace Osprey.Nodes
 				// And store them in reverse!
 				for (var i = Targets.Length - 1; i >= 0; i--)
 				{
-					LocalVariable variable;
-					if (Targets[i] is GlobalVariableAccess)
-						variable = method.GetLocal(((GlobalVariableAccess)Targets[i]).Variable.Name);
-					else
-						variable = ((LocalVariableAccess)Targets[i]).GetLocal(method);
-
+					LocalVariable variable = ((LocalVariableAccess)Targets[i]).GetLocal(method);
 					method.Append(new StoreLocal(variable));
 				}
 			}
@@ -2713,12 +2694,10 @@ namespace Osprey.Nodes
 			foreach (var e in Targets)
 			{
 				var local = e as LocalVariableAccess;
-				var global = e as GlobalVariableAccess;
-				if (local == null && (global == null || global.Variable.IsCaptured))
-					return false; // Neither local nor non-captured global
+				if (local == null)
+					return false; // Not a local
 
-				var variable = local != null ? local.Variable : global.Variable;
-				if (!variables.Add(variable))
+				if (!variables.Add(local.Variable))
 					return false; // Already a target, can't compile as right-to-left unpacking
 			}
 			return true;

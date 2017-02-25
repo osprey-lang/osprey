@@ -75,8 +75,8 @@ namespace Osprey.Nodes
 		/// it should return 'this'. If it creates a new expression, that expression
 		/// should be returned.
 		/// </summary>
-		/// <param name="context">The context in which to resolve names. This is usually a block,
-		/// but initializers for fields and global variables do not occur inside blocks.</param>
+		/// <param name="context">The context in which to resolve names. This is usually a block;
+		/// the exception is initializers for fields, which occur inside class bodies.</param>
 		/// <param name="document">The <see cref="FileNamespace"/> of the document in which the expression occurs.</param>
 		/// <returns>An expression that represents the current expression with all names resolved.</returns>
 		/// <exception cref="UndefinedNameException">A name in this expression could not be resolved.</exception>
@@ -363,8 +363,7 @@ namespace Osprey.Nodes
 				var instMemAccess = Inner as InstanceMemberAccess;
 				if ((instMemAccess == null || instMemAccess.Member.Kind != MemberKind.Field) &&
 					!(Inner is StaticFieldAccess) &&
-					!(Inner is MemberAccess) &&
-					!(Inner is GlobalVariableAccess))
+					!(Inner is MemberAccess))
 					throw new CompileTimeException(Inner,
 						"A ref argument must be a variable, instance field, static field, or member access.");
 			}
@@ -406,15 +405,6 @@ namespace Osprey.Nodes
 
 				access.Inner.Compile(compiler, method);
 				method.Append(new LoadMemberReference(method.Module.GetStringId(access.Member)));
-			}
-			else if (Inner is GlobalVariableAccess)
-			{
-				var variable = ((GlobalVariableAccess)Inner).Variable;
-
-				if (!variable.IsCaptured)
-					method.Append(new LoadLocalReference(method.GetLocal(variable.Name)));
-				else
-					method.Append(LoadFieldReference.Create(method.Module, variable.CaptureField));
 			}
 			else
 				throw new InvalidOperationException();
@@ -1422,7 +1412,7 @@ namespace Osprey.Nodes
 
 			var member = context.ResolveName(Name, containingClass);
 			if (member == null)
-				// It might be a global variable, let's try that
+				// It might be a global member, let's try that
 				member = document.ResolveName(Name, containingClass);
 			if (member == null)
 				throw new UndefinedNameException(this, Name);
@@ -1437,14 +1427,6 @@ namespace Osprey.Nodes
 					break;
 				case MemberKind.GlobalConstant:
 					result = new GlobalConstantAccess((GlobalConstant)member);
-					break;
-				case MemberKind.GlobalVariable:
-					{
-						var variable = (GlobalVariable)member;
-						if (block != null && block.ContainingMember != document.Compiler.MainMethod)
-							variable.Capture(this);
-						result = new GlobalVariableAccess(variable);
-					}
 					break;
 				case MemberKind.Class:
 				case MemberKind.Enum:
@@ -2578,14 +2560,6 @@ namespace Osprey.Nodes
 					return new NamespaceAccess((Namespace)member).At(this);
 				case MemberKind.GlobalConstant:
 					return new GlobalConstantAccess((GlobalConstant)member).At(this);
-				case MemberKind.GlobalVariable:
-					{
-						var variable = (GlobalVariable)member;
-						var block = context as BlockSpace;
-						if (block != null && block.ContainingMember != document.Compiler.MainMethod)
-							variable.Capture(this);
-						return new GlobalVariableAccess(variable).At(this);
-					}
 				case MemberKind.Class:
 				case MemberKind.Enum:
 					return new TypeAccess((Type)member).At(this);

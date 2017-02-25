@@ -221,8 +221,6 @@ namespace Osprey.Members
 
 		/// <summary>Global constant.</summary>
 		GlobalConstant,
-		/// <summary>Global variable.</summary>
-		GlobalVariable,
 
 		/// <summary>Class.</summary>
 		Class,
@@ -282,7 +280,7 @@ namespace Osprey.Members
 
 	/// <summary>
 	/// Represents a namespace, which is a member and a declaration space.
-	/// Namespaces can contain global functions, global constants, types, global variables and other namespaces.
+	/// Namespaces can contain global functions, global constants, types and other namespaces.
 	/// </summary>
 	[DebuggerDisplay("Namespace {FullName}")]
 	public class Namespace : NamedMember, IDeclarationSpace
@@ -696,25 +694,6 @@ namespace Osprey.Members
 
 		private Compiler compiler;
 		internal Compiler Compiler { get { return compiler; } }
-
-		/// <summary>
-		/// Declares a global variable in the global declaration space.
-		/// </summary>
-		/// <param name="variable">The variable to declare.</param>
-		/// <exception cref="ArgumentNullException"><paramref name="variable"/> is null.</exception>
-		public void DeclareGlobalVariable(GlobalVariable variable)
-		{
-			if (variable == null)
-				throw new ArgumentNullException("variable");
-
-			var name = variable.Name;
-
-			if (projectNamespace.ContainsMember(name) ||
-				Members.ContainsKey(name))
-				throw new DuplicateNameException(variable.Node, name);
-
-			Members.Add(variable.Name, variable);
-		}
 
 		public void ImportMember(ParseNode errorNode, NamedMember member, string name)
 		{
@@ -1625,7 +1604,6 @@ namespace Osprey.Members
 				{
 					case VariableKind.Regular:
 					case VariableKind.Parameter:
-					case VariableKind.Global:
 						return true;
 					case VariableKind.IterationVariable:
 					case VariableKind.CatchVariable:
@@ -1638,7 +1616,6 @@ namespace Osprey.Members
 
 		/// <summary>
 		/// The field that the variable is captured in, if it is captured.
-		/// For global variables, this is the field that contains the variable value.
 		/// </summary>
 		internal Field CaptureField;
 
@@ -1746,8 +1723,6 @@ namespace Osprey.Members
 		IterationVariable,
 		/// <summary>The variable is a catch variable, into which an error is caught.</summary>
 		CatchVariable,
-		/// <summary>The variable is a global variable.</summary>
-		Global,
 		/// <summary>The variable is declared in a 'with' statement.</summary>
 		WithVariable,
 	}
@@ -2068,23 +2043,6 @@ namespace Osprey.Members
 		ClosureMethod = 1,
 		InstanceMethod = 2,
 		StaticMethod = 3,
-	}
-
-	public class GlobalVariable : Variable
-	{
-		public GlobalVariable(string name, VariableDeclarator node, Document document)
-			: base(name, node, MemberKind.GlobalVariable, VariableKind.Global)
-		{
-			this.document = document;
-		}
-
-		private Document document;
-
-		internal override void Capture(ParseNode errorNode)
-		{
-			base.Capture(errorNode);
-			document.Compiler.AddGlobalVariable(document, this);
-		}
 	}
 
 	public sealed class ReservedName : LocalMember

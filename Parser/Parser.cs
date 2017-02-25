@@ -523,7 +523,7 @@ namespace Osprey
 				else if (Accept(ref i, TokenType.CurlyOpen))
 				{
 					var ns = new NamespaceDeclaration(name) { Document = document };
-					ParseNamespaceMembers(ref i, ns, null);
+					ParseNamespaceMembers(ref i, ns);
 					Expect(ref i, TokenType.CurlyClose);
 
 					fileNs.Namespaces.Add(ns);
@@ -532,11 +532,8 @@ namespace Osprey
 					ParseError(i, "Expected ';' or namespace body.");
 			}
 
-			var statements = new List<Statement>();
 			while (!Accept(i, TokenType.EOF, TokenType.CurlyClose))
-				ParseNamespaceMembers(ref i, fileNs, statements);
-
-			document.Statements = statements.ToArray();
+				ParseNamespaceMembers(ref i, fileNs);
 
 			Expect(i, TokenType.EOF);
 
@@ -707,7 +704,7 @@ namespace Osprey
 			return output;
 		}
 
-		private void ParseNamespaceMembers(ref int i, NamespaceDeclaration target, List<Statement> stmtList)
+		private void ParseNamespaceMembers(ref int i, NamespaceDeclaration target)
 		{
 			while (!Accept(i, TokenType.CurlyClose, TokenType.EOF))
 			{
@@ -739,19 +736,10 @@ namespace Osprey
 				{
 					modifiers.ValidateForGlobal(tok[i]);
 
-					// This makes sure all the names have values.
-					// It also makes sure the declaration is not "parallel", e.g.
-					//     public const (a, b) = someValue;
-					// which is not constant.
+					// This method makes sure all the names have values.
 					var decl = ParseLocalVariableDeclaration(ref i);
 
 					var varDecl = decl as LocalVariableDeclaration;
-#if DEBUG
-					if (varDecl == null || !varDecl.IsConst)
-						throw new ParseException(decl,
-							"Internal error: global constant declaration should be a local variable declaration and marked IsConst.");
-#endif
-
 					var constDecl = new GlobalConstantDeclaration(modifiers.Access == Accessibility.Public, varDecl)
 					{
 						Document = document
@@ -778,23 +766,19 @@ namespace Osprey
 
 					Expect(ref i, TokenType.CurlyOpen);
 
-					ParseNamespaceMembers(ref i, ns, null);
+					ParseNamespaceMembers(ref i, ns);
 
 					Expect(ref i, TokenType.CurlyClose);
 
 					target.Namespaces.Add(ns);
 				}
 				else if (!modifiers.IsEmpty)
+				{
 					ParseError(i, "Expected class, function or constant declaration.");
-				else if (stmtList == null)
-					ParseError(i, "Expected class, function, constant or namespace declaration.");
+				}
 				else
 				{
-					var statement = ParseStatement(ref i);
-					var localVarDecl = statement as LocalVariableDeclaration;
-					if (localVarDecl != null)
-						localVarDecl.IsGlobal = true;
-					stmtList.Add(statement);
+					ParseError(i, "Expected class, function, constant or namespace declaration.");
 				}
 			}
 		}

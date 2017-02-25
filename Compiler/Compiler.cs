@@ -129,10 +129,8 @@ namespace Osprey
 
 		private ModulePool modules;
 		private Namespace projectNamespace;
-		private Block mainMethodBody;
 		private Method mainMethod;
 		private Class lambdaOpClass;
-		private Class globalsClass;
 
 		public Method MainMethod { get { return mainMethod; } }
 
@@ -222,24 +220,6 @@ namespace Osprey
 			if (globalConstants == null)
 				globalConstants = new List<GlobalConstant>();
 			globalConstants.Add(constant);
-		}
-
-		internal void AddGlobalVariable(Document parentDocument, GlobalVariable variable)
-		{
-			if (variable.CaptureField != null)
-				return;
-
-			if (globalsClass == null)
-			{
-				globalsClass = new Class("<global>", Accessibility.Internal, projectNamespace);
-				globalsClass.BaseType = ObjectType;
-				globalsClass.IsStatic = true;
-				AddType(globalsClass);
-			}
-
-			var name = string.Format("{0}@{1}", variable.Name, documents.IndexOf(parentDocument));
-			variable.CaptureField = new Field(name, Accessibility.Internal, globalsClass);
-			globalsClass.DeclareField(variable.CaptureField);
 		}
 
 		private Type FindType(string fullName)
@@ -758,38 +738,8 @@ namespace Osprey
 					throw; // rethrow
 				}
 
-			// If we're compiling the project as an application, we need to gather up
-			// all the global statements into a main method in this phase too.
-			var mainMethodContents = new TempList<Statement>();
-
-			for (var i = 0; i < documents.Count; i++)
-				try
-				{
-					InitializeGlobalVariables(documents[i], ref mainMethodContents);
-				}
-				catch (CompileTimeException e)
-				{
-					e.Document = documents[i];
-					throw;
-				}
-
-			if (projectType == ProjectType.Application)
-			{
-				// Pretend there's a main method that belongs to the project namespace.
-				// There isn't, of course, but that won't stop us!
-				// NOTE: This method will never actually be /declared/ in the project namespace;
-				// we just pretend it's in there. The compiler will still output metadata about
-				// the existence of a method with the fully qualified name "<main>", so we can
-				// reference it as the main method of the module.
-
-				Notice("Initializing main method...", CompilerVerbosity.Verbose);
-				mainMethodBody = new Block(mainMethodContents.ToArray());
-				mainMethod = new Method(null, DefaultMainMethodName, Accessibility.Internal, mainMethodBody, Splat.None, null);
-
-				var mainMethodGroup = new MethodGroup(DefaultMainMethodName, projectNamespace, Accessibility.Internal);
-				mainMethodGroup.AddOverload(mainMethod);
-				AddGlobalFunction(mainMethodGroup); // Always first!
-			}
+			if (mainMethodName == null && projectType == ProjectType.Application)
+				mainMethodName = DefaultMainMethodName;
 
 			// If an explicit main method was specified, we now have enough information
 			// to locate it, so let's try doing that.
@@ -807,8 +757,8 @@ namespace Osprey
 							var lastPart = nameParts[nameParts.Length - 1];
 							if (!ns.ContainsMember(lastPart))
 								throw new CompileTimeException(null, string.Format(
-									"Cannot use '{0}.{1}' as the main method because it does not exist.",
-									ns.FullName, lastPart));
+									"Cannot use '{0}' as the main method because it does not exist.",
+									mainMethodName));
 
 							// The main method must be a method group
 							member = ns.GetMember(lastPart);
@@ -895,30 +845,6 @@ namespace Osprey
 
 			foreach (var subNs in nsDecl.Namespaces)
 				ProcessNamespaceMembers(subNs, ns);
-		}
-
-		private void InitializeGlobalVariables(Document doc, ref TempList<Statement> mainMethodBody)
-		{
-			if (doc.Statements.Length > 0)
-			{
-				if (projectType == ProjectType.Module)
-					throw new CompileTimeException(doc.Statements[0],
-						"A project compiled as a module may not contain any global statements or global variables.");
-
-				foreach (var stmt in doc.Statements)
-				{
-					if (stmt is LocalVariableDeclaration) // var a = x;
-					{
-						foreach (var decl in ((LocalVariableDeclaration)stmt).Declarators)
-						{
-							var globalVar = new GlobalVariable(decl.Name, decl, doc);
-							decl.Variable = globalVar;
-							doc.Namespace.DeclareGlobalVariable(globalVar);
-						}
-					}
-					mainMethodBody.Add(stmt);
-				}
-			}
 		}
 
 		private void DeclareExtraConstants()
@@ -1028,12 +954,6 @@ namespace Osprey
 						if (use.ResolveNames(projectNamespace, firstPass: true))
 							doc.UseDirectivesRequireSecondPass = true;
 					}
-
-					// If the document has "namespace blah;" at the top,
-					// then we act as if it also had "use blah.*;",
-					// for the benefit of global statements.
-					if (doc.GlobalDeclarationSpace.Name != null)
-						doc.Namespace.ImportNamespace(doc.GlobalDeclarationSpace.Namespace);
 
 					ResolveBaseTypeNames(doc.GlobalDeclarationSpace, doc.Namespace);
 				}
@@ -1170,20 +1090,6 @@ namespace Osprey
 					throw;
 				}
 
-			if (projectType == ProjectType.Application)
-				try
-				{
-					mainMethod.InitBody(this);
-				}
-				catch (CompileTimeException e)
-				{
-					// The main method may consist of statments from
-					// more than one document, so we must rely on the
-					// information in the node.
-					e.Document = e.Node.Document;
-					throw;
-				}
-
 			Notice("All member bodies were initialized successfully.", CompilerVerbosity.Verbose);
 		}
 
@@ -1236,16 +1142,6 @@ namespace Osprey
 				{
 					doc = documents[i];
 					ResolveAllNames(doc.GlobalDeclarationSpace, doc.Namespace, firstPass: false);
-
-					// Statements must be resolved relative to the document's FileNamespace, because
-					// of global variables. We cannot loop through the main method body separately.
-					var reachable = true;
-					foreach (var stmt in doc.Statements)
-					{
-						stmt.ResolveNames(mainMethodBody.DeclSpace, doc.Namespace, reachable);
-						if (reachable && !stmt.IsEndReachable)
-							reachable = false;
-					}
 				}
 			}
 			catch (CompileTimeException e)
@@ -1253,9 +1149,6 @@ namespace Osprey
 				e.Document = doc;
 				throw;
 			}
-
-			if (projectType == ProjectType.Application && mainMethod.HasLocalFunctions)
-				AddMethodWithLocalFunctions(mainMethod);
 
 			Notice("All names were resolved successfully.", CompilerVerbosity.Verbose);
 		}
@@ -1298,9 +1191,6 @@ namespace Osprey
 				try
 				{
 					FoldConstant(doc.GlobalDeclarationSpace);
-
-					foreach (var stmt in doc.Statements)
-						stmt.FoldConstant();
 				}
 				catch (CompileTimeException e)
 				{
@@ -1582,10 +1472,6 @@ namespace Osprey
 
 		private void BuildMethodBodies()
 		{
-			// Note: mainMethod is already in GlobalFuncDefs
-			//if (mainMethod != null)
-			//	mainMethod.Compile(this);
-
 			foreach (var kvp in outputModule.Members.MethodDefs)
 				foreach (var method in kvp.Value)
 					method.Compile(this);
@@ -1807,7 +1693,12 @@ namespace Osprey
 			}
 		}
 
-		private const string DefaultMainMethodName = "<main>";
+		/// <summary>
+		/// The default name of the main method. If no other name is specified on the command line,
+		/// and if the project is being built as an application, the main method will automatically
+		/// be resolved to the global function with this name.
+		/// </summary>
+		private const string DefaultMainMethodName = "main";
 
 		private static readonly Dictionary<LambdaOperator, string> lambdaOperatorNames = new Dictionary<LambdaOperator, string>
 		{
@@ -2012,8 +1903,7 @@ namespace Osprey
 		/// <list type="bullet">
 		///		<item>
 		///			<description>If the <see cref="Type"/> is <see cref="ProjectType.Application"/>,
-		///			then the main method is comprised of global statements from all source files,
-		///			concatenated in an unspecified order.</description>
+		///			then the main method is resolved from the default name "main".</description>
 		///		</item>
 		///		<item>
 		///			<description>If the <see cref="Type"/> is <see cref="ProjectType.Module"/>,
