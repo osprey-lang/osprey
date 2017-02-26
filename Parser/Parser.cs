@@ -724,7 +724,8 @@ namespace Osprey
 					@enum.DocString = startTok.Documentation;
 					target.Types.Add(@enum);
 				}
-				else if (Accept(i, TokenType.Function)) // global function
+				else if (Accept(i, TokenType.Function) ||
+					Accept(i, TokenType.Identifier) && Accept(i + 1, TokenType.ParenOpen)) // global function
 				{
 					modifiers.ValidateForGlobal(tok[i]);
 					var func = ParseLocalFunctionDeclaration(ref i, isLocal: false);
@@ -1699,7 +1700,10 @@ namespace Osprey
 
 		private LocalFunctionDeclaration ParseLocalFunctionDeclaration(ref int i, bool isLocal)
 		{
-			Expect(ref i, TokenType.Function);
+			if (isLocal)
+				Expect(ref i, TokenType.Function);
+			else
+				Accept(ref i, TokenType.Function);
 
 			var nameTok = Expect(ref i, TokenType.Identifier);
 
