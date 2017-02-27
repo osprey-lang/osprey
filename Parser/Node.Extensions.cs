@@ -129,39 +129,4 @@ namespace Osprey.Nodes
 			throw new ArgumentException(string.Format("Invalid constant name in scope '{0}': {1}", scope, name));
 		}
 	}
-
-	/// <summary>
-	/// Represents the __get_argc extension keyword, which compiles directly to the ldargc instruction.
-	/// </summary>
-	public sealed class GetArgumentCount : Expression
-	{
-		public GetArgumentCount()
-		{ }
-
-		public override bool IsTypeKnown(Compiler compiler) { return true; }
-
-		public override Members.Type GetKnownType(Compiler compiler)
-		{
-			return compiler.IntType;
-		}
-
-		public override string ToString(int indent)
-		{
-			return "__get_argc";
-		}
-
-		public override Expression ResolveNames(IDeclarationSpace context, FileNamespace document)
-		{
-			var contextBlock = context as BlockSpace;
-			if (contextBlock == null || !(contextBlock.ContainingMember is Method))
-				throw new CompileTimeException(this, "'__get_argc' may only appear inside a method body.");
-
-			return this;
-		}
-
-		public override void Compile(Compiler compiler, MethodBuilder method)
-		{
-			method.Append(new SimpleInstruction(Opcode.Ldargc));
-		}
-	}
 }

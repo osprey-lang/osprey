@@ -2672,11 +2672,6 @@ namespace Osprey
 				{
 					if (ident.ContextualType == ContextualType.NamedConst)
 						return ParseNamedConstExpr(ref i);
-					if (ident.ContextualType == ContextualType.GetArgc)
-					{
-						i++;
-						return new GetArgumentCount() { StartIndex = start, EndIndex = ident.EndIndex, Document = document };
-					}
 				}
 
 				i++;

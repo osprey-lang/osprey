@@ -29,7 +29,5 @@ namespace Osprey
 		Extern = 7,
 		/// <summary>__named_const</summary>
 		NamedConst = 8,
-		/// <summary>__get_argc</summary>
-		GetArgc = 9,
 	}
 }

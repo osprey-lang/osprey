@@ -30,8 +30,7 @@ namespace Osprey.Nodes
 
 				return this is ThisAccess || // but not BaseAccess; 'base' is not supposed to occur on its own
 					this is ConstantExpression ||
-					this is StaticMethodAccess ||
-					this is GetArgumentCount;
+					this is StaticMethodAccess;
 			}
 		}
 

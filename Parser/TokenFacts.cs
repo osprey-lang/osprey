@@ -70,7 +70,6 @@ namespace Osprey
 			{"__init_type", ContextualType.InitType},
 			{"__extern", ContextualType.Extern},
 			{"__named_const", ContextualType.NamedConst},
-			{"__get_argc", ContextualType.GetArgc},
 		};
 
 		internal static readonly Dictionary<string, TokenType> PunctToType = new Dictionary<string, TokenType>
