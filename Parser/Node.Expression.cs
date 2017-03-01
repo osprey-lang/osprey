@@ -1939,9 +1939,9 @@ namespace Osprey.Nodes
 		}
 	}
 
-	public sealed class UseInExpression : Expression
+	public sealed class LetInExpression : Expression
 	{
-		public UseInExpression(VariableDeclarator[] variables, Expression inner)
+		public LetInExpression(VariableDeclarator[] variables, Expression inner)
 		{
 			this.Variables = variables;
 			this.Inner = inner;
@@ -1967,7 +1967,7 @@ namespace Osprey.Nodes
 
 		public override string ToString(int indent)
 		{
-			var sb = new StringBuilder("use ");
+			var sb = new StringBuilder("let ");
 
 			var needSep = false;
 			foreach (var decl in Variables)
@@ -1997,7 +1997,7 @@ namespace Osprey.Nodes
 		{
 			// Note: Expression has no DeclareNames method, so we declare the names here instead.
 			// The context is guaranteed to be a BlockSpace (inside a member with a body or another
-			// use-in expression) or Class (inside a field initializer).
+			// let-in expression) or Class (inside a field initializer).
 			var parentBlock = context as BlockSpace;
 
 			var vars = Variables;
@@ -2009,7 +2009,7 @@ namespace Osprey.Nodes
 					Document = this.Document
 				}
 			);
-			if (parentBlock == null) // top-level use-in in field initializer
+			if (parentBlock == null) // top-level let-in in field initializer
 			{
 				bool _;
 				VariableBlock.DeclSpace = new BlockSpace(VariableBlock, context.GetContainingClass(out _));

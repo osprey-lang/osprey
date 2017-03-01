@@ -2268,9 +2268,9 @@ namespace Osprey
 
 		private Expression ParseExpression(ref int i)
 		{
-			// use-in expressions are NOT primary expressions!
-			if (Accept(i, TokenType.Use))
-				return ParseUseInExpression(ref i);
+			// let-in expressions are NOT primary expressions!
+			if (Accept(i, TokenType.Let))
+				return ParseLetInExpression(ref i);
 
 			return ParseConditionalExpr(ref i);
 		}
@@ -2977,9 +2977,9 @@ namespace Osprey
 				.At(start, tok[i - 1].EndIndex, document);
 		}
 
-		private Expression ParseUseInExpression(ref int i)
+		private Expression ParseLetInExpression(ref int i)
 		{
-			var useTok = Expect(ref i, TokenType.Use);
+			var letTok = Expect(ref i, TokenType.Let);
 
 			var variables = new TempList<VariableDeclarator>(1);
 			do
@@ -2999,10 +2999,10 @@ namespace Osprey
 			Expect(ref i, TokenType.In);
 
 			var inner = ParseExpression(ref i);
-			return new UseInExpression(variables.ToArray(), inner)
+			return new LetInExpression(variables.ToArray(), inner)
 			{
-				StartIndex = useTok.Index,
-				EndIndex = useTok.EndIndex,
+				StartIndex = letTok.Index,
+				EndIndex = letTok.EndIndex,
 				Document = document,
 			};
 		}
