@@ -518,15 +518,19 @@ namespace Osprey
 			ProcessFiles();
 			parseTimer.Stop();
 
-			Notice("Time taken to parse (ms): " + parseTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
+			Notice(
+				CompilerVerbosity.ExtraVerbose,
+				"Time taken to parse (ms): {0}",
+				parseTimer.Elapsed.TotalMilliseconds.ToStringInvariant()
+			);
 
 			// And now we start the real work.
 
 			if (!SilenceNotices)
 			{
-				Notice("Starting compilation at " + DateTime.Now);
+				Notice("Starting compilation at " + DateTime.Now, CompilerVerbosity.ExtraVerbose);
 				foreach (var file in sourceFiles.Keys)
-					Notice("Source file: " + file);
+					Notice("Source file: " + file, CompilerVerbosity.ExtraVerbose);
 			}
 
 			var compileTimer = Stopwatch.StartNew();
@@ -608,18 +612,34 @@ namespace Osprey
 			long bytesWritten = outputModule.Save(targetPath);
 			emitTimer.Stop();
 
-			Notice("Compilation finished at " + DateTime.Now);
-			Notice("Time taken to compile (ms): " + compileTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
-			Notice("Time taken to emit bytes (ms): " + emitTimer.Elapsed.TotalMilliseconds.ToStringInvariant());
+			Notice("Compilation finished at " + DateTime.Now, CompilerVerbosity.ExtraVerbose);
+			Notice(
+				CompilerVerbosity.ExtraVerbose,
+				"Time taken to compile (ms): {0}",
+				compileTimer.Elapsed.TotalMilliseconds.ToStringInvariant()
+			);
+			Notice(
+				CompilerVerbosity.ExtraVerbose,
+				"Time taken to emit bytes (ms): {0}",
+				emitTimer.Elapsed.TotalMilliseconds.ToStringInvariant()
+			);
 
 			var totalTime = parseTimer.Elapsed + compileTimer.Elapsed + emitTimer.Elapsed;
-			Notice("Total time taken (ms): " + totalTime.TotalMilliseconds.ToStringInvariant());
-			Notice("Total bytes written: " + bytesWritten.ToStringInvariant());
+			Notice(
+				CompilerVerbosity.ExtraVerbose,
+				"Total time taken (ms): ",
+				totalTime.TotalMilliseconds.ToStringInvariant()
+			);
+			Notice(
+				CompilerVerbosity.ExtraVerbose,
+				"Total bytes written: ",
+				bytesWritten.ToStringInvariant()
+			);
 		}
 
 		private void ProcessFiles()
 		{
-			Notice("Parsing source files and adding dependent modules...", CompilerVerbosity.Verbose);
+			Notice("Parsing source files and adding dependent modules...", CompilerVerbosity.ExtraVerbose);
 
 			var projectNs = new Namespace();
 			var importedModules = this.importedModules;
@@ -658,7 +678,7 @@ namespace Osprey
 			foreach (var modName in importedModules)
 				if (!modules.HasLoaded(modName, null))
 				{
-					Notice(CompilerVerbosity.Verbose, "Loading module '{0}'.", modName);
+					Notice(CompilerVerbosity.ExtraVerbose, "Loading module '{0}'.", modName);
 					modules.GetOrLoad(modName, null);
 				}
 
@@ -669,9 +689,18 @@ namespace Osprey
 
 			if (metadataFile != null)
 			{
-				Notice(CompilerVerbosity.Verbose, "Reading metadata from '{0}'...", metadataFile);
+				Notice(
+					CompilerVerbosity.ExtraVerbose,
+					"Reading metadata from '{0}'...",
+					metadataFile
+				);
 				metadata = Parser.ParseMetadata(File.ReadAllText(metadataFile));
-				Notice(CompilerVerbosity.Verbose, "Finished reading {0} entr{1} of metadata.", metadata.Count, metadata.Count == 1 ? "y" : "ies");
+				Notice(
+					CompilerVerbosity.Verbose,
+					"Finished reading {0} entr{1} of metadata.",
+					metadata.Count,
+					metadata.Count == 1 ? "y" : "ies"
+				);
 			}
 			else
 				metadata = new Dictionary<string, string>();
@@ -715,9 +744,12 @@ namespace Osprey
 						throw new CompileTimeException(use, "A source file may not include itself.");
 					if (!sourceFiles.ContainsKey(realFile))
 					{
-						Notice(CompilerVerbosity.ExtraVerbose,
+						Notice(
+							CompilerVerbosity.ExtraVerbose,
 							"Adding source file '{0}' to project, referenced in '{1}'",
-							realFile, docFile);
+							realFile,
+							docFile
+						);
 						newFiles.Add(realFile);
 					}
 				}
@@ -849,7 +881,7 @@ namespace Osprey
 
 		private void DeclareExtraConstants()
 		{
-			Notice("Declaring command-line constants...", CompilerVerbosity.Verbose);
+			Notice("Declaring command-line constants...", CompilerVerbosity.ExtraVerbose);
 			foreach (var kvp in extraConstants)
 			{
 				var nameParts = kvp.Key.Split(Dot);
@@ -867,23 +899,37 @@ namespace Osprey
 							{
 								ns.DeclareConstant(new GlobalConstant(lastPart,
 									ConstantValue.CreateBoolean(kvp.Value), Accessibility.Internal));
-								Notice(CompilerVerbosity.Verbose, "Declared constant: {0} = {1}", kvp.Key, kvp.Value);
+								Notice(
+									CompilerVerbosity.Verbose,
+									"Declared constant: {0} = {1}",
+									kvp.Key,
+									kvp.Value
+								);
 							}
 							else
-								Warning(CompilerVerbosity.NotVerbose,
+								Warning(
+									CompilerVerbosity.NotVerbose,
 									"Could not declare constant '{0}': a member by that name already exists.",
-									kvp.Key);
+									kvp.Key
+								);
 						}
 						break;
 					case NamespaceLookupResult.IntermediateNamespaceMissing:
-						Warning(CompilerVerbosity.NotVerbose,
+						Warning(
+							CompilerVerbosity.NotVerbose,
 							"Could not declare constant '{0}': intermediate namespace '{1}.{2}' does not exist.",
-							kvp.Key, member.FullName, nameParts[lastIndex]);
+							kvp.Key,
+							member.FullName,
+							nameParts[lastIndex]
+						);
 						break;
 					case NamespaceLookupResult.MemberIsNotNamespace:
-						Warning(CompilerVerbosity.NotVerbose,
+						Warning(
+							CompilerVerbosity.NotVerbose,
 							"Could not declare constant '{0}': '{1}' is not a namespace.",
-							kvp.Key, member.FullName);
+							kvp.Key,
+							member.FullName
+						);
 						break;
 				}
 			}
@@ -925,7 +971,7 @@ namespace Osprey
 
 		private void ResolveBaseTypeNames()
 		{
-			Notice("Resolving base type names...", CompilerVerbosity.Verbose);
+			Notice("Resolving base type names...", CompilerVerbosity.ExtraVerbose);
 
 			// Prepare some stuff
 			try
@@ -1077,7 +1123,7 @@ namespace Osprey
 
 		private void InitializeClassMembers()
 		{
-			Notice("Initializing all members with bodies...", CompilerVerbosity.Verbose);
+			Notice("Initializing all members with bodies...", CompilerVerbosity.ExtraVerbose);
 			
 			foreach (var doc in documents)
 				try
@@ -1113,7 +1159,7 @@ namespace Osprey
 
 		private void ResolveAllNames()
 		{
-			Notice("Resolving all names...", CompilerVerbosity.Verbose);
+			Notice("Resolving all names...", CompilerVerbosity.ExtraVerbose);
 
 			Document doc = null;
 			try
@@ -1185,7 +1231,7 @@ namespace Osprey
 
 		private void FoldConstant()
 		{
-			Notice("Performing constant folding...", CompilerVerbosity.Verbose);
+			Notice("Performing constant folding...", CompilerVerbosity.ExtraVerbose);
 
 			foreach (var doc in documents)
 				try
@@ -1218,7 +1264,7 @@ namespace Osprey
 
 		private void ExtractLocalFunctions()
 		{
-			Notice("Extracting local functions and closure classes...", CompilerVerbosity.Verbose);
+			Notice("Extracting local functions and closure classes...", CompilerVerbosity.ExtraVerbose);
 
 			foreach (var method in methodsWithLocalFunctions)
 			{
@@ -1321,7 +1367,7 @@ namespace Osprey
 
 		private void ExtractGeneratorClasses()
 		{
-			Notice("Extracting generator classes...", CompilerVerbosity.Verbose);
+			Notice("Extracting generator classes...", CompilerVerbosity.ExtraVerbose);
 
 			foreach (var method in generatorMethods)
 			{
@@ -1510,7 +1556,7 @@ namespace Osprey
 
 		private void SaveDebugSymbols(string targetPath)
 		{
-			Notice("[debug] Writing debug symbols...", CompilerVerbosity.Verbose);
+			Notice("[debug] Writing debug symbols...", CompilerVerbosity.ExtraVerbose);
 
 			var writer = new DebugSymbolsWriter();
 

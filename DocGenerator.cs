@@ -33,7 +33,7 @@ namespace Osprey
 		public static void Generate(Namespace projectNamespace, Compiler compiler,
 			IEnumerable<Document> documents, Stream output, bool prettyPrint)
 		{
-			compiler.Notice("[doc] Generating documentation file...");
+			compiler.Notice("[doc] Generating documentation file...", CompilerVerbosity.ExtraVerbose);
 
 			if (projectNamespace == null)
 				throw new ArgumentNullException("projectNamespace");
@@ -52,7 +52,7 @@ namespace Osprey
 			using (var writer = new StreamWriter(output))
 				writer.Write(result.ToString(prettyPrint));
 
-			compiler.Notice("[doc] Finished generating documentation file.");
+			compiler.Notice("[doc] Finished generating documentation file.", CompilerVerbosity.Verbose);
 			// Done!
 		}
 
